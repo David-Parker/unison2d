@@ -1,0 +1,13 @@
+[package]
+name = "unison2d"
+description = "Unison 2D game engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+unison-physics = { workspace = true }
+unison-render = { workspace = true }
+unison-lighting = { workspace = true }
+unison-profiler = { workspace = true }

@@ -1,0 +1,8 @@
+[package]
+name = "unison-render"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Unison 2D Game Engine - Rendering traits and abstractions"
+
+[dependencies]

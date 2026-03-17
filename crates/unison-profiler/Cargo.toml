@@ -1,0 +1,11 @@
+[package]
+name = "unison-profiler"
+version = "0.1.0"
+edition = "2021"
+description = "Profiling utilities for Unison 2D engine"
+
+[features]
+default = ["enabled"]
+enabled = []
+
+[dependencies]

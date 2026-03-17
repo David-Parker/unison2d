@@ -1,0 +1,15 @@
+[package]
+name = "unison-physics"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Unison 2D Game Engine - Soft body physics"
+
+[dependencies]
+wide = { version = "0.7", optional = true }
+unison-profiler = { path = "../unison-profiler" }
+
+[features]
+default = []
+simd = ["wide"]  # Portable SIMD (x86/ARM/WASM)
+profiling = ["unison-profiler/enabled"]
