@@ -161,6 +161,14 @@ impl<A: Copy + Eq + Hash> Engine<A> {
         }
     }
 
+    /// Apply a torque to an object (continuous rotation, call each frame).
+    /// Positive = counter-clockwise, negative = clockwise.
+    pub fn apply_torque(&mut self, id: ObjectId, torque: f32) {
+        if let Some(handle) = self.get_handle(id) {
+            self.physics.apply_torque(handle, torque, self.fixed_dt);
+        }
+    }
+
     /// Apply an impulse to an object (instantaneous velocity change).
     pub fn apply_impulse(&mut self, id: ObjectId, impulse: Vec2) {
         if let Some(handle) = self.get_handle(id) {
@@ -170,7 +178,7 @@ impl<A: Copy + Eq + Hash> Engine<A> {
 
     /// Check if an object is touching the ground.
     pub fn is_grounded(&self, id: ObjectId) -> bool {
-        self.with_handle(id, |h| self.physics.is_grounded(h, 0.1))
+        self.with_handle(id, |h| self.physics.is_grounded(h, 0.5))
             .unwrap_or(false)
     }
 

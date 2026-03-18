@@ -46,29 +46,40 @@ pub fn start_loop<G: Game + 'static>(
         // Clamp accumulator to prevent spiral of death
         accumulator += dt.min(MAX_ACCUMULATOR);
 
-        // Swap input state from DOM event handler into engine
+        // Transfer input state from DOM event handler into engine.
+        // We swap the two InputState structs so the engine gets fresh DOM events
+        // and the shared ref gets a clean state for the next frame's DOM events.
         {
             let mut engine_ref = engine.borrow_mut();
             let mut input_ref = input.borrow_mut();
             std::mem::swap(&mut engine_ref.input, &mut *input_ref);
+            // Clear the shared input (now holding stale engine state) so new DOM events
+            // start from a clean held-key state. Copy over the engine's current held keys
+            // so that key-release events during the next frame work correctly.
+            input_ref.begin_frame();
+            input_ref.copy_held_from(&engine_ref.input);
         }
 
         // Snapshot for render interpolation
         engine.borrow_mut().snapshot_for_render();
 
         // Fixed timestep updates
+        let mut first_tick = true;
         while accumulator >= FIXED_DT {
             {
                 let mut engine_ref = engine.borrow_mut();
+                // On subsequent ticks within the same frame, clear per-frame flags
+                // so that just_started/just_ended only fire once per frame.
+                if !first_tick {
+                    engine_ref.input.begin_frame();
+                }
+                first_tick = false;
                 engine_ref.pre_update();
                 game.update(&mut engine_ref);
                 engine_ref.post_update();
             }
             accumulator -= FIXED_DT;
         }
-
-        // Reset input for next frame (the DOM handlers will fill it with new events)
-        input.borrow_mut().begin_frame();
 
         // Render
         {

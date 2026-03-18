@@ -40,7 +40,10 @@ impl Game for MyGame {
 
     fn update(&mut self, engine: &mut Engine<Action>) {
         let move_x = engine.action_axis(Action::MoveLeft, Action::MoveRight);
-        engine.apply_force(self.player, Vec2::new(move_x * 25.0, 0.0));
+        if move_x != 0.0 {
+            engine.apply_force(self.player, Vec2::new(move_x * 1200.0, 0.0));
+            engine.apply_torque(self.player, -move_x * 800.0);
+        }
         if engine.action_just_started(Action::Jump) && engine.is_grounded(self.player) {
             engine.apply_impulse(self.player, Vec2::new(0.0, 8.0));
         }
@@ -132,6 +135,7 @@ engine.despawn(id);
 
 ```rust
 engine.apply_force(id, Vec2::new(10.0, 0.0));   // continuous, call each frame
+engine.apply_torque(id, -5.0);                   // continuous rotation (negative = clockwise)
 engine.apply_impulse(id, Vec2::new(0.0, 8.0));   // instantaneous velocity change
 engine.set_velocity(id, Vec2::new(5.0, 0.0));    // set velocity directly
 let pos = engine.get_position(id);                // get current position
@@ -246,7 +250,8 @@ engine.camera_mut()    // -> &mut Camera
 fn update(&mut self, engine: &mut Engine<Action>) {
     let move_x = engine.action_axis(Action::MoveLeft, Action::MoveRight);
     if move_x != 0.0 {
-        engine.apply_force(self.player, Vec2::new(move_x * 25.0, 0.0));
+        engine.apply_force(self.player, Vec2::new(move_x * 1200.0, 0.0));
+        engine.apply_torque(self.player, -move_x * 800.0); // roll the soft body
     }
     if engine.action_just_started(Action::Jump) && engine.is_grounded(self.player) {
         engine.apply_impulse(self.player, Vec2::new(0.0, 8.0));

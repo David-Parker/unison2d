@@ -135,6 +135,16 @@ impl InputState {
         self.touches.get(&id)
     }
 
+    // ── Transfer API ──
+
+    /// Copy held-key and held-mouse-button state from another InputState.
+    /// Used after swapping input buffers so the shared buffer starts with
+    /// the correct held state for processing key-release events next frame.
+    pub fn copy_held_from(&mut self, other: &InputState) {
+        self.keys_held = other.keys_held.clone();
+        self.mouse_buttons_held = other.mouse_buttons_held.clone();
+    }
+
     // ── Platform mutation API ──
     // Platform crates call these to feed native events in.
 

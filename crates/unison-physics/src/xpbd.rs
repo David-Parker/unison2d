@@ -786,6 +786,12 @@ pub struct XPBDSoftBody {
     pub vel: Vec<f32>,           // Velocities (used for external forces)
     pub inv_mass: Vec<f32>,      // Inverse masses (0 = fixed)
 
+    // Force accumulator [fx0, fy0, fx1, fy1, ...] — cleared each step
+    pub force_accum: Vec<f32>,
+
+    // Torque accumulator — cleared each step
+    pub torque_accum: f32,
+
     // Constraints
     pub edge_constraints: Vec<EdgeConstraint>,
     pub area_constraints: Vec<AreaConstraint>,
@@ -890,11 +896,15 @@ impl XPBDSoftBody {
             }
         }
 
+        let force_accum = vec![0.0; vertices.len()];
+
         XPBDSoftBody {
             pos,
             prev_pos,
             vel,
             inv_mass,
+            force_accum,
+            torque_accum: 0.0,
             edge_constraints,
             area_constraints,
             edge_compliance,
@@ -928,6 +938,36 @@ impl XPBDSoftBody {
     /// Pre-solve: apply external forces and predict positions
     #[cfg(feature = "simd")]
     pub fn pre_solve(&mut self, dt: f32, gravity: f32) {
+        // Compute center of mass for torque application
+        let (cx, cy) = if self.torque_accum != 0.0 {
+            let mut sx = 0.0f32;
+            let mut sy = 0.0f32;
+            for i in 0..self.num_verts {
+                sx += self.pos[i * 2];
+                sy += self.pos[i * 2 + 1];
+            }
+            (sx / self.num_verts as f32, sy / self.num_verts as f32)
+        } else {
+            (0.0, 0.0)
+        };
+        let omega = self.torque_accum * dt;
+
+        // Apply accumulated forces and torque before SIMD integration
+        for i in 0..self.num_verts {
+            if self.inv_mass[i] > 0.0 {
+                self.vel[i * 2] += self.force_accum[i * 2] * self.inv_mass[i] * dt;
+                self.vel[i * 2 + 1] += self.force_accum[i * 2 + 1] * self.inv_mass[i] * dt;
+
+                if omega != 0.0 {
+                    let rx = self.pos[i * 2] - cx;
+                    let ry = self.pos[i * 2 + 1] - cy;
+                    self.vel[i * 2] += -ry * omega;
+                    self.vel[i * 2 + 1] += rx * omega;
+                }
+            }
+        }
+        // Note: accumulators are cleared by PhysicsWorld::step() AFTER all substeps.
+
         SimdBackend::integrate_gravity(
             &mut self.pos,
             &mut self.vel,
@@ -941,6 +981,20 @@ impl XPBDSoftBody {
     /// Pre-solve: apply external forces and predict positions (scalar fallback)
     #[cfg(not(feature = "simd"))]
     pub fn pre_solve(&mut self, dt: f32, gravity: f32) {
+        // Compute center of mass for torque application
+        let (cx, cy) = if self.torque_accum != 0.0 {
+            let mut sx = 0.0f32;
+            let mut sy = 0.0f32;
+            for i in 0..self.num_verts {
+                sx += self.pos[i * 2];
+                sy += self.pos[i * 2 + 1];
+            }
+            (sx / self.num_verts as f32, sy / self.num_verts as f32)
+        } else {
+            (0.0, 0.0)
+        };
+        let omega = self.torque_accum * dt;
+
         for i in 0..self.num_verts {
             if self.inv_mass[i] == 0.0 {
                 continue; // Fixed vertex
@@ -950,6 +1004,18 @@ impl XPBDSoftBody {
             self.prev_pos[i * 2] = self.pos[i * 2];
             self.prev_pos[i * 2 + 1] = self.pos[i * 2 + 1];
 
+            // Apply accumulated forces: a = F * inv_mass, v += a * dt
+            self.vel[i * 2] += self.force_accum[i * 2] * self.inv_mass[i] * dt;
+            self.vel[i * 2 + 1] += self.force_accum[i * 2 + 1] * self.inv_mass[i] * dt;
+
+            // Apply accumulated torque as tangential velocity
+            if omega != 0.0 {
+                let rx = self.pos[i * 2] - cx;
+                let ry = self.pos[i * 2 + 1] - cy;
+                self.vel[i * 2] += -ry * omega;
+                self.vel[i * 2 + 1] += rx * omega;
+            }
+
             // Apply gravity to velocity
             self.vel[i * 2 + 1] += gravity * dt;
 
@@ -957,6 +1023,15 @@ impl XPBDSoftBody {
             self.pos[i * 2] += self.vel[i * 2] * dt;
             self.pos[i * 2 + 1] += self.vel[i * 2 + 1] * dt;
         }
+
+        // Note: accumulators are cleared by PhysicsWorld::step() AFTER all substeps,
+        // so the same force/torque applies across every substep within a frame.
+    }
+
+    /// Clear force and torque accumulators. Called by PhysicsWorld after all substeps complete.
+    pub fn clear_accumulators(&mut self) {
+        self.force_accum.iter_mut().for_each(|f| *f = 0.0);
+        self.torque_accum = 0.0;
     }
 
     /// Solve distance (edge length) constraint using XPBD
@@ -1077,6 +1152,9 @@ impl XPBDSoftBody {
     /// - friction: Coulomb friction coefficient (0 = ice, 1 = sticky rubber)
     /// - restitution: bounciness (0 = no bounce, 1 = perfect bounce)
     pub fn solve_ground_collision_with_friction(&mut self, ground_y: f32, friction: f32, restitution: f32) {
+        // Threshold: vertices within this distance of the ground are considered "in contact"
+        let contact_threshold = 0.05;
+
         for i in 0..self.num_verts {
             if self.inv_mass[i] == 0.0 {
                 continue;
@@ -1116,6 +1194,14 @@ impl XPBDSoftBody {
 
                 // Clamp the tangent displacement - this removes energy, never adds it
                 let friction_factor = 1.0 - friction;
+                self.pos[i * 2] = prev_x + dx * friction_factor;
+            } else if y < ground_y + contact_threshold {
+                // Near-ground friction: damp horizontal movement of vertices close to ground.
+                // This simulates rolling friction — the body decelerates when in contact.
+                let prev_x = self.prev_pos[i * 2];
+                let curr_x = self.pos[i * 2];
+                let dx = curr_x - prev_x;
+                let friction_factor = 1.0 - friction * 0.3;
                 self.pos[i * 2] = prev_x + dx * friction_factor;
             }
         }
@@ -1179,6 +1265,18 @@ impl XPBDSoftBody {
                 let friction_factor = 1.0 - friction;
                 self.pos[i * 2] = prev_x + vel_tangent_x * friction_factor + nx * penetration;
                 self.pos[i * 2 + 1] = prev_y + vel_tangent_y * friction_factor + ny * penetration;
+            } else if y < terrain_y + 0.05 {
+                // Near-terrain friction: damp tangential movement of vertices close to surface
+                let prev_x = self.prev_pos[i * 2];
+                let prev_y = self.prev_pos[i * 2 + 1];
+                let (nx, ny) = normal_at(x);
+                let dx = x - prev_x;
+                let dy = y - prev_y;
+                let vel_tangent_x = dx - (dx * nx + dy * ny) * nx;
+                let vel_tangent_y = dy - (dx * nx + dy * ny) * ny;
+                let friction_factor = 1.0 - friction * 0.3;
+                self.pos[i * 2] = prev_x + (dx - vel_tangent_x) + vel_tangent_x * friction_factor;
+                self.pos[i * 2 + 1] = prev_y + (dy - vel_tangent_y) + vel_tangent_y * friction_factor;
             }
         }
     }

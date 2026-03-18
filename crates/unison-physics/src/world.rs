@@ -601,8 +601,8 @@ impl PhysicsWorld {
 
     // === Force/Impulse Application ===
 
-    /// Apply a force to a body (in Newtons)
-    /// For soft bodies, applies to all vertices.
+    /// Apply a force to a body (in Newtons). Accumulated and applied during the next physics step.
+    /// For soft bodies, applies uniformly to all vertices.
     /// For rigid bodies, applies at center of mass.
     pub fn apply_force(&mut self, handle: BodyHandle, fx: f32, fy: f32) {
         let Some(body_type) = self.body_types.get(handle.0).cloned().flatten() else { return };
@@ -612,8 +612,8 @@ impl PhysicsWorld {
                 let body = &mut self.soft_bodies[index];
                 for i in 0..body.num_verts {
                     if body.inv_mass[i] > 0.0 {
-                        body.vel[i * 2] += fx * body.inv_mass[i];
-                        body.vel[i * 2 + 1] += fy * body.inv_mass[i];
+                        body.force_accum[i * 2] += fx;
+                        body.force_accum[i * 2 + 1] += fy;
                     }
                 }
             }
@@ -877,13 +877,14 @@ impl PhysicsWorld {
         }
     }
 
-    /// Apply torque (angular acceleration) to the body
+    /// Apply torque (angular acceleration) to the body. Accumulated and applied during the next physics step.
+    /// Positive = counter-clockwise, negative = clockwise.
     pub fn apply_torque(&mut self, handle: BodyHandle, torque: f32, dt: f32) {
         let Some(body_type) = self.body_types.get(handle.0).cloned().flatten() else { return };
 
         match body_type {
-            BodyType::Soft(_) => {
-                self.apply_angular_velocity(handle, torque * dt);
+            BodyType::Soft(index) => {
+                self.soft_bodies[index].torque_accum += torque;
             }
             BodyType::Rigid(index) => {
                 let body = &mut self.rigid_bodies[index];
@@ -1017,11 +1018,42 @@ impl PhysicsWorld {
         }
     }
 
-    /// Check if body is near ground (within threshold)
+    /// Check if body is near ground (within threshold).
+    /// For soft bodies, uses the lowest vertex position and checks that
+    /// the body is not moving upward significantly (to avoid false positives mid-jump).
     pub fn is_grounded(&self, handle: BodyHandle, threshold: f32) -> bool {
         let Some(ground_y) = self.ground_y else { return false };
         let Some(lowest) = self.get_lowest_y(handle) else { return false };
-        lowest < ground_y + threshold
+
+        // Position check: lowest point within threshold of ground
+        if lowest >= ground_y + threshold {
+            return false;
+        }
+
+        // For soft bodies, also check vertical velocity to avoid false positives.
+        // If the body is moving upward significantly, it's not grounded (just launched).
+        let body_type = self.body_types.get(handle.0).and_then(|bt| bt.as_ref());
+        if let Some(BodyType::Soft(index)) = body_type {
+            let body = &self.soft_bodies[*index];
+            // Average vertical velocity of all dynamic vertices
+            let mut vy_sum = 0.0f32;
+            let mut count = 0;
+            for i in 0..body.num_verts {
+                if body.inv_mass[i] > 0.0 {
+                    vy_sum += body.vel[i * 2 + 1];
+                    count += 1;
+                }
+            }
+            if count > 0 {
+                let avg_vy = vy_sum / count as f32;
+                // If moving upward faster than a small threshold, not grounded
+                if avg_vy > 2.0 {
+                    return false;
+                }
+            }
+        }
+
+        true
     }
 
     /// Check if a body is in contact with any other body (within threshold distance)
@@ -1205,10 +1237,16 @@ impl PhysicsWorld {
             // Post-solve all bodies
             for body in self.soft_bodies.iter_mut() {
                 body.substep_post(substep_dt);
+                body.apply_damping(0.005); // Light damping per substep
             }
             for body in self.rigid_bodies.iter_mut() {
                 body.post_solve(substep_dt);
             }
+        }
+
+        // Clear force/torque accumulators AFTER all substeps so forces apply uniformly
+        for body in self.soft_bodies.iter_mut() {
+            body.clear_accumulators();
         }
     }
 
@@ -1280,11 +1318,17 @@ impl PhysicsWorld {
                 profile_scope!("physics.post_solve");
                 for body in self.soft_bodies.iter_mut() {
                     body.substep_post(substep_dt);
+                    body.apply_damping(0.005); // Light damping per substep
                 }
                 for body in self.rigid_bodies.iter_mut() {
                     body.post_solve(substep_dt);
                 }
             }
+        }
+
+        // Clear force/torque accumulators AFTER all substeps so forces apply uniformly
+        for body in self.soft_bodies.iter_mut() {
+            body.clear_accumulators();
         }
     }
 
@@ -1560,5 +1604,250 @@ mod tests {
         // Check that get_rigid_body returns rigid body only for rigid handle
         assert!(world.get_rigid_body(soft_handle).is_none());
         assert!(world.get_rigid_body(rigid_handle).is_some());
+    }
+
+    /// Helper: create a donut-game-like setup and return (world, donut_handle)
+    fn setup_donut_world() -> (PhysicsWorld, BodyHandle) {
+        let mut world = PhysicsWorld::new();
+        world.set_gravity(-9.8);
+        world.set_ground(Some(-4.5));
+
+        let mesh = create_ring_mesh(1.0, 0.4, 16, 6);
+        let handle = world.add_body(
+            &mesh,
+            BodyConfig::new()
+                .at_position(0.0, 3.0)
+                .with_material(crate::Material::RUBBER),
+        );
+        (world, handle)
+    }
+
+    /// BUG 1: Force accumulator is cleared after first substep.
+    /// With 4 substeps, only substep 1 gets the force. Substeps 2-4 get nothing.
+    /// This means the body receives 1/4 of the intended force.
+    #[test]
+    fn test_bug_force_accum_cleared_too_early() {
+        let (mut world, handle) = setup_donut_world();
+
+        // Let body settle on ground first
+        let dt = 1.0 / 60.0;
+        for _ in 0..120 {
+            world.step(dt);
+        }
+
+        let pos_before = world.get_position(handle).unwrap();
+        println!("Settled position: ({:.3}, {:.3})", pos_before.x, pos_before.y);
+
+        // Apply rightward force for 60 frames (1 second)
+        for frame in 0..60 {
+            world.apply_force(handle, 1200.0, 0.0);
+            world.step(dt);
+
+            if frame % 10 == 0 {
+                let pos = world.get_position(handle).unwrap();
+                let vel = world.get_velocity(handle).unwrap();
+                println!(
+                    "Frame {:3}: pos=({:.3}, {:.3}) vel=({:.3}, {:.3})",
+                    frame, pos.x, pos.y, vel.x, vel.y
+                );
+            }
+        }
+
+        let vel_after = world.get_velocity(handle).unwrap();
+        let pos_after = world.get_position(handle).unwrap();
+        println!("After 60 frames of 1200N force:");
+        println!("  pos: ({:.3}, {:.3})", pos_after.x, pos_after.y);
+        println!("  vel: ({:.3}, {:.3})", vel_after.x, vel_after.y);
+
+        // The body should have moved significantly rightward.
+        // With correct physics (force applied all 4 substeps), vel.x should be substantial.
+        // With the bug (force only in substep 1), it's ~1/4 of expected.
+        assert!(
+            pos_after.x > pos_before.x + 1.0,
+            "Donut barely moved! pos.x delta = {:.3}. Force may only be applied in first substep.",
+            pos_after.x - pos_before.x
+        );
+    }
+
+    /// BUG 2: Torque center-of-mass uses positions AFTER force integration.
+    /// Apply a rightward force + clockwise torque (negative). Verify the donut
+    /// consistently moves right AND rotates clockwise, not erratically.
+    #[test]
+    fn test_bug_torque_direction_consistency() {
+        let (mut world, handle) = setup_donut_world();
+        let dt = 1.0 / 60.0;
+
+        // Settle
+        for _ in 0..120 {
+            world.step(dt);
+        }
+
+        // Apply rightward force + clockwise torque for 30 frames
+        let mut angular_velocities = Vec::new();
+        for frame in 0..30 {
+            world.apply_force(handle, 1200.0, 0.0);
+            world.apply_torque(handle, -800.0, dt);
+            world.step(dt);
+
+            let omega = world.get_angular_velocity(handle).unwrap_or(0.0);
+            angular_velocities.push(omega);
+
+            if frame % 5 == 0 {
+                let pos = world.get_position(handle).unwrap();
+                let vel = world.get_velocity(handle).unwrap();
+                println!(
+                    "Frame {:3}: pos=({:.3}, {:.3}) vel=({:.3}, {:.3}) omega={:.3}",
+                    frame, pos.x, pos.y, vel.x, vel.y, omega
+                );
+            }
+        }
+
+        // Check: angular velocity should be consistently negative (clockwise)
+        let negative_count = angular_velocities.iter().filter(|&&w| w < -0.01).count();
+        let positive_count = angular_velocities.iter().filter(|&&w| w > 0.01).count();
+        println!(
+            "Angular velocity: {} negative, {} positive, {} near-zero (out of {})",
+            negative_count,
+            positive_count,
+            angular_velocities.len() - negative_count - positive_count,
+            angular_velocities.len()
+        );
+
+        // With clockwise torque (-3000), angular velocity should be consistently negative
+        assert!(
+            negative_count > positive_count * 3,
+            "Torque direction is inconsistent! {} negative vs {} positive frames. \
+             Center-of-mass may be computed from wrong positions.",
+            negative_count, positive_count
+        );
+    }
+
+    /// BUG 3: is_grounded is unreliable for deforming soft bodies.
+    /// Drop the donut, let it settle, then check grounding across many frames.
+    #[test]
+    fn test_bug_is_grounded_reliability() {
+        let (mut world, handle) = setup_donut_world();
+        let dt = 1.0 / 60.0;
+
+        // Let the donut fall and settle on ground for 3 seconds
+        for _ in 0..180 {
+            world.step(dt);
+        }
+
+        let pos = world.get_position(handle).unwrap();
+        let vel = world.get_velocity(handle).unwrap();
+        println!("After settling: pos=({:.3}, {:.3}) vel=({:.3}, {:.3})", pos.x, pos.y, vel.x, vel.y);
+
+        // Check grounding over 60 frames with no input — should be consistently grounded
+        let mut grounded_count = 0;
+        let mut not_grounded_count = 0;
+        for frame in 0..60 {
+            world.step(dt);
+            let grounded = world.is_grounded(handle, 0.5);
+            if grounded { grounded_count += 1; } else { not_grounded_count += 1; }
+            if !grounded {
+                let lowest = world.get_lowest_y(handle).unwrap();
+                let vel = world.get_velocity(handle).unwrap();
+                println!(
+                    "Frame {:3}: NOT grounded! lowest_y={:.4} ground={:.1} vel=({:.3}, {:.3})",
+                    frame, lowest, -4.5, vel.x, vel.y
+                );
+            }
+        }
+        println!(
+            "Grounded: {}/{} frames (should be ~60/60)",
+            grounded_count, grounded_count + not_grounded_count
+        );
+
+        assert!(
+            grounded_count >= 55,
+            "is_grounded flickers! Only grounded {}/60 frames while resting on ground.",
+            grounded_count
+        );
+    }
+
+    /// Diagnostic: Simulate the actual donut game input pattern and dump full state.
+    /// Press right for 30 frames, release for 30 frames, jump, observe.
+    #[test]
+    fn test_diagnostic_full_game_simulation() {
+        let (mut world, handle) = setup_donut_world();
+        let dt = 1.0 / 60.0;
+
+        println!("=== Full Game Simulation Diagnostic ===");
+        println!("Phase 1: Settle (120 frames)");
+
+        // Phase 1: Settle
+        for _ in 0..120 {
+            world.step(dt);
+        }
+        let pos = world.get_position(handle).unwrap();
+        println!("Settled at: ({:.3}, {:.3})", pos.x, pos.y);
+
+        // Phase 2: Press right for 30 frames
+        println!("\nPhase 2: Press RIGHT (30 frames, force=1200, torque=-800)");
+        for frame in 0..30 {
+            world.apply_force(handle, 1200.0, 0.0);
+            world.apply_torque(handle, -800.0, dt);
+            world.step(dt);
+
+            let pos = world.get_position(handle).unwrap();
+            let vel = world.get_velocity(handle).unwrap();
+            let omega = world.get_angular_velocity(handle).unwrap_or(0.0);
+            let grounded = world.is_grounded(handle, 0.5);
+            println!(
+                "  [{:3}] pos=({:7.3}, {:7.3}) vel=({:7.3}, {:7.3}) omega={:7.3} grounded={}",
+                frame, pos.x, pos.y, vel.x, vel.y, omega, grounded
+            );
+        }
+
+        // Phase 3: Release for 30 frames — observe deceleration
+        println!("\nPhase 3: RELEASE (30 frames, no input)");
+        for frame in 0..30 {
+            world.step(dt);
+
+            let pos = world.get_position(handle).unwrap();
+            let vel = world.get_velocity(handle).unwrap();
+            let omega = world.get_angular_velocity(handle).unwrap_or(0.0);
+            let grounded = world.is_grounded(handle, 0.5);
+            println!(
+                "  [{:3}] pos=({:7.3}, {:7.3}) vel=({:7.3}, {:7.3}) omega={:7.3} grounded={}",
+                frame, pos.x, pos.y, vel.x, vel.y, omega, grounded
+            );
+        }
+
+        // Phase 4: Jump
+        println!("\nPhase 4: JUMP (impulse y=8.0, then 60 frames)");
+        let grounded = world.is_grounded(handle, 0.5);
+        println!("  Pre-jump grounded: {}", grounded);
+        world.apply_impulse(handle, 0.0, 8.0);
+        for frame in 0..60 {
+            world.step(dt);
+
+            let pos = world.get_position(handle).unwrap();
+            let vel = world.get_velocity(handle).unwrap();
+            let grounded = world.is_grounded(handle, 0.5);
+            if frame % 5 == 0 {
+                println!(
+                    "  [{:3}] pos=({:7.3}, {:7.3}) vel=({:7.3}, {:7.3}) grounded={}",
+                    frame, pos.x, pos.y, vel.x, vel.y, grounded
+                );
+            }
+        }
+
+        // Phase 5: Press LEFT for 30 frames — should go left reliably
+        println!("\nPhase 5: Press LEFT (30 frames, force=-1200, torque=800)");
+        for frame in 0..30 {
+            world.apply_force(handle, -1200.0, 0.0);
+            world.apply_torque(handle, 800.0, dt);
+            world.step(dt);
+
+            let pos = world.get_position(handle).unwrap();
+            let vel = world.get_velocity(handle).unwrap();
+            let omega = world.get_angular_velocity(handle).unwrap_or(0.0);
+            println!(
+                "  [{:3}] pos=({:7.3}, {:7.3}) vel=({:7.3}, {:7.3}) omega={:7.3}",
+                frame, pos.x, pos.y, vel.x, vel.y, omega
+            );
+        }
     }
 }
