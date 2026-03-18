@@ -6,6 +6,7 @@
 /// - `unison-lighting`: 2D dynamic lighting with soft shadows
 /// - `unison-profiler`: Lightweight function-level profiling
 
+pub use unison_math as math;
 pub use unison_physics as physics;
 pub use unison_render as render;
 pub use unison_lighting as lighting;

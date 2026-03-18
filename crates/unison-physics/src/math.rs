@@ -4,8 +4,6 @@
 /// 2x2 matrix in column-major order
 pub type Mat2 = [f32; 4];
 
-/// 2D vector
-pub type Vec2 = [f32; 2];
 
 /// Create a 2x2 matrix from column vectors
 #[inline]
@@ -64,7 +62,7 @@ pub fn mat2_mul(a: &Mat2, b: &Mat2) -> Mat2 {
 
 /// Multiply 2x2 matrix by 2D vector
 #[inline]
-pub fn mat2_mul_vec(m: &Mat2, v: &Vec2) -> Vec2 {
+pub fn mat2_mul_vec(m: &Mat2, v: &[f32; 2]) -> [f32; 2] {
     [m[0] * v[0] + m[2] * v[1], m[1] * v[0] + m[3] * v[1]]
 }
 
@@ -98,35 +96,6 @@ pub fn mat2_frobenius_norm_sq(m: &Mat2) -> f32 {
     m[0] * m[0] + m[1] * m[1] + m[2] * m[2] + m[3] * m[3]
 }
 
-/// Compute 2D vector length
-#[inline]
-pub fn vec2_length(v: &Vec2) -> f32 {
-    (v[0] * v[0] + v[1] * v[1]).sqrt()
-}
-
-/// Compute 2D vector dot product
-#[inline]
-pub fn vec2_dot(a: &Vec2, b: &Vec2) -> f32 {
-    a[0] * b[0] + a[1] * b[1]
-}
-
-/// Subtract two 2D vectors: a - b
-#[inline]
-pub fn vec2_sub(a: &Vec2, b: &Vec2) -> Vec2 {
-    [a[0] - b[0], a[1] - b[1]]
-}
-
-/// Add two 2D vectors
-#[inline]
-pub fn vec2_add(a: &Vec2, b: &Vec2) -> Vec2 {
-    [a[0] + b[0], a[1] + b[1]]
-}
-
-/// Scale 2D vector
-#[inline]
-pub fn vec2_scale(v: &Vec2, s: f32) -> Vec2 {
-    [v[0] * s, v[1] * s]
-}
 
 #[cfg(test)]
 mod tests {
@@ -225,24 +194,4 @@ mod tests {
         assert_close(result[1], 6.0, "mul_vec[1]");
     }
 
-    #[test]
-    fn test_vec2_ops() {
-        let a = [3.0, 4.0];
-        let b = [1.0, 2.0];
-
-        assert_close(vec2_length(&a), 5.0, "length");
-        assert_close(vec2_dot(&a, &b), 11.0, "dot");
-
-        let sum = vec2_add(&a, &b);
-        assert_close(sum[0], 4.0, "add[0]");
-        assert_close(sum[1], 6.0, "add[1]");
-
-        let diff = vec2_sub(&a, &b);
-        assert_close(diff[0], 2.0, "sub[0]");
-        assert_close(diff[1], 2.0, "sub[1]");
-
-        let scaled = vec2_scale(&a, 2.0);
-        assert_close(scaled[0], 6.0, "scale[0]");
-        assert_close(scaled[1], 8.0, "scale[1]");
-    }
 }

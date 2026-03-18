@@ -1,22 +1,24 @@
 # unison-lighting
 
-2D dynamic lighting with soft shadows.
+2D dynamic lighting with soft shadows. Uses `Vec2`, `Color`, and `Rect` from `unison-math`.
 
 ## LightingManager
 
 Central coordinator for all lights and shadow maps.
 
 ```rust
+use unison_math::{Color, Rect, Vec2};
+
 let mut manager = LightingManager::new();
-manager.set_ambient(0.1, 0.1, 0.15);
+manager.set_ambient(Color::rgb(0.1, 0.1, 0.15));
 manager.set_shadow_quality(ShadowQuality::High);
 ```
 
 ### Adding & Managing Lights
 
 ```rust
-let handle = manager.add_light(Light::point((5.0, 3.0), 10.0)
-    .with_color(1.0, 0.9, 0.7)
+let handle = manager.add_light(Light::point(Vec2::new(5.0, 3.0), 10.0)
+    .with_color(Color::rgb(1.0, 0.9, 0.7))
     .with_intensity(1.5)
     .with_shadows(true));
 
@@ -41,13 +43,13 @@ manager.update_shadows(&occluders); // &[&dyn ShadowCaster]
 ### Frustum Culling
 
 ```rust
-let bounds = CameraBounds::from_center((cam_x, cam_y), width, height);
+let bounds = Rect::from_center(Vec2::new(cam_x, cam_y), Vec2::new(width, height));
 let visible = manager.get_visible_lights(&bounds); // -> Vec<&Light>
 ```
 
 ## Light
 
-Factory methods for each light type:
+Factory methods for each light type (all positions/directions use `Vec2`):
 
 ```rust
 Light::point(position, radius)
@@ -59,22 +61,22 @@ Light::area(position, width, height)
 Builder methods (chainable):
 
 ```rust
-.with_color(r, g, b)
+.with_color(color)       // Color
 .with_intensity(intensity)
 .with_shadows(bool)
 ```
 
-Properties: `light_type`, `position`, `color`, `intensity`, `shadows`, `enabled`.
+Properties: `light_type`, `position: Vec2`, `color: Color`, `intensity`, `shadows`, `enabled`.
 
-Query methods: `effective_radius()`, `affects_point(point)`.
+Query methods: `effective_radius()`, `affects_point(point: Vec2)`.
 
 ## LightType
 
 ```rust
 enum LightType {
     Point { radius: f32 },
-    Spot { radius: f32, angle: f32, direction: (f32, f32) },
-    Directional { direction: (f32, f32) },
+    Spot { radius: f32, angle: f32, direction: Vec2 },
+    Directional { direction: Vec2 },
     Area { width: f32, height: f32 },
 }
 ```
@@ -94,7 +96,7 @@ Implement for objects that block light.
 
 ```rust
 trait ShadowCaster {
-    fn get_occluder_segments(&self) -> Vec<((f32, f32), (f32, f32))>;
+    fn get_occluder_segments(&self) -> Vec<(Vec2, Vec2)>;
 }
 ```
 
@@ -125,13 +127,13 @@ cache.free(id);
 
 ## OccluderData
 
-Helper for building occluder geometry.
+Helper for building occluder geometry (uses `Vec2`).
 
 ```rust
 let mut occ = OccluderData::new();
-occ.add_segment(start, end);
-occ.add_rect(x, y, width, height);
-occ.add_polygon(&vertices);
+occ.add_segment(start, end);           // Vec2, Vec2
+occ.add_rect(x, y, width, height);     // f32s
+occ.add_polygon(&vertices);            // &[Vec2]
 ```
 
 ## LightingRenderer (trait)
@@ -143,7 +145,7 @@ trait LightingRenderer {
     fn create_shadow_map(&mut self, resolution: u32) -> ShadowMapId;
     fn update_shadow_map(&mut self, id: ShadowMapId, light: &Light, occluders: &[OccluderData]);
     fn destroy_shadow_map(&mut self, id: ShadowMapId);
-    fn bind_lighting(&mut self, lights: &[&Light], ambient: (f32, f32, f32), shadow_maps: &[ShadowMapId]);
+    fn bind_lighting(&mut self, lights: &[&Light], ambient: Color, shadow_maps: &[ShadowMapId]);
     fn begin_lighting_pass(&mut self);
     fn end_lighting_pass(&mut self);
 }

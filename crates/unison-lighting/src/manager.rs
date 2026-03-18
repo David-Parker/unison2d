@@ -4,53 +4,15 @@ use crate::light::Light;
 use crate::shadow::{
     compute_shadow_map, LightHandle, ShadowCaster, ShadowMapCache, ShadowMapId, ShadowQuality,
 };
+use unison_math::{Color, Rect};
 use unison_profiler::profile_scope;
-
-/// Camera bounds for frustum culling.
-#[derive(Debug, Clone, Copy)]
-pub struct CameraBounds {
-    /// Minimum X coordinate visible.
-    pub min_x: f32,
-    /// Maximum X coordinate visible.
-    pub max_x: f32,
-    /// Minimum Y coordinate visible.
-    pub min_y: f32,
-    /// Maximum Y coordinate visible.
-    pub max_y: f32,
-}
-
-impl CameraBounds {
-    /// Create camera bounds from center and dimensions.
-    pub fn from_center(center: (f32, f32), width: f32, height: f32) -> Self {
-        let half_w = width * 0.5;
-        let half_h = height * 0.5;
-        Self {
-            min_x: center.0 - half_w,
-            max_x: center.0 + half_w,
-            min_y: center.1 - half_h,
-            max_y: center.1 + half_h,
-        }
-    }
-
-    /// Check if a circle intersects these bounds.
-    pub fn intersects_circle(&self, center: (f32, f32), radius: f32) -> bool {
-        // Find closest point on bounds to circle center
-        let closest_x = center.0.clamp(self.min_x, self.max_x);
-        let closest_y = center.1.clamp(self.min_y, self.max_y);
-
-        let dx = center.0 - closest_x;
-        let dy = center.1 - closest_y;
-
-        dx * dx + dy * dy <= radius * radius
-    }
-}
 
 /// Manages all lights and their shadow maps in a scene.
 pub struct LightingManager {
     /// All lights in the scene.
     lights: Vec<Option<Light>>,
     /// Global ambient light color.
-    ambient: (f32, f32, f32),
+    ambient: Color,
     /// Shadow map cache.
     shadow_cache: ShadowMapCache,
     /// Shadow map IDs for each light (parallel to lights vec).
@@ -74,7 +36,7 @@ impl LightingManager {
     pub fn new() -> Self {
         Self {
             lights: Vec::new(),
-            ambient: (0.1, 0.1, 0.1),
+            ambient: Color::rgb(0.1, 0.1, 0.1),
             shadow_cache: ShadowMapCache::new(),
             light_shadow_maps: Vec::new(),
             shadow_quality: ShadowQuality::Medium,
@@ -131,12 +93,12 @@ impl LightingManager {
     }
 
     /// Set the global ambient light color.
-    pub fn set_ambient(&mut self, r: f32, g: f32, b: f32) {
-        self.ambient = (r, g, b);
+    pub fn set_ambient(&mut self, color: Color) {
+        self.ambient = color;
     }
 
     /// Get the current ambient light color.
-    pub fn ambient(&self) -> (f32, f32, f32) {
+    pub fn ambient(&self) -> Color {
         self.ambient
     }
 
@@ -197,8 +159,8 @@ impl LightingManager {
         }
     }
 
-    /// Get all lights visible within the camera bounds.
-    pub fn get_visible_lights(&self, camera: &CameraBounds) -> Vec<&Light> {
+    /// Get all lights visible within the given bounds.
+    pub fn get_visible_lights(&self, bounds: &Rect) -> Vec<&Light> {
         profile_scope!("lighting.get_visible_lights");
 
         self.lights
@@ -212,7 +174,7 @@ impl LightingManager {
                 if radius.is_infinite() {
                     true // Directional lights are always visible
                 } else {
-                    camera.intersects_circle(light.position, radius)
+                    bounds.intersects_circle(light.position, radius)
                 }
             })
             .collect()

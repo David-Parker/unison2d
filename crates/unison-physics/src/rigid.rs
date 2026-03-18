@@ -3,6 +3,8 @@
 //! This module provides true rigid bodies as an alternative to soft bodies.
 //! Rigid bodies maintain their shape and support circle and AABB colliders.
 
+use unison_math::Vec2;
+
 /// Collider shape for rigid bodies
 #[derive(Clone, Debug)]
 pub enum Collider {
@@ -24,21 +26,21 @@ impl Collider {
     }
 
     /// Get the half-extents of this collider (for rendering)
-    pub fn half_extents(&self) -> [f32; 2] {
+    pub fn half_extents(&self) -> Vec2 {
         match self {
-            Collider::Circle { radius } => [*radius, *radius],
-            Collider::AABB { half_width, half_height } => [*half_width, *half_height],
+            Collider::Circle { radius } => Vec2::new(*radius, *radius),
+            Collider::AABB { half_width, half_height } => Vec2::new(*half_width, *half_height),
         }
     }
 
     /// Get the AABB bounds for this collider at a given position and rotation
-    pub fn get_aabb(&self, position: [f32; 2], rotation: f32) -> (f32, f32, f32, f32) {
+    pub fn get_aabb(&self, position: Vec2, rotation: f32) -> (f32, f32, f32, f32) {
         match self {
             Collider::Circle { radius } => (
-                position[0] - radius,
-                position[1] - radius,
-                position[0] + radius,
-                position[1] + radius,
+                position.x - radius,
+                position.y - radius,
+                position.x + radius,
+                position.y + radius,
             ),
             Collider::AABB { half_width, half_height } => {
                 // For rotated AABB, compute bounding box of the rotated rectangle
@@ -59,8 +61,8 @@ impl Collider {
                 let mut max_y = f32::NEG_INFINITY;
 
                 for (cx, cy) in corners {
-                    let rx = cx * cos_r - cy * sin_r + position[0];
-                    let ry = cx * sin_r + cy * cos_r + position[1];
+                    let rx = cx * cos_r - cy * sin_r + position.x;
+                    let ry = cx * sin_r + cy * cos_r + position.y;
                     min_x = min_x.min(rx);
                     min_y = min_y.min(ry);
                     max_x = max_x.max(rx);
@@ -76,16 +78,16 @@ impl Collider {
 /// A rigid body with position, rotation, and velocity state
 #[derive(Clone, Debug)]
 pub struct RigidBody {
-    /// Current position [x, y]
-    pub position: [f32; 2],
+    /// Current position
+    pub position: Vec2,
     /// Current rotation in radians
     pub rotation: f32,
-    /// Linear velocity [vx, vy]
-    pub linear_velocity: [f32; 2],
+    /// Linear velocity
+    pub linear_velocity: Vec2,
     /// Angular velocity in radians per second
     pub angular_velocity: f32,
     /// Previous position (for XPBD integration)
-    pub prev_position: [f32; 2],
+    pub prev_position: Vec2,
     /// Previous rotation (for XPBD integration)
     pub prev_rotation: f32,
     /// Inverse mass (0 = kinematic/static)
@@ -162,28 +164,28 @@ impl RigidBody {
     }
 
     /// Get center position
-    pub fn get_center(&self) -> (f32, f32) {
-        (self.position[0], self.position[1])
+    pub fn get_center(&self) -> Vec2 {
+        self.position
     }
 
     /// Apply an impulse at the center of mass
     pub fn apply_impulse(&mut self, impulse_x: f32, impulse_y: f32) {
         if self.inv_mass > 0.0 {
-            self.linear_velocity[0] += impulse_x * self.inv_mass;
-            self.linear_velocity[1] += impulse_y * self.inv_mass;
+            self.linear_velocity.x += impulse_x * self.inv_mass;
+            self.linear_velocity.y += impulse_y * self.inv_mass;
         }
     }
 
     /// Apply an impulse at a world point (creates torque)
     pub fn apply_impulse_at_point(&mut self, impulse_x: f32, impulse_y: f32, point_x: f32, point_y: f32) {
         if self.inv_mass > 0.0 {
-            self.linear_velocity[0] += impulse_x * self.inv_mass;
-            self.linear_velocity[1] += impulse_y * self.inv_mass;
+            self.linear_velocity.x += impulse_x * self.inv_mass;
+            self.linear_velocity.y += impulse_y * self.inv_mass;
         }
         if self.inv_inertia > 0.0 {
             // Torque = r x F (2D cross product)
-            let rx = point_x - self.position[0];
-            let ry = point_y - self.position[1];
+            let rx = point_x - self.position.x;
+            let ry = point_y - self.position.y;
             let torque = rx * impulse_y - ry * impulse_x;
             self.angular_velocity += torque * self.inv_inertia;
         }
@@ -207,11 +209,11 @@ impl RigidBody {
         self.prev_rotation = self.rotation;
 
         // Apply gravity
-        self.linear_velocity[1] += gravity * dt;
+        self.linear_velocity.y += gravity * dt;
 
         // Integrate position
-        self.position[0] += self.linear_velocity[0] * dt;
-        self.position[1] += self.linear_velocity[1] * dt;
+        self.position.x += self.linear_velocity.x * dt;
+        self.position.y += self.linear_velocity.y * dt;
         self.rotation += self.angular_velocity * dt;
     }
 
@@ -222,8 +224,8 @@ impl RigidBody {
         }
 
         let inv_dt = 1.0 / dt;
-        self.linear_velocity[0] = (self.position[0] - self.prev_position[0]) * inv_dt;
-        self.linear_velocity[1] = (self.position[1] - self.prev_position[1]) * inv_dt;
+        self.linear_velocity.x = (self.position.x - self.prev_position.x) * inv_dt;
+        self.linear_velocity.y = (self.position.y - self.prev_position.y) * inv_dt;
         self.angular_velocity = (self.rotation - self.prev_rotation) * inv_dt;
     }
 
@@ -239,15 +241,15 @@ impl RigidBody {
             let penetration = ground_y - min_y;
 
             // Push out of ground
-            self.position[1] += penetration;
+            self.position.y += penetration;
 
             // Apply restitution to vertical velocity
-            if self.linear_velocity[1] < 0.0 {
-                self.linear_velocity[1] = -self.linear_velocity[1] * restitution;
+            if self.linear_velocity.y < 0.0 {
+                self.linear_velocity.y = -self.linear_velocity.y * restitution;
             }
 
             // Apply friction to horizontal velocity
-            self.linear_velocity[0] *= 1.0 - friction;
+            self.linear_velocity.x *= 1.0 - friction;
 
             // Dampen angular velocity when on ground
             self.angular_velocity *= 1.0 - friction * 0.5;
@@ -258,8 +260,8 @@ impl RigidBody {
     pub fn contains_point(&self, px: f32, py: f32) -> Option<(f32, f32, f32)> {
         match &self.collider {
             Collider::Circle { radius } => {
-                let dx = px - self.position[0];
-                let dy = py - self.position[1];
+                let dx = px - self.position.x;
+                let dy = py - self.position.y;
                 let dist_sq = dx * dx + dy * dy;
                 let radius_sq = radius * radius;
 
@@ -277,8 +279,8 @@ impl RigidBody {
                 // Transform point to local space
                 let cos_r = self.rotation.cos();
                 let sin_r = self.rotation.sin();
-                let dx = px - self.position[0];
-                let dy = py - self.position[1];
+                let dx = px - self.position.x;
+                let dy = py - self.position.y;
                 let local_x = dx * cos_r + dy * sin_r;
                 let local_y = -dx * sin_r + dy * cos_r;
 
@@ -323,12 +325,12 @@ pub struct RigidBodyConfig {
     pub collider: Collider,
     /// Density in kg/m^2
     pub density: f32,
-    /// Initial position [x, y]
-    pub position: [f32; 2],
+    /// Initial position
+    pub position: Vec2,
     /// Initial rotation in radians
     pub rotation: f32,
-    /// Initial velocity [vx, vy]
-    pub velocity: [f32; 2],
+    /// Initial velocity
+    pub velocity: Vec2,
     /// Initial angular velocity
     pub angular_velocity: f32,
     /// If true, body is kinematic (not affected by physics)
@@ -344,9 +346,9 @@ impl Default for RigidBodyConfig {
         Self {
             collider: Collider::Circle { radius: 1.0 },
             density: 1000.0,
-            position: [0.0, 0.0],
+            position: Vec2::ZERO,
             rotation: 0.0,
-            velocity: [0.0, 0.0],
+            velocity: Vec2::ZERO,
             angular_velocity: 0.0,
             is_kinematic: false,
             friction: 0.5,
@@ -387,7 +389,7 @@ impl RigidBodyConfig {
 
     /// Set position
     pub fn at_position(mut self, x: f32, y: f32) -> Self {
-        self.position = [x, y];
+        self.position = Vec2::new(x, y);
         self
     }
 
@@ -399,7 +401,7 @@ impl RigidBodyConfig {
 
     /// Set velocity
     pub fn with_velocity(mut self, vx: f32, vy: f32) -> Self {
-        self.velocity = [vx, vy];
+        self.velocity = Vec2::new(vx, vy);
         self
     }
 
@@ -443,7 +445,7 @@ mod tests {
 
         assert!(body.inv_mass > 0.0);
         assert!(body.inv_inertia > 0.0);
-        assert_eq!(body.position, [0.0, 5.0]);
+        assert_eq!(body.position, Vec2::new(0.0, 5.0));
     }
 
     #[test]
@@ -462,7 +464,7 @@ mod tests {
     #[test]
     fn test_collider_aabb() {
         let collider = Collider::Circle { radius: 1.0 };
-        let aabb = collider.get_aabb([0.0, 0.0], 0.0);
+        let aabb = collider.get_aabb(Vec2::ZERO, 0.0);
 
         assert_eq!(aabb, (-1.0, -1.0, 1.0, 1.0));
     }

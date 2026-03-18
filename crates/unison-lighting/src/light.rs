@@ -1,5 +1,7 @@
 //! Light types and structures for 2D dynamic lighting.
 
+use unison_math::{Vec2, Color};
+
 /// The type of light source and its type-specific parameters.
 #[derive(Debug, Clone, PartialEq)]
 pub enum LightType {
@@ -9,10 +11,10 @@ pub enum LightType {
     Spot {
         radius: f32,
         angle: f32,
-        direction: (f32, f32),
+        direction: Vec2,
     },
     /// Parallel rays from a distant source (e.g., sun/moon).
-    Directional { direction: (f32, f32) },
+    Directional { direction: Vec2 },
     /// Rectangular area light for soft illumination.
     Area { width: f32, height: f32 },
 }
@@ -23,9 +25,9 @@ pub struct Light {
     /// The type of light and its parameters.
     pub light_type: LightType,
     /// World position of the light (ignored for directional lights).
-    pub position: (f32, f32),
+    pub position: Vec2,
     /// RGB color of the light (0.0 to 1.0 per channel).
-    pub color: (f32, f32, f32),
+    pub color: Color,
     /// Light intensity multiplier.
     pub intensity: f32,
     /// Whether this light casts shadows.
@@ -36,11 +38,11 @@ pub struct Light {
 
 impl Light {
     /// Create a new point light.
-    pub fn point(position: (f32, f32), radius: f32) -> Self {
+    pub fn point(position: Vec2, radius: f32) -> Self {
         Self {
             light_type: LightType::Point { radius },
             position,
-            color: (1.0, 1.0, 1.0),
+            color: Color::WHITE,
             intensity: 1.0,
             shadows: true,
             enabled: true,
@@ -49,10 +51,10 @@ impl Light {
 
     /// Create a new spot light.
     pub fn spot(
-        position: (f32, f32),
+        position: Vec2,
         radius: f32,
         angle: f32,
-        direction: (f32, f32),
+        direction: Vec2,
     ) -> Self {
         Self {
             light_type: LightType::Spot {
@@ -61,7 +63,7 @@ impl Light {
                 direction,
             },
             position,
-            color: (1.0, 1.0, 1.0),
+            color: Color::WHITE,
             intensity: 1.0,
             shadows: true,
             enabled: true,
@@ -69,11 +71,11 @@ impl Light {
     }
 
     /// Create a new directional light.
-    pub fn directional(direction: (f32, f32)) -> Self {
+    pub fn directional(direction: Vec2) -> Self {
         Self {
             light_type: LightType::Directional { direction },
-            position: (0.0, 0.0),
-            color: (1.0, 1.0, 1.0),
+            position: Vec2::ZERO,
+            color: Color::WHITE,
             intensity: 1.0,
             shadows: true,
             enabled: true,
@@ -81,11 +83,11 @@ impl Light {
     }
 
     /// Create a new area light.
-    pub fn area(position: (f32, f32), width: f32, height: f32) -> Self {
+    pub fn area(position: Vec2, width: f32, height: f32) -> Self {
         Self {
             light_type: LightType::Area { width, height },
             position,
-            color: (1.0, 1.0, 1.0),
+            color: Color::WHITE,
             intensity: 1.0,
             shadows: false, // Area lights typically don't cast hard shadows
             enabled: true,
@@ -93,8 +95,8 @@ impl Light {
     }
 
     /// Set the light color.
-    pub fn with_color(mut self, r: f32, g: f32, b: f32) -> Self {
-        self.color = (r, g, b);
+    pub fn with_color(mut self, color: Color) -> Self {
+        self.color = color;
         self
     }
 
@@ -121,25 +123,22 @@ impl Light {
     }
 
     /// Check if the light affects a given point.
-    pub fn affects_point(&self, point: (f32, f32)) -> bool {
+    pub fn affects_point(&self, point: Vec2) -> bool {
         if !self.enabled {
             return false;
         }
 
         match &self.light_type {
             LightType::Point { radius } => {
-                let dx = point.0 - self.position.0;
-                let dy = point.1 - self.position.1;
-                dx * dx + dy * dy <= radius * radius
+                self.position.distance_squared(point) <= radius * radius
             }
             LightType::Spot {
                 radius,
                 angle,
                 direction,
             } => {
-                let dx = point.0 - self.position.0;
-                let dy = point.1 - self.position.1;
-                let dist_sq = dx * dx + dy * dy;
+                let diff = point - self.position;
+                let dist_sq = diff.length_squared();
                 if dist_sq > radius * radius {
                     return false;
                 }
@@ -148,23 +147,22 @@ impl Light {
                 if dist < 0.0001 {
                     return true;
                 }
-                let to_point = (dx / dist, dy / dist);
-                let dir_len = (direction.0 * direction.0 + direction.1 * direction.1).sqrt();
-                if dir_len < 0.0001 {
+                let to_point = diff / dist;
+                let dir_norm = direction.normalized();
+                if dir_norm == Vec2::ZERO {
                     return true;
                 }
-                let dir_norm = (direction.0 / dir_len, direction.1 / dir_len);
-                let dot = to_point.0 * dir_norm.0 + to_point.1 * dir_norm.1;
+                let dot = to_point.dot(dir_norm);
                 dot >= (angle * 0.5).cos()
             }
             LightType::Directional { .. } => true,
             LightType::Area { width, height } => {
                 let half_w = width * 0.5;
                 let half_h = height * 0.5;
-                point.0 >= self.position.0 - half_w
-                    && point.0 <= self.position.0 + half_w
-                    && point.1 >= self.position.1 - half_h
-                    && point.1 <= self.position.1 + half_h
+                point.x >= self.position.x - half_w
+                    && point.x <= self.position.x + half_w
+                    && point.y >= self.position.y - half_h
+                    && point.y <= self.position.y + half_h
             }
         }
     }
@@ -172,6 +170,6 @@ impl Light {
 
 impl Default for Light {
     fn default() -> Self {
-        Self::point((0.0, 0.0), 10.0)
+        Self::point(Vec2::ZERO, 10.0)
     }
 }

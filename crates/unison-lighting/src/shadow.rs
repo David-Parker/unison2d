@@ -1,6 +1,7 @@
 //! Shadow mapping system for 2D soft shadows.
 
 use crate::light::Light;
+use unison_math::Vec2;
 use unison_profiler::profile_scope;
 
 /// Quality settings for shadow rendering.
@@ -121,7 +122,7 @@ pub struct LightHandle(pub u32);
 /// Trait for objects that can cast shadows.
 pub trait ShadowCaster {
     /// Get the line segments that block light.
-    fn get_occluder_segments(&self) -> Vec<((f32, f32), (f32, f32))>;
+    fn get_occluder_segments(&self) -> Vec<(Vec2, Vec2)>;
 }
 
 /// Cache for managing shadow map allocation and dirty tracking.
@@ -193,7 +194,7 @@ impl ShadowMapCache {
 pub fn compute_shadow_map(
     shadow_map: &mut ShadowMap,
     light: &Light,
-    occluders: &[((f32, f32), (f32, f32))],
+    occluders: &[(Vec2, Vec2)],
 ) {
     profile_scope!("lighting.compute_shadow_map");
 
@@ -208,7 +209,7 @@ pub fn compute_shadow_map(
 
     for i in 0..resolution {
         let angle = (i as f32 / resolution as f32) * two_pi;
-        let dir = (angle.cos(), angle.sin());
+        let dir = Vec2::new(angle.cos(), angle.sin());
 
         let mut min_dist = f32::INFINITY;
 
@@ -227,22 +228,22 @@ pub fn compute_shadow_map(
 /// Ray-segment intersection test.
 /// Returns the distance along the ray if there's an intersection.
 fn ray_segment_intersection(
-    ray_origin: (f32, f32),
-    ray_dir: (f32, f32),
-    p1: (f32, f32),
-    p2: (f32, f32),
+    ray_origin: Vec2,
+    ray_dir: Vec2,
+    p1: Vec2,
+    p2: Vec2,
 ) -> Option<f32> {
-    let v1 = (ray_origin.0 - p1.0, ray_origin.1 - p1.1);
-    let v2 = (p2.0 - p1.0, p2.1 - p1.1);
-    let v3 = (-ray_dir.1, ray_dir.0);
+    let v1 = ray_origin - p1;
+    let v2 = p2 - p1;
+    let v3 = Vec2::new(-ray_dir.y, ray_dir.x);
 
-    let dot = v2.0 * v3.0 + v2.1 * v3.1;
+    let dot = v2.dot(v3);
     if dot.abs() < 0.0001 {
         return None; // Parallel
     }
 
-    let t1 = (v2.0 * v1.1 - v2.1 * v1.0) / dot;
-    let t2 = (v1.0 * v3.0 + v1.1 * v3.1) / dot;
+    let t1 = v2.cross(v1) / dot;
+    let t2 = v1.dot(v3) / dot;
 
     if t1 >= 0.0 && t2 >= 0.0 && t2 <= 1.0 {
         Some(t1)

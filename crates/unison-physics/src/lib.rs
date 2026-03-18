@@ -32,7 +32,7 @@
 //! - [`world`] - High-level physics world API (recommended)
 //! - [`xpbd`] - Low-level XPBD solver and body types
 //! - [`mesh`] - Mesh generation utilities
-//! - [`math`] - Math primitives (Vec2, Mat2)
+//! - [`math`] - Math primitives (Mat2)
 
 pub mod math;
 pub mod mesh;
@@ -60,8 +60,12 @@ pub use mesh::Mesh;
 
 pub use rigid::{RigidBody, RigidBodyConfig, Collider};
 
+// === Shared types (re-exported from unison-math) ===
+
+pub use unison_math;
+
 // === Low-level API (for advanced usage) ===
 
-pub use math::{Mat2, Vec2};
+pub use math::Mat2;
 pub use xpbd::{XPBDSoftBody, CollisionSystem, EdgeConstraint, AreaConstraint};
 pub use trace::{SimulationTracer, FrameTrace, TraceStatistics};

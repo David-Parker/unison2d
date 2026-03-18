@@ -1,6 +1,6 @@
 # unison-physics
 
-XPBD soft body and rigid body physics simulation. Platform-independent.
+XPBD soft body and rigid body physics simulation. Platform-independent. Uses `Vec2` from `unison-math`.
 
 ## PhysicsWorld
 
@@ -8,6 +8,7 @@ The main entry point. Manages all bodies and runs the simulation.
 
 ```rust
 use unison_physics::{PhysicsWorld, BodyHandle, BodyConfig, Material, Mesh};
+use unison_math::Vec2;
 
 let mut world = PhysicsWorld::new();
 world.set_gravity(-9.81);
@@ -66,8 +67,8 @@ world.apply_acceleration(handle, ax, ay, dt);
 ### Queries
 
 ```rust
-world.get_position(handle)       // -> Option<(f32, f32)>
-world.get_velocity(handle)       // -> Option<(f32, f32)>
+world.get_position(handle)       // -> Option<Vec2>
+world.get_velocity(handle)       // -> Option<Vec2>
 world.get_angular_velocity(handle) // -> Option<f32>
 world.get_aabb(handle)           // -> Option<(min_x, min_y, max_x, max_y)>
 world.get_lowest_y(handle)       // -> Option<f32>
@@ -95,11 +96,11 @@ world.get_render_data() // -> Vec<(&[f32], &[u32])> (positions, triangles)
 
 // Single body with interpolation
 world.get_body_render_data_interpolated(handle, alpha) // -> Option<(Vec<f32>, &[u32])>
-world.get_position_interpolated(handle, alpha)         // -> Option<(f32, f32)>
+world.get_position_interpolated(handle, alpha)         // -> Option<Vec2>
 
 // Rigid body interpolated
 world.get_rigid_body_render_data_interpolated(handle, alpha)
-    // -> Option<([f32; 2], [f32; 2], f32)>  (position, half_extents, rotation)
+    // -> Option<(Vec2, Vec2, f32)>  (position, half_extents, rotation)
 ```
 
 ### Iteration
@@ -182,7 +183,7 @@ offset_vertices(&mut vertices, dx, dy)
 
 ## RigidBody
 
-Non-deformable physics body with circle or AABB collider.
+Non-deformable physics body with circle or AABB collider. Position and velocity fields use `Vec2`.
 
 ```rust
 RigidBodyConfig::new()
@@ -202,28 +203,25 @@ RigidBodyConfig::new()
 ```rust
 Collider::circle(radius)
 Collider::aabb(half_width, half_height)
-collider.half_extents()  // -> [f32; 2]
+collider.half_extents()  // -> Vec2
 ```
 
 ## Math
 
-Type aliases and utility functions.
+Internal 2x2 matrix utilities used by the FEM solver. For `Vec2`, see `unison-math`.
 
 ```rust
-type Vec2 = [f32; 2];
 type Mat2 = [f32; 4]; // column-major
-
-// Vector ops
-vec2_length, vec2_dot, vec2_add, vec2_sub, vec2_scale
 
 // Matrix ops
 mat2_create, mat2_identity, mat2_det, mat2_inv, mat2_transpose,
-mat2_mul, mat2_mul_vec, mat2_add, mat2_sub, mat2_scale, mat2_trace
+mat2_inv_transpose, mat2_mul, mat2_mul_vec, mat2_add, mat2_sub,
+mat2_scale, mat2_trace, mat2_frobenius_norm_sq
 ```
 
 ## SimulationTracer
 
-Debug tool for capturing frame snapshots.
+Debug tool for capturing frame snapshots. `FrameTrace` fields `centroid` and `linear_velocity` are `Vec2`. `TraceStatistics` fields `start_centroid` and `end_centroid` are `Vec2`.
 
 ```rust
 let mut tracer = SimulationTracer::new(120); // keep last 120 frames

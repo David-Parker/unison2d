@@ -14,23 +14,24 @@
 //! # Usage
 //!
 //! ```ignore
-//! use unison_lighting::{LightingManager, Light, ShadowQuality, CameraBounds};
+//! use unison_lighting::{LightingManager, Light, ShadowQuality};
+//! use unison_math::{Vec2, Color, Rect};
 //!
 //! // Create lighting manager
 //! let mut lighting = LightingManager::new();
 //! lighting.set_shadow_quality(ShadowQuality::Medium);
-//! lighting.set_ambient(0.1, 0.1, 0.15);
+//! lighting.set_ambient(Color::rgb(0.1, 0.1, 0.15));
 //!
 //! // Add lights
 //! let sun = lighting.add_light(
-//!     Light::directional((0.5, -1.0))
-//!         .with_color(1.0, 0.95, 0.8)
+//!     Light::directional(Vec2::new(0.5, -1.0))
+//!         .with_color(Color::rgb(1.0, 0.95, 0.8))
 //!         .with_intensity(0.8)
 //! );
 //!
 //! let torch = lighting.add_light(
-//!     Light::point((10.0, 5.0), 8.0)
-//!         .with_color(1.0, 0.6, 0.2)
+//!     Light::point(Vec2::new(10.0, 5.0), 8.0)
+//!         .with_color(Color::rgb(1.0, 0.6, 0.2))
 //!         .with_intensity(1.2)
 //! );
 //!
@@ -39,7 +40,7 @@
 //! lighting.update_shadows(&occluders);
 //!
 //! // Get visible lights for rendering
-//! let camera = CameraBounds::from_center((0.0, 0.0), 20.0, 15.0);
+//! let camera = Rect::from_center(Vec2::ZERO, Vec2::new(20.0, 15.0));
 //! let visible = lighting.get_visible_lights(&camera);
 //! ```
 //!
@@ -82,5 +83,5 @@ pub mod render;
 pub use light::{Light, LightType};
 pub use config::{LightConfig, AmbientConfig, SceneLightingConfig};
 pub use shadow::{ShadowQuality, ShadowMap, ShadowMapId, LightHandle, ShadowCaster, ShadowMapCache};
-pub use manager::{LightingManager, CameraBounds};
+pub use manager::LightingManager;
 pub use render::{LightingRenderer, OccluderData, LightingData, LightRenderData, NullLightingRenderer};

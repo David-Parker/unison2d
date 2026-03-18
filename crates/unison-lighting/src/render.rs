@@ -2,13 +2,14 @@
 
 use crate::light::Light;
 use crate::shadow::ShadowMapId;
+use unison_math::{Vec2, Color};
 
 /// Data for occluders to be rendered into shadow maps.
 #[derive(Debug, Clone, Default)]
 pub struct OccluderData {
     /// Line segments that block light.
-    /// Each segment is ((start_x, start_y), (end_x, end_y)).
-    pub segments: Vec<((f32, f32), (f32, f32))>,
+    /// Each segment is (start, end).
+    pub segments: Vec<(Vec2, Vec2)>,
 }
 
 impl OccluderData {
@@ -18,12 +19,12 @@ impl OccluderData {
     }
 
     /// Create occluder data from segments.
-    pub fn from_segments(segments: Vec<((f32, f32), (f32, f32))>) -> Self {
+    pub fn from_segments(segments: Vec<(Vec2, Vec2)>) -> Self {
         Self { segments }
     }
 
     /// Add a segment to the occluder.
-    pub fn add_segment(&mut self, start: (f32, f32), end: (f32, f32)) {
+    pub fn add_segment(&mut self, start: Vec2, end: Vec2) {
         self.segments.push((start, end));
     }
 
@@ -31,14 +32,14 @@ impl OccluderData {
     pub fn add_rect(&mut self, x: f32, y: f32, width: f32, height: f32) {
         let x2 = x + width;
         let y2 = y + height;
-        self.segments.push(((x, y), (x2, y)));
-        self.segments.push(((x2, y), (x2, y2)));
-        self.segments.push(((x2, y2), (x, y2)));
-        self.segments.push(((x, y2), (x, y)));
+        self.segments.push((Vec2::new(x, y), Vec2::new(x2, y)));
+        self.segments.push((Vec2::new(x2, y), Vec2::new(x2, y2)));
+        self.segments.push((Vec2::new(x2, y2), Vec2::new(x, y2)));
+        self.segments.push((Vec2::new(x, y2), Vec2::new(x, y)));
     }
 
     /// Add a polygon as segments connecting consecutive vertices.
-    pub fn add_polygon(&mut self, vertices: &[(f32, f32)]) {
+    pub fn add_polygon(&mut self, vertices: &[Vec2]) {
         if vertices.len() < 2 {
             return;
         }
@@ -55,16 +56,16 @@ pub struct LightingData {
     /// Visible lights for this frame.
     pub lights: Vec<LightRenderData>,
     /// Ambient light color.
-    pub ambient: (f32, f32, f32),
+    pub ambient: Color,
 }
 
 /// Per-light data for rendering.
 #[derive(Debug, Clone)]
 pub struct LightRenderData {
     /// Light position in world space.
-    pub position: (f32, f32),
-    /// Light color (RGB).
-    pub color: (f32, f32, f32),
+    pub position: Vec2,
+    /// Light color.
+    pub color: Color,
     /// Light intensity.
     pub intensity: f32,
     /// Light radius (for attenuation).
@@ -88,9 +89,9 @@ impl LightRenderData {
                 radius,
                 angle,
                 direction,
-            } => (1, *radius, [direction.0, direction.1, *angle, 0.0]),
+            } => (1, *radius, [direction.x, direction.y, *angle, 0.0]),
             LightType::Directional { direction } => {
-                (2, f32::INFINITY, [direction.0, direction.1, 0.0, 0.0])
+                (2, f32::INFINITY, [direction.x, direction.y, 0.0, 0.0])
             }
             LightType::Area { width, height } => {
                 (3, (width * width + height * height).sqrt() * 0.5, [*width, *height, 0.0, 0.0])
@@ -126,7 +127,7 @@ pub trait LightingRenderer {
     fn bind_lighting(
         &mut self,
         lights: &[&Light],
-        ambient: (f32, f32, f32),
+        ambient: Color,
         shadow_maps: &[ShadowMapId],
     );
 
@@ -168,7 +169,7 @@ impl LightingRenderer for NullLightingRenderer {
     fn bind_lighting(
         &mut self,
         _lights: &[&Light],
-        _ambient: (f32, f32, f32),
+        _ambient: Color,
         _shadow_maps: &[ShadowMapId],
     ) {
         // No-op

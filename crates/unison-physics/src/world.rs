@@ -6,6 +6,7 @@
 use crate::mesh::Mesh;
 use crate::rigid::{RigidBody, RigidBodyConfig};
 use crate::xpbd::{XPBDSoftBody, CollisionSystem};
+use unison_math::Vec2;
 use unison_profiler::profile_scope;
 
 /// Unique identifier for a physics body
@@ -115,9 +116,9 @@ pub struct BodyConfig {
     /// Collision groups
     pub collision_groups: CollisionGroups,
     /// Initial position offset
-    pub position: (f32, f32),
+    pub position: Vec2,
     /// Initial velocity
-    pub velocity: (f32, f32),
+    pub velocity: Vec2,
 }
 
 impl Default for BodyConfig {
@@ -125,8 +126,8 @@ impl Default for BodyConfig {
         Self {
             material: Material::default(),
             collision_groups: CollisionGroups::default(),
-            position: (0.0, 0.0),
-            velocity: (0.0, 0.0),
+            position: Vec2::ZERO,
+            velocity: Vec2::ZERO,
         }
     }
 }
@@ -157,13 +158,13 @@ impl BodyConfig {
 
     /// Set initial position
     pub fn at_position(mut self, x: f32, y: f32) -> Self {
-        self.position = (x, y);
+        self.position = Vec2::new(x, y);
         self
     }
 
     /// Set initial velocity
     pub fn with_velocity(mut self, vx: f32, vy: f32) -> Self {
-        self.velocity = (vx, vy);
+        self.velocity = Vec2::new(vx, vy);
         self
     }
 }
@@ -308,10 +309,9 @@ impl PhysicsWorld {
         let mut vertices = mesh.vertices.clone();
 
         // Apply position offset
-        let (dx, dy) = config.position;
         for i in 0..vertices.len() / 2 {
-            vertices[i * 2] += dx;
-            vertices[i * 2 + 1] += dy;
+            vertices[i * 2] += config.position.x;
+            vertices[i * 2 + 1] += config.position.y;
         }
 
         let mut body = XPBDSoftBody::new(
@@ -323,10 +323,9 @@ impl PhysicsWorld {
         );
 
         // Set initial velocity
-        let (vx, vy) = config.velocity;
         for i in 0..body.num_verts {
-            body.vel[i * 2] = vx;
-            body.vel[i * 2 + 1] = vy;
+            body.vel[i * 2] = config.velocity.x;
+            body.vel[i * 2 + 1] = config.velocity.y;
         }
 
         // Initialize prev_pos for correct first-frame velocity
@@ -642,8 +641,8 @@ impl PhysicsWorld {
             BodyType::Rigid(index) => {
                 let body = &mut self.rigid_bodies[index];
                 if body.inv_mass > 0.0 {
-                    body.linear_velocity[0] += vx;
-                    body.linear_velocity[1] += vy;
+                    body.linear_velocity.x += vx;
+                    body.linear_velocity.y += vy;
                 }
             }
         }
@@ -676,8 +675,8 @@ impl PhysicsWorld {
             BodyType::Rigid(index) => {
                 let body = &mut self.rigid_bodies[index];
                 if body.inv_mass > 0.0 {
-                    body.linear_velocity[0] += ax * dt;
-                    body.linear_velocity[1] += ay * dt;
+                    body.linear_velocity.x += ax * dt;
+                    body.linear_velocity.y += ay * dt;
                 }
             }
         }
@@ -697,14 +696,14 @@ impl PhysicsWorld {
             }
             BodyType::Rigid(index) => {
                 let body = &mut self.rigid_bodies[index];
-                body.linear_velocity[0] = vx;
-                body.linear_velocity[1] = vy;
+                body.linear_velocity.x = vx;
+                body.linear_velocity.y = vy;
             }
         }
     }
 
     /// Get average velocity of body
-    pub fn get_velocity(&self, handle: BodyHandle) -> Option<(f32, f32)> {
+    pub fn get_velocity(&self, handle: BodyHandle) -> Option<Vec2> {
         let body_type = self.body_types.get(handle.0)?.as_ref()?;
 
         match body_type {
@@ -723,14 +722,14 @@ impl PhysicsWorld {
                 }
 
                 if count > 0 {
-                    Some((vx / count as f32, vy / count as f32))
+                    Some(Vec2::new(vx / count as f32, vy / count as f32))
                 } else {
-                    Some((0.0, 0.0))
+                    Some(Vec2::ZERO)
                 }
             }
             BodyType::Rigid(index) => {
                 let body = &self.rigid_bodies[*index];
-                Some((body.linear_velocity[0], body.linear_velocity[1]))
+                Some(body.linear_velocity)
             }
         }
     }
@@ -836,8 +835,8 @@ impl PhysicsWorld {
             }
             BodyType::Rigid(index) => {
                 let body = &mut self.rigid_bodies[index];
-                body.linear_velocity[0] = vx;
-                body.linear_velocity[1] = vy;
+                body.linear_velocity.x = vx;
+                body.linear_velocity.y = vy;
             }
         }
     }
@@ -896,11 +895,14 @@ impl PhysicsWorld {
     // === Position/Transform ===
 
     /// Get the center of mass position
-    pub fn get_position(&self, handle: BodyHandle) -> Option<(f32, f32)> {
+    pub fn get_position(&self, handle: BodyHandle) -> Option<Vec2> {
         let body_type = self.body_types.get(handle.0)?.as_ref()?;
 
         match body_type {
-            BodyType::Soft(index) => Some(self.soft_bodies[*index].get_center()),
+            BodyType::Soft(index) => {
+                let (x, y) = self.soft_bodies[*index].get_center();
+                Some(Vec2::new(x, y))
+            }
             BodyType::Rigid(index) => Some(self.rigid_bodies[*index].get_center()),
         }
     }
@@ -921,10 +923,10 @@ impl PhysicsWorld {
             }
             BodyType::Rigid(index) => {
                 let body = &mut self.rigid_bodies[index];
-                body.position[0] += dx;
-                body.position[1] += dy;
-                body.prev_position[0] += dx;
-                body.prev_position[1] += dy;
+                body.position.x += dx;
+                body.position.y += dy;
+                body.prev_position.x += dx;
+                body.prev_position.y += dy;
             }
         }
     }
@@ -932,8 +934,8 @@ impl PhysicsWorld {
     /// Set the center position (translates whole body)
     pub fn set_position(&mut self, handle: BodyHandle, x: f32, y: f32) {
         let Some(current) = self.get_position(handle) else { return };
-        let dx = x - current.0;
-        let dy = y - current.1;
+        let dx = x - current.x;
+        let dy = y - current.y;
         self.translate(handle, dx, dy);
     }
 
@@ -1113,7 +1115,7 @@ impl PhysicsWorld {
                 let body = &self.rigid_bodies[*index];
                 if body.inv_mass > 0.0 {
                     let mass = 1.0 / body.inv_mass;
-                    let v_sq = body.linear_velocity[0].powi(2) + body.linear_velocity[1].powi(2);
+                    let v_sq = body.linear_velocity.x.powi(2) + body.linear_velocity.y.powi(2);
                     Some(0.5 * mass * v_sq)
                 } else {
                     Some(0.0)
@@ -1128,7 +1130,7 @@ impl PhysicsWorld {
         let rigid_ke: f32 = self.rigid_bodies.iter().map(|b| {
             if b.inv_mass > 0.0 {
                 let mass = 1.0 / b.inv_mass;
-                let v_sq = b.linear_velocity[0].powi(2) + b.linear_velocity[1].powi(2);
+                let v_sq = b.linear_velocity.x.powi(2) + b.linear_velocity.y.powi(2);
                 0.5 * mass * v_sq
             } else {
                 0.0
@@ -1252,7 +1254,8 @@ impl PhysicsWorld {
             for body in self.rigid_bodies.iter_mut() {
                 body.pre_solve(substep_dt, self.gravity);
                 // Use height_at for simple ground approximation
-                let (cx, _cy) = body.get_center();
+                let center = body.get_center();
+                let cx = center.x;
                 let ground_y = height_at(cx);
                 body.solve_ground_collision(ground_y, self.ground_friction, self.ground_restitution);
             }
@@ -1327,12 +1330,12 @@ impl PhysicsWorld {
                             soft_body.pos[i * 2] += nx * soft_push;
                             soft_body.pos[i * 2 + 1] += ny * soft_push;
 
-                            rigid_body.position[0] -= nx * rigid_push;
-                            rigid_body.position[1] -= ny * rigid_push;
+                            rigid_body.position.x -= nx * rigid_push;
+                            rigid_body.position.y -= ny * rigid_push;
 
                             // Apply torque to rigid body based on contact point
-                            let rx = vx - rigid_body.position[0];
-                            let ry = vy - rigid_body.position[1];
+                            let rx = vx - rigid_body.position.x;
+                            let ry = vy - rigid_body.position.y;
                             let torque = (rx * (-ny * rigid_push) - ry * (-nx * rigid_push)) * rigid_body.inv_inertia;
                             rigid_body.angular_velocity += torque;
                         }
@@ -1390,7 +1393,7 @@ impl PhysicsWorld {
 
     /// Get interpolated center position for a body.
     /// Useful for camera tracking without jitter.
-    pub fn get_position_interpolated(&self, handle: BodyHandle, alpha: f32) -> Option<(f32, f32)> {
+    pub fn get_position_interpolated(&self, handle: BodyHandle, alpha: f32) -> Option<Vec2> {
         let body_type = self.body_types.get(handle.0)?.as_ref()?;
 
         let alpha = alpha.clamp(0.0, 1.0);
@@ -1414,14 +1417,11 @@ impl PhysicsWorld {
                     cy += prev_y * one_minus_alpha + curr_y * alpha;
                 }
 
-                Some((cx / n as f32, cy / n as f32))
+                Some(Vec2::new(cx / n as f32, cy / n as f32))
             }
             BodyType::Rigid(index) => {
                 let body = self.rigid_bodies.get(*index)?;
-                // Interpolate between previous and current position
-                let x = body.prev_position[0] * one_minus_alpha + body.position[0] * alpha;
-                let y = body.prev_position[1] * one_minus_alpha + body.position[1] * alpha;
-                Some((x, y))
+                Some(body.prev_position.lerp(body.position, alpha))
             }
         }
     }
@@ -1432,22 +1432,18 @@ impl PhysicsWorld {
         &self,
         handle: BodyHandle,
         alpha: f32,
-    ) -> Option<([f32; 2], [f32; 2], f32)> {
+    ) -> Option<(Vec2, Vec2, f32)> {
         let BodyType::Rigid(index) = self.body_types.get(handle.0)?.as_ref()? else {
             return None;
         };
         let body = self.rigid_bodies.get(*index)?;
 
         let alpha = alpha.clamp(0.0, 1.0);
-        let one_minus_alpha = 1.0 - alpha;
-
-        let x = body.prev_position[0] * one_minus_alpha + body.position[0] * alpha;
-        let y = body.prev_position[1] * one_minus_alpha + body.position[1] * alpha;
-        let rotation = body.prev_rotation * one_minus_alpha + body.rotation * alpha;
-
+        let position = body.prev_position.lerp(body.position, alpha);
+        let rotation = body.prev_rotation * (1.0 - alpha) + body.rotation * alpha;
         let half_extents = body.collider.half_extents();
 
-        Some(([x, y], half_extents, rotation))
+        Some((position, half_extents, rotation))
     }
 }
 
@@ -1502,8 +1498,8 @@ mod tests {
         world.apply_impulse(handle, 5.0, 10.0);
 
         let vel = world.get_velocity(handle).unwrap();
-        assert!((vel.0 - 5.0).abs() < 0.01);
-        assert!((vel.1 - 10.0).abs() < 0.01);
+        assert!((vel.x - 5.0).abs() < 0.01);
+        assert!((vel.y - 10.0).abs() < 0.01);
     }
 
     #[test]
@@ -1513,13 +1509,13 @@ mod tests {
         let handle = world.add_body(&mesh, BodyConfig::new().at_position(3.0, 4.0));
 
         let pos = world.get_position(handle).unwrap();
-        assert!((pos.0 - 3.0).abs() < 0.01);
-        assert!((pos.1 - 4.0).abs() < 0.01);
+        assert!((pos.x - 3.0).abs() < 0.01);
+        assert!((pos.y - 4.0).abs() < 0.01);
 
         world.set_position(handle, 10.0, 20.0);
         let pos = world.get_position(handle).unwrap();
-        assert!((pos.0 - 10.0).abs() < 0.01);
-        assert!((pos.1 - 20.0).abs() < 0.01);
+        assert!((pos.x - 10.0).abs() < 0.01);
+        assert!((pos.y - 20.0).abs() < 0.01);
     }
 
     #[test]
@@ -1537,8 +1533,8 @@ mod tests {
         assert!(world.contains(rigid_handle));
 
         let pos = world.get_position(rigid_handle).unwrap();
-        assert!((pos.0 - 5.0).abs() < 0.01);
-        assert!((pos.1 - 10.0).abs() < 0.01);
+        assert!((pos.x - 5.0).abs() < 0.01);
+        assert!((pos.y - 10.0).abs() < 0.01);
     }
 
     #[test]

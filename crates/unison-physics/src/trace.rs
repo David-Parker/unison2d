@@ -3,6 +3,7 @@
 //! Captures detailed state snapshots during simulation for analysis.
 
 use std::collections::VecDeque;
+use unison_math::Vec2;
 
 /// A single frame's worth of simulation state
 #[derive(Clone, Debug)]
@@ -11,12 +12,12 @@ pub struct FrameTrace {
     pub time: f32,
 
     // Mesh state
-    pub centroid: [f32; 2],
+    pub centroid: Vec2,
     pub bounding_box: [f32; 4],  // min_x, max_x, min_y, max_y
     pub orientation: f32,        // angle of principal axis in radians
 
     // Velocity state
-    pub linear_velocity: [f32; 2],  // average velocity
+    pub linear_velocity: Vec2,      // average velocity
     pub angular_velocity: f32,       // estimated rotation rate
     pub max_velocity: f32,
 
@@ -42,10 +43,10 @@ impl FrameTrace {
         FrameTrace {
             frame,
             time,
-            centroid: [0.0, 0.0],
+            centroid: Vec2::ZERO,
             bounding_box: [0.0, 0.0, 0.0, 0.0],
             orientation: 0.0,
-            linear_velocity: [0.0, 0.0],
+            linear_velocity: Vec2::ZERO,
             angular_velocity: 0.0,
             max_velocity: 0.0,
             min_j: 1.0,
@@ -124,7 +125,7 @@ impl SimulationTracer {
         }
         cx /= num_verts as f32;
         cy /= num_verts as f32;
-        trace.centroid = [cx, cy];
+        trace.centroid = Vec2::new(cx, cy);
 
         // Compute bounding box
         let mut min_x = f32::MAX;
@@ -173,7 +174,7 @@ impl SimulationTracer {
         }
         vx /= num_verts as f32;
         vy /= num_verts as f32;
-        trace.linear_velocity = [vx, vy];
+        trace.linear_velocity = Vec2::new(vx, vy);
         trace.max_velocity = max_vel;
         trace.fastest_vertex = (fastest_idx, max_vel);
 
@@ -292,8 +293,8 @@ impl SimulationTracer {
             println!("{:>6} {:>8.3} {:>10.3} {:>10.3} {:>8.3} {:>8.3} {:>8.2} {:>8.2} {:>6}",
                 trace.frame,
                 trace.time,
-                trace.centroid[0],
-                trace.centroid[1],
+                trace.centroid.x,
+                trace.centroid.y,
                 trace.min_j,
                 trace.max_j,
                 trace.max_velocity,
@@ -313,13 +314,13 @@ impl SimulationTracer {
         for t in &self.traces {
             csv.push_str(&format!(
                 "{},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},",
-                t.frame, t.time, t.centroid[0], t.centroid[1],
+                t.frame, t.time, t.centroid.x, t.centroid.y,
                 t.bounding_box[0], t.bounding_box[1], t.bounding_box[2], t.bounding_box[3],
                 t.orientation
             ));
             csv.push_str(&format!(
                 "{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{},{:.4}\n",
-                t.linear_velocity[0], t.linear_velocity[1], t.max_velocity, t.angular_velocity,
+                t.linear_velocity.x, t.linear_velocity.y, t.max_velocity, t.angular_velocity,
                 t.min_j, t.max_j, t.avg_j, t.inverted_triangles, t.kinetic_energy
             ));
         }
@@ -427,8 +428,8 @@ pub struct TraceStatistics {
     pub max_velocity_ever: f32,
     pub max_angular_velocity_ever: f32,
     pub total_inverted_frames: u32,
-    pub start_centroid: [f32; 2],
-    pub end_centroid: [f32; 2],
+    pub start_centroid: Vec2,
+    pub end_centroid: Vec2,
 }
 
 impl TraceStatistics {
@@ -440,12 +441,12 @@ impl TraceStatistics {
         println!("Max angular velocity: {:.2} rad/s", self.max_angular_velocity_ever);
         println!("Total inverted triangles: {}", self.total_inverted_frames);
         println!("Trajectory: ({:.2}, {:.2}) -> ({:.2}, {:.2})",
-            self.start_centroid[0], self.start_centroid[1],
-            self.end_centroid[0], self.end_centroid[1]
+            self.start_centroid.x, self.start_centroid.y,
+            self.end_centroid.x, self.end_centroid.y
         );
 
         // Fall distance
-        let fall = self.start_centroid[1] - self.end_centroid[1];
+        let fall = self.start_centroid.y - self.end_centroid.y;
         if fall > 0.0 && self.total_time > 0.0 {
             let avg_fall_speed = fall / self.total_time;
             println!("Fall: {:.2}m in {:.2}s (avg {:.2} m/s)", fall, self.total_time, avg_fall_speed);
@@ -478,7 +479,7 @@ mod tests {
 
         assert_eq!(tracer.traces().len(), 1);
         let trace = tracer.traces().back().unwrap();
-        assert!((trace.centroid[0] - 0.5).abs() < 0.01);
-        assert!((trace.linear_velocity[1] - (-1.0)).abs() < 0.01);
+        assert!((trace.centroid.x - 0.5).abs() < 0.01);
+        assert!((trace.linear_velocity.y - (-1.0)).abs() < 0.01);
     }
 }

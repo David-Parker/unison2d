@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::light::{Light, LightType};
+use unison_math::{Vec2, Color};
 
 /// Configuration for a light loaded from a scene file.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -44,8 +45,7 @@ fn default_enabled() -> bool {
 impl LightConfig {
     /// Convert this config into a Light instance.
     pub fn to_light(&self) -> Result<Light, String> {
-        let position = self.position.unwrap_or([0.0, 0.0]);
-        let position = (position[0], position[1]);
+        let position: Vec2 = self.position.unwrap_or([0.0, 0.0]).into();
 
         let light_type = match self.light_type.as_str() {
             "point" => {
@@ -61,7 +61,7 @@ impl LightConfig {
                 LightType::Spot {
                     radius,
                     angle,
-                    direction: (direction[0], direction[1]),
+                    direction: direction.into(),
                 }
             }
             "directional" => {
@@ -69,7 +69,7 @@ impl LightConfig {
                     .direction
                     .ok_or("directional light requires 'direction'")?;
                 LightType::Directional {
-                    direction: (direction[0], direction[1]),
+                    direction: direction.into(),
                 }
             }
             "area" => {
@@ -83,7 +83,7 @@ impl LightConfig {
         Ok(Light {
             light_type,
             position,
-            color: (self.color[0], self.color[1], self.color[2]),
+            color: Color::rgb(self.color[0], self.color[1], self.color[2]),
             intensity: self.intensity,
             shadows: self.shadows,
             enabled: self.enabled,
