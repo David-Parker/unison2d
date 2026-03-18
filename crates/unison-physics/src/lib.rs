@@ -41,6 +41,7 @@ pub mod rigid;
 pub mod trace;
 pub mod compute;
 pub mod world;
+pub mod forensics;
 
 // === High-level API (recommended) ===
 
@@ -63,6 +64,10 @@ pub use rigid::{RigidBody, RigidBodyConfig, Collider};
 // === Shared types (re-exported from unison-math) ===
 
 pub use unison_math;
+
+// === Forensics (testing) ===
+
+pub use forensics::{MeshForensics, ShapeBaseline, HealthTolerance, ForensicSimulation};
 
 // === Low-level API (for advanced usage) ===
 

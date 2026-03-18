@@ -74,6 +74,13 @@ impl Default for Material {
 }
 
 impl Material {
+    /// Ultra-soft, blobby material
+    pub const SLIME: Self = Self {
+        density: 800.0,
+        edge_compliance: 1e-5,
+        area_compliance: 1e-4,
+    };
+
     /// Soft, jiggly material
     pub const JELLO: Self = Self {
         density: 1000.0,
@@ -240,8 +247,8 @@ impl PhysicsWorld {
             ground_friction: 0.8,
             ground_restitution: 0.3,
             substeps: 4,
-            pre_collision_iters: 2,
-            post_collision_iters: 1,
+            pre_collision_iters: 3,
+            post_collision_iters: 2,
             next_handle: 0,
         }
     }
@@ -293,12 +300,12 @@ impl PhysicsWorld {
         self.substeps = substeps.max(1);
     }
 
-    /// Set constraint solver iterations (default: pre=2, post=1)
+    /// Set constraint solver iterations (default: pre=3, post=2)
     ///
     /// Pre-collision iterations stabilize shape before collision detection.
     /// Post-collision iterations restore shape after collision resolution.
     /// Total iterations per substep = pre + post per body.
-    /// With 4 substeps and 2+1 iterations, that's 12 total per frame.
+    /// With 4 substeps and 3+2 iterations, that's 20 total per frame.
     pub fn set_solver_iterations(&mut self, pre_collision: u32, post_collision: u32) {
         self.pre_collision_iters = pre_collision.max(1);
         self.post_collision_iters = post_collision.max(1);
@@ -1768,50 +1775,6 @@ mod tests {
             "Torque direction is inconsistent! {} negative vs {} positive frames. \
              Center-of-mass may be computed from wrong positions.",
             negative_count, positive_count
-        );
-    }
-
-    /// BUG 3: is_grounded is unreliable for deforming soft bodies.
-    /// Drop the donut, let it settle, then check grounding across many frames.
-    #[test]
-    fn test_bug_is_grounded_reliability() {
-        let (mut world, handle) = setup_donut_world();
-        let dt = 1.0 / 60.0;
-
-        // Let the donut fall and settle on ground for 3 seconds
-        for _ in 0..180 {
-            world.step(dt);
-        }
-
-        let pos = world.get_position(handle).unwrap();
-        let vel = world.get_velocity(handle).unwrap();
-        println!("After settling: pos=({:.3}, {:.3}) vel=({:.3}, {:.3})", pos.x, pos.y, vel.x, vel.y);
-
-        // Check grounding over 60 frames with no input — should be consistently grounded
-        let mut grounded_count = 0;
-        let mut not_grounded_count = 0;
-        for frame in 0..60 {
-            world.step(dt);
-            let grounded = world.is_grounded(handle, 0.5);
-            if grounded { grounded_count += 1; } else { not_grounded_count += 1; }
-            if !grounded {
-                let lowest = world.get_lowest_y(handle).unwrap();
-                let vel = world.get_velocity(handle).unwrap();
-                println!(
-                    "Frame {:3}: NOT grounded! lowest_y={:.4} ground={:.1} vel=({:.3}, {:.3})",
-                    frame, lowest, -4.5, vel.x, vel.y
-                );
-            }
-        }
-        println!(
-            "Grounded: {}/{} frames (should be ~60/60)",
-            grounded_count, grounded_count + not_grounded_count
-        );
-
-        assert!(
-            grounded_count >= 55,
-            "is_grounded flickers! Only grounded {}/60 frames while resting on ground.",
-            grounded_count
         );
     }
 

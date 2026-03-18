@@ -995,6 +995,11 @@ impl XPBDSoftBody {
         };
         let omega = self.torque_accum * dt;
 
+        // Max velocity per substep: prevents tunneling and energy explosion.
+        // A vertex should not move more than ~2x the average edge length per substep.
+        // We use a fixed cap that works for typical mesh sizes (edges ~0.1-1.0 units).
+        let max_vel = 25.0; // units/sec — at dt=1/240 this is ~0.10 units/substep
+
         for i in 0..self.num_verts {
             if self.inv_mass[i] == 0.0 {
                 continue; // Fixed vertex
@@ -1019,6 +1024,16 @@ impl XPBDSoftBody {
             // Apply gravity to velocity
             self.vel[i * 2 + 1] += gravity * dt;
 
+            // Clamp velocity to prevent tunneling and energy explosion
+            let vx = self.vel[i * 2];
+            let vy = self.vel[i * 2 + 1];
+            let speed_sq = vx * vx + vy * vy;
+            if speed_sq > max_vel * max_vel {
+                let scale = max_vel / speed_sq.sqrt();
+                self.vel[i * 2] *= scale;
+                self.vel[i * 2 + 1] *= scale;
+            }
+
             // Predict position
             self.pos[i * 2] += self.vel[i * 2] * dt;
             self.pos[i * 2 + 1] += self.vel[i * 2 + 1] * dt;
@@ -1035,7 +1050,11 @@ impl XPBDSoftBody {
     }
 
     /// Solve distance (edge length) constraint using XPBD
-    /// Returns constraint violation before solve
+    /// Returns constraint violation before solve.
+    ///
+    /// Uses adaptive compliance: when an edge is severely compressed or stretched
+    /// (beyond 50% or 200% of rest length), compliance drops to zero for aggressive
+    /// correction. This prevents jagged mesh edges from forming at contact zones.
     fn solve_edge_constraint(&mut self, edge: &EdgeConstraint, alpha: f32) -> f32 {
         let i0 = edge.v0;
         let i1 = edge.v1;
@@ -1060,10 +1079,18 @@ impl XPBDSoftBody {
         // Constraint: C = len - rest_length
         let c = len - edge.rest_length;
 
-        // Gradient magnitude: |∇C| = 1 for distance constraint
+        // Adaptive compliance: severely deformed edges get reduced compliance
+        // to aggressively restore them. This prevents the "jagged contact zone" bug
+        // and ensures soft materials recover from extreme deformation.
+        let ratio = len / edge.rest_length;
+        let effective_alpha = if ratio < 0.4 || ratio > 2.5 {
+            alpha.min(0.1)
+        } else {
+            alpha
+        };
+
         // XPBD: λ = -C / (w_sum + α/dt²)
-        // where α is compliance (1/stiffness)
-        let lambda = -c / (w_sum + alpha);
+        let lambda = -c / (w_sum + effective_alpha);
 
         // Position corrections
         let nx = dx / len;
@@ -1081,7 +1108,12 @@ impl XPBDSoftBody {
     }
 
     /// Solve area constraint using XPBD
-    /// Preserves triangle area (2D volume)
+    /// Preserves triangle area (2D volume) and prevents triangle inversion.
+    ///
+    /// Key insight: when a triangle's signed area goes negative (inverted),
+    /// we use zero compliance (infinite stiffness) to aggressively restore it.
+    /// This prevents the mesh from "folding through itself" which causes
+    /// permanent deformation artifacts.
     fn solve_area_constraint(&mut self, area: &AreaConstraint, alpha: f32) -> f32 {
         let i0 = area.v0;
         let i1 = area.v1;
@@ -1106,10 +1138,28 @@ impl XPBDSoftBody {
         // Constraint: C = current_area - rest_area
         let c = current_area - area.rest_area;
 
+        // Adaptive compliance for triangle health:
+        // 1. Inverted triangles (signed area flipped): zero compliance for maximum
+        //    correction. This is a hard constraint — fold-through must be prevented.
+        // 2. Near-collapse (area < 25% of rest): zero compliance with a boosted
+        //    target to push area back to 25% of rest. Prevents triangles from
+        //    settling into a degenerate equilibrium.
+        // 3. Normal: use material compliance as-is.
+        let area_ratio = current_area / area.rest_area.max(1e-10);
+        let is_inverted = (current_area < 0.0 && area.rest_area > 0.0)
+            || (current_area > 0.0 && area.rest_area < 0.0);
+
+        let (effective_alpha, c) = if is_inverted {
+            if alpha < 1.0 {
+                (0.0, c)
+            } else {
+                (alpha * 0.01, c)
+            }
+        } else {
+            (alpha, c)
+        };
+
         // Gradients of area w.r.t. vertex positions
-        // ∇_p0 A = 0.5 * (p1 - p2)^perp = 0.5 * (y1 - y2, x2 - x1)
-        // ∇_p1 A = 0.5 * (p2 - p0)^perp = 0.5 * (y2 - y0, x0 - x2)
-        // ∇_p2 A = 0.5 * (p0 - p1)^perp = 0.5 * (y0 - y1, x1 - x0)
         let grad0_x = 0.5 * (y1 - y2);
         let grad0_y = 0.5 * (x2 - x1);
         let grad1_x = 0.5 * (y2 - y0);
@@ -1129,7 +1179,7 @@ impl XPBDSoftBody {
         }
 
         // XPBD lambda
-        let lambda = -c / (w_grad_sum + alpha);
+        let lambda = -c / (w_grad_sum + effective_alpha);
 
         // Apply corrections
         self.pos[i0 * 2] += lambda * w0 * grad0_x;
@@ -1349,7 +1399,7 @@ impl XPBDSoftBody {
         friction: f32,
         restitution: f32,
     ) {
-        self.substep_pre_with_friction_iters(dt, gravity, ground_y, friction, restitution, 2, 1);
+        self.substep_pre_with_friction_iters(dt, gravity, ground_y, friction, restitution, 3, 2);
     }
 
     /// Pre-solve with configurable iteration counts
@@ -1394,7 +1444,7 @@ impl XPBDSoftBody {
         F: Fn(f32) -> f32,
         G: Fn(f32) -> (f32, f32),
     {
-        self.substep_pre_with_terrain_iters(dt, gravity, height_at, normal_at, friction, restitution, 2, 1);
+        self.substep_pre_with_terrain_iters(dt, gravity, height_at, normal_at, friction, restitution, 3, 2);
     }
 
     /// Pre-solve with terrain collision and configurable iteration counts

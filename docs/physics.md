@@ -16,7 +16,26 @@ world.set_ground(Some(0.0));
 world.set_ground_friction(0.5);
 world.set_ground_restitution(0.3);
 world.set_substeps(8);
+world.set_solver_iterations(3, 2); // pre-collision, post-collision
 ```
+
+### Solver Defaults
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| Gravity | -9.8 | Downward acceleration |
+| Substeps | 4 | Physics substeps per frame |
+| Pre-collision iterations | 3 | Constraint solves before collision |
+| Post-collision iterations | 2 | Constraint solves after collision |
+| Ground friction | 0.8 | Coulomb friction coefficient |
+| Ground restitution | 0.3 | Bounciness |
+
+The XPBD solver includes adaptive constraint behavior:
+
+- **Velocity clamping**: Per-vertex velocity is capped at 25 units/sec in `pre_solve` to prevent tunneling and energy explosion during high-speed impacts.
+- **Adaptive edge compliance**: Edges compressed below 40% or stretched beyond 250% of rest length get compliance capped at 0.1 for aggressive correction.
+- **Adaptive area compliance**: Inverted triangles (signed area flipped) get zero compliance for stiff materials (alpha < 1.0) or 1% compliance for soft materials, preventing fold-through without energy injection.
+- **Rotation-aware forensics**: `MeshForensics::analyze` compares sorted dimensions (min-to-min, max-to-max) so rigid body rotation doesn't register as collapse.
 
 ### Adding Bodies
 
@@ -131,6 +150,7 @@ Predefined materials and custom creation.
 
 | Preset | Description |
 |--------|-------------|
+| `Material::SLIME` | Ultra-soft, blobby |
 | `Material::JELLO` | Soft, jiggly |
 | `Material::RUBBER` | Bouncy (default) |
 | `Material::WOOD` | Stiff |
@@ -232,6 +252,35 @@ tracer.detect_anomalies() // -> Vec<String>
 tracer.print_summary(10);
 tracer.to_csv()           // -> String
 ```
+
+## Forensics (Testing)
+
+Mesh shape forensics for detecting permanent deformation, jagged edges, vertex clustering, and triangle inversion. Used by the `shape_integrity` integration test battery.
+
+```rust
+use unison_physics::forensics::*;
+
+// Capture baseline before simulation
+let baseline = ShapeBaseline::capture(&body);
+
+// Analyze after simulation
+let f = MeshForensics::analyze(&body, &baseline);
+println!("{}", f.summary());
+
+// Check health against tolerance
+let issues = f.is_healthy(&HealthTolerance::strict());
+// Also: HealthTolerance::soft_material(), HealthTolerance::during_collision()
+```
+
+Key metrics in `MeshForensics`:
+- `width_ratio`, `height_ratio` — dimension preservation (1.0 = perfect)
+- `min_edge_ratio`, `max_edge_ratio`, `edge_ratio_stddev` — edge length health
+- `severely_compressed_edges`, `severely_stretched_edges` — edge extremes
+- `min_area_ratio`, `inverted_triangles`, `collapsed_triangles` — triangle health
+- `max_boundary_angle_deviation` — jagged edge detection
+- `min_vertex_separation` — vertex clustering detection
+
+`ForensicSimulation::run_single(...)` runs a simulation with periodic forensic capture.
 
 ## Low-Level: XPBDSoftBody
 

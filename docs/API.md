@@ -98,6 +98,7 @@ let id = engine.spawn_soft_body(SoftBodyDesc {
 - `create_rounded_box_mesh(width, height, corner_radius, corner_segments)` — rounded rectangle
 
 **Materials** (from `unison2d::physics::Material`):
+- `Material::SLIME` — ultra-soft, blobby
 - `Material::JELLO` — soft, jiggly
 - `Material::RUBBER` — bouncy (default)
 - `Material::WOOD` — stiff
