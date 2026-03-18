@@ -7,6 +7,8 @@
 //! - "XPBD: Position-Based Simulation of Compliant Constrained Dynamics" (Macklin et al. 2016)
 //! - Ten Minute Physics XPBD tutorial
 
+use unison_profiler::profile_scope;
+
 
 #[cfg(feature = "simd")]
 use crate::compute::simd::SimdBackend;
@@ -240,11 +242,14 @@ impl CollisionSystem {
         }
 
         // Step 2: Find overlapping body pairs (broad phase)
-        self.overlapping_pairs.clear();
-        for i in 0..num_bodies {
-            for j in (i + 1)..num_bodies {
-                if Self::aabbs_overlap(self.aabbs[i], self.aabbs[j], self.min_dist) {
-                    self.overlapping_pairs.push((i, j));
+        {
+            profile_scope!("broad_phase");
+            self.overlapping_pairs.clear();
+            for i in 0..num_bodies {
+                for j in (i + 1)..num_bodies {
+                    if Self::aabbs_overlap(self.aabbs[i], self.aabbs[j], self.min_dist) {
+                        self.overlapping_pairs.push((i, j));
+                    }
                 }
             }
         }
@@ -254,73 +259,76 @@ impl CollisionSystem {
         }
 
         // Step 3: Build danger zones, edge cache, and spatial hash
-        self.cached_edges.clear();
-        self.edge_hash.clear();
+        {
+            profile_scope!("edge_cache");
+            self.cached_edges.clear();
+            self.edge_hash.clear();
 
-        self.body_needs_collision.clear();
-        self.body_needs_collision.resize(num_bodies, false);
-        self.danger_zones.clear();
-        self.danger_zones.resize(num_bodies, (f32::INFINITY, f32::INFINITY, f32::NEG_INFINITY, f32::NEG_INFINITY));
-        let margin = self.min_dist;
-        for &(i, j) in &self.overlapping_pairs {
-            self.body_needs_collision[i] = true;
-            self.body_needs_collision[j] = true;
-            let aj = self.aabbs[j];
-            let di = &mut self.danger_zones[i];
-            di.0 = di.0.min(aj.0 - margin);
-            di.1 = di.1.min(aj.1 - margin);
-            di.2 = di.2.max(aj.2 + margin);
-            di.3 = di.3.max(aj.3 + margin);
-            let ai = self.aabbs[i];
-            let dj = &mut self.danger_zones[j];
-            dj.0 = dj.0.min(ai.0 - margin);
-            dj.1 = dj.1.min(ai.1 - margin);
-            dj.2 = dj.2.max(ai.2 + margin);
-            dj.3 = dj.3.max(ai.3 + margin);
-        }
-
-        for (body_idx, body) in bodies.iter().enumerate() {
-            if !self.body_needs_collision[body_idx] { continue; }
-            let dz = self.danger_zones[body_idx];
-
-            for edge in &body.edge_constraints {
-                let w0 = body.inv_mass[edge.v0];
-                let w1 = body.inv_mass[edge.v1];
-
-                if w0 == 0.0 && w1 == 0.0 { continue; }
-
-                let e0x = body.pos[edge.v0 * 2];
-                let e0y = body.pos[edge.v0 * 2 + 1];
-                let e1x = body.pos[edge.v1 * 2];
-                let e1y = body.pos[edge.v1 * 2 + 1];
-
-                // Skip edges entirely outside the danger zone
-                let edge_min_x = e0x.min(e1x);
-                let edge_max_x = e0x.max(e1x);
-                let edge_min_y = e0y.min(e1y);
-                let edge_max_y = e0y.max(e1y);
-                if edge_max_x < dz.0 || edge_min_x > dz.2 ||
-                   edge_max_y < dz.1 || edge_min_y > dz.3 { continue; }
-
-                let dx = e1x - e0x;
-                let dy = e1y - e0y;
-                if dx * dx + dy * dy < 1e-10 { continue; }
-
-                let edge_idx = self.cached_edges.len();
-                self.cached_edges.push(CachedEdge {
-                    body_idx,
-                    v0: edge.v0,
-                    v1: edge.v1,
-                    w0,
-                    w1,
-                });
-
-                self.edge_hash.insert(body_idx, edge_idx, e0x, e0y);
-                self.edge_hash.insert(body_idx, edge_idx, e1x, e1y);
+            self.body_needs_collision.clear();
+            self.body_needs_collision.resize(num_bodies, false);
+            self.danger_zones.clear();
+            self.danger_zones.resize(num_bodies, (f32::INFINITY, f32::INFINITY, f32::NEG_INFINITY, f32::NEG_INFINITY));
+            let margin = self.min_dist;
+            for &(i, j) in &self.overlapping_pairs {
+                self.body_needs_collision[i] = true;
+                self.body_needs_collision[j] = true;
+                let aj = self.aabbs[j];
+                let di = &mut self.danger_zones[i];
+                di.0 = di.0.min(aj.0 - margin);
+                di.1 = di.1.min(aj.1 - margin);
+                di.2 = di.2.max(aj.2 + margin);
+                di.3 = di.3.max(aj.3 + margin);
+                let ai = self.aabbs[i];
+                let dj = &mut self.danger_zones[j];
+                dj.0 = dj.0.min(ai.0 - margin);
+                dj.1 = dj.1.min(ai.1 - margin);
+                dj.2 = dj.2.max(ai.2 + margin);
+                dj.3 = dj.3.max(ai.3 + margin);
             }
-        }
 
-        self.edge_hash.build();
+            for (body_idx, body) in bodies.iter().enumerate() {
+                if !self.body_needs_collision[body_idx] { continue; }
+                let dz = self.danger_zones[body_idx];
+
+                for edge in &body.edge_constraints {
+                    let w0 = body.inv_mass[edge.v0];
+                    let w1 = body.inv_mass[edge.v1];
+
+                    if w0 == 0.0 && w1 == 0.0 { continue; }
+
+                    let e0x = body.pos[edge.v0 * 2];
+                    let e0y = body.pos[edge.v0 * 2 + 1];
+                    let e1x = body.pos[edge.v1 * 2];
+                    let e1y = body.pos[edge.v1 * 2 + 1];
+
+                    // Skip edges entirely outside the danger zone
+                    let edge_min_x = e0x.min(e1x);
+                    let edge_max_x = e0x.max(e1x);
+                    let edge_min_y = e0y.min(e1y);
+                    let edge_max_y = e0y.max(e1y);
+                    if edge_max_x < dz.0 || edge_min_x > dz.2 ||
+                       edge_max_y < dz.1 || edge_min_y > dz.3 { continue; }
+
+                    let dx = e1x - e0x;
+                    let dy = e1y - e0y;
+                    if dx * dx + dy * dy < 1e-10 { continue; }
+
+                    let edge_idx = self.cached_edges.len();
+                    self.cached_edges.push(CachedEdge {
+                        body_idx,
+                        v0: edge.v0,
+                        v1: edge.v1,
+                        w0,
+                        w1,
+                    });
+
+                    self.edge_hash.insert(body_idx, edge_idx, e0x, e0y);
+                    self.edge_hash.insert(body_idx, edge_idx, e1x, e1y);
+                }
+            }
+
+            self.edge_hash.build();
+        }
         self.stats_cached_edges = self.cached_edges.len() as u32;
         self.stats_overlapping_pairs = self.overlapping_pairs.len() as u32;
     }
@@ -349,6 +357,7 @@ impl CollisionSystem {
 
         // Build candidates on first call after prepare()
         if !self.candidates_valid {
+            profile_scope!("build_candidates");
             self.build_candidates(bodies);
             self.candidates_valid = true;
         }
@@ -356,11 +365,14 @@ impl CollisionSystem {
         // Resolve candidates, up to 3 iterations with fresh positions
         let mut total = 0;
         let mut iters = 0u32;
-        for _ in 0..3 {
-            iters += 1;
-            let found = self.resolve_candidate_collisions_kinematic(bodies, is_kinematic);
-            total += found;
-            if found == 0 { break; }
+        {
+            profile_scope!("narrow_phase");
+            for _ in 0..3 {
+                iters += 1;
+                let found = self.resolve_candidate_collisions_kinematic(bodies, is_kinematic);
+                total += found;
+                if found == 0 { break; }
+            }
         }
         self.stats_candidates = self.candidates.len() as u32;
         self.stats_collisions_found = total;
@@ -1476,19 +1488,31 @@ impl XPBDSoftBody {
         pre_iters: u32,
         post_iters: u32,
     ) {
-        self.pre_solve(dt, gravity);
+        {
+            profile_scope!("integrate");
+            self.pre_solve(dt, gravity);
+        }
 
         // Solve constraints before collision
-        for _ in 0..pre_iters {
-            self.solve_constraints(dt);
+        {
+            profile_scope!("constraints_pre");
+            for _ in 0..pre_iters {
+                self.solve_constraints(dt);
+            }
         }
 
         // Ground collision with friction
         if let Some(gy) = ground_y {
-            self.solve_ground_collision_with_friction(gy, friction, restitution);
+            {
+                profile_scope!("ground_collision");
+                self.solve_ground_collision_with_friction(gy, friction, restitution);
+            }
             // Re-solve constraints after ground collision to restore shape
-            for _ in 0..post_iters {
-                self.solve_constraints(dt);
+            {
+                profile_scope!("constraints_post");
+                for _ in 0..post_iters {
+                    self.solve_constraints(dt);
+                }
             }
         }
     }
@@ -1526,19 +1550,31 @@ impl XPBDSoftBody {
         F: Fn(f32) -> f32,
         G: Fn(f32) -> (f32, f32),
     {
-        self.pre_solve(dt, gravity);
+        {
+            profile_scope!("integrate");
+            self.pre_solve(dt, gravity);
+        }
 
         // Solve constraints before collision
-        for _ in 0..pre_iters {
-            self.solve_constraints(dt);
+        {
+            profile_scope!("constraints_pre");
+            for _ in 0..pre_iters {
+                self.solve_constraints(dt);
+            }
         }
 
         // Terrain collision with friction
-        self.solve_terrain_collision(&height_at, &normal_at, friction, restitution);
+        {
+            profile_scope!("terrain_collision");
+            self.solve_terrain_collision(&height_at, &normal_at, friction, restitution);
+        }
 
         // Re-solve constraints after terrain collision to restore shape
-        for _ in 0..post_iters {
-            self.solve_constraints(dt);
+        {
+            profile_scope!("constraints_post");
+            for _ in 0..post_iters {
+                self.solve_constraints(dt);
+            }
         }
     }
 

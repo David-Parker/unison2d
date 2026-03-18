@@ -69,13 +69,14 @@ pub fn run<G: Game + 'static>(game: G) {
         WebGlRenderer::new(gl, width, height).expect("Failed to create WebGL renderer");
     web_renderer.init().expect("Failed to init renderer");
 
-    // Set up profiler time function (returns seconds)
+    // Set up profiler time function (returns milliseconds)
     unison_profiler::set_time_fn(|| {
         web_sys::window()
             .and_then(|w| w.performance())
-            .map(|p| p.now() / 1000.0)
+            .map(|p| p.now())
             .unwrap_or(0.0)
     });
+    unison_profiler::Profiler::set_enabled(true);
 
     // Create shared input state
     let input = Rc::new(RefCell::new(InputState::new()));

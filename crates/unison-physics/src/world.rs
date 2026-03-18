@@ -1199,6 +1199,8 @@ impl PhysicsWorld {
 
     /// Step the simulation forward by dt seconds
     pub fn step(&mut self, dt: f32) {
+        profile_scope!("physics.step");
+
         if self.soft_bodies.is_empty() && self.rigid_bodies.is_empty() {
             return;
         }
@@ -1206,20 +1208,26 @@ impl PhysicsWorld {
         let substep_dt = dt / self.substeps as f32;
 
         // Prepare collision system for soft-soft collisions
-        self.collision_system.prepare(&self.soft_bodies);
+        {
+            profile_scope!("collision_prepare");
+            self.collision_system.prepare(&self.soft_bodies);
+        }
 
         for _ in 0..self.substeps {
             // Pre-solve soft bodies (includes pre-collision constraint iterations)
-            for body in self.soft_bodies.iter_mut() {
-                body.substep_pre_with_friction_iters(
-                    substep_dt,
-                    self.gravity,
-                    self.ground_y,
-                    self.ground_friction,
-                    self.ground_restitution,
-                    self.pre_collision_iters,
-                    self.post_collision_iters,
-                );
+            {
+                profile_scope!("pre_solve");
+                for body in self.soft_bodies.iter_mut() {
+                    body.substep_pre_with_friction_iters(
+                        substep_dt,
+                        self.gravity,
+                        self.ground_y,
+                        self.ground_friction,
+                        self.ground_restitution,
+                        self.pre_collision_iters,
+                        self.post_collision_iters,
+                    );
+                }
             }
 
             // Pre-solve rigid bodies
@@ -1231,25 +1239,34 @@ impl PhysicsWorld {
             }
 
             // Resolve soft-soft collisions
-            self.collision_system.resolve_collisions(&mut self.soft_bodies);
+            {
+                profile_scope!("soft_collisions");
+                self.collision_system.resolve_collisions(&mut self.soft_bodies);
+            }
 
             // Resolve soft-vs-rigid collisions
-            self.resolve_soft_rigid_collisions();
+            {
+                profile_scope!("soft_rigid_collisions");
+                self.resolve_soft_rigid_collisions();
+            }
 
             // Note: constraint solving already done in substep_pre_with_friction_iters
 
             // Post-solve all bodies
-            for body in self.soft_bodies.iter_mut() {
-                body.substep_post(substep_dt);
-                // Per-substep internal damping for stiff materials — kills
-                // deformation energy before it accumulates into a bounce.
-                let compliance = body.edge_compliance + body.area_compliance;
-                if compliance < 1e-7 {
-                    body.apply_internal_damping(0.15);
+            {
+                profile_scope!("post_solve");
+                for body in self.soft_bodies.iter_mut() {
+                    body.substep_post(substep_dt);
+                    // Per-substep internal damping for stiff materials — kills
+                    // deformation energy before it accumulates into a bounce.
+                    let compliance = body.edge_compliance + body.area_compliance;
+                    if compliance < 1e-7 {
+                        body.apply_internal_damping(0.15);
+                    }
                 }
-            }
-            for body in self.rigid_bodies.iter_mut() {
-                body.post_solve(substep_dt);
+                for body in self.rigid_bodies.iter_mut() {
+                    body.post_solve(substep_dt);
+                }
             }
         }
 
@@ -1285,14 +1302,14 @@ impl PhysicsWorld {
 
         // Prepare collision system
         {
-            profile_scope!("physics.collision_prepare");
+            profile_scope!("collision_prepare");
             self.collision_system.prepare(&self.soft_bodies);
         }
 
         for _ in 0..self.substeps {
             // Pre-solve soft bodies with terrain
             {
-                profile_scope!("physics.pre_solve_terrain");
+                profile_scope!("pre_solve_terrain");
                 for body in self.soft_bodies.iter_mut() {
                     body.substep_pre_with_terrain_iters(
                         substep_dt,
@@ -1319,13 +1336,13 @@ impl PhysicsWorld {
 
             // Resolve soft-soft collisions
             {
-                profile_scope!("physics.soft_collisions");
+                profile_scope!("soft_collisions");
                 self.collision_system.resolve_collisions(&mut self.soft_bodies);
             }
 
             // Resolve soft-vs-rigid collisions
             {
-                profile_scope!("physics.soft_rigid_collisions");
+                profile_scope!("soft_rigid_collisions");
                 self.resolve_soft_rigid_collisions();
             }
 
@@ -1334,7 +1351,7 @@ impl PhysicsWorld {
 
             // Post-solve all bodies
             {
-                profile_scope!("physics.post_solve");
+                profile_scope!("post_solve");
                 for body in self.soft_bodies.iter_mut() {
                     body.substep_post(substep_dt);
                     let compliance = body.edge_compliance + body.area_compliance;

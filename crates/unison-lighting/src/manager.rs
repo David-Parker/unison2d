@@ -135,7 +135,7 @@ impl LightingManager {
 
         // Collect all occluder segments
         let segments: Vec<_> = {
-            profile_scope!("lighting.collect_occluders");
+            profile_scope!("collect_occluders");
             occluders
                 .iter()
                 .flat_map(|o| o.get_occluder_segments())
@@ -144,7 +144,7 @@ impl LightingManager {
 
         // Update dirty shadow maps
         {
-            profile_scope!("lighting.compute_shadow_maps");
+            profile_scope!("compute_shadow_maps");
             for (i, shadow_id) in self.light_shadow_maps.iter().enumerate() {
                 if let Some(id) = shadow_id {
                     if let Some(shadow_map) = self.shadow_cache.get_mut(*id) {

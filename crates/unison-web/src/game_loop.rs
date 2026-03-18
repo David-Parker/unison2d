@@ -7,6 +7,10 @@ use wasm_bindgen::JsCast;
 
 use unison2d::{Engine, Game};
 use unison_input::InputState;
+use unison_profiler::Profiler;
+
+/// How often (in frames) to log profiler stats to the console
+const PROFILER_LOG_INTERVAL: u64 = 120;
 
 /// Fixed timestep: 60 updates per second
 const FIXED_DT: f32 = 1.0 / 60.0;
@@ -35,6 +39,9 @@ pub fn start_loop<G: Game + 'static>(
     }
 
     *g.borrow_mut() = Some(Closure::wrap(Box::new(move |timestamp: f64| {
+        // Begin profiler frame
+        Profiler::begin_frame();
+
         // Calculate delta time
         let dt = if let Some(prev) = last_time {
             ((timestamp - prev) / 1000.0) as f32
@@ -86,6 +93,15 @@ pub fn start_loop<G: Game + 'static>(
             let mut engine_ref = engine.borrow_mut();
             engine_ref.auto_render();
             game.render(&mut engine_ref);
+        }
+
+        // End profiler frame and periodically log stats
+        Profiler::end_frame();
+        let frame_count = Profiler::frame_count();
+        if frame_count > 0 && frame_count % PROFILER_LOG_INTERVAL == 0 {
+            let stats = Profiler::format_stats();
+            web_sys::console::log_1(&stats.into());
+            Profiler::reset();
         }
 
         // Request next frame

@@ -55,10 +55,13 @@ Game keys (arrows, space, tab) have `preventDefault()` to avoid page scrolling.
 ## Game Loop
 
 Fixed timestep accumulator pattern:
+- Calls `Profiler::begin_frame()` at the start of each frame
 - Accumulates real delta time each frame
 - Steps `game.update()` at 60Hz intervals (multiple steps if needed)
 - Caps accumulator at 100ms to prevent spiral of death
 - Calls `game.render()` once per frame after all updates
+- Calls `Profiler::end_frame()` to accumulate frame statistics
+- Every 120 frames, logs profiler stats to the browser console via `web_sys::console::log_1` and resets
 
 ## Dependencies
 

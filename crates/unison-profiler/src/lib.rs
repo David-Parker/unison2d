@@ -419,12 +419,26 @@ impl Profiler {
         output.push_str("---------------------------------------------------------------------------\n");
 
         for (path, _avg_per_call, total, count, depth) in stats {
-            // Get just the last component of the path for display
-            let name = path.split('/').last().unwrap_or(&path);
+            // Get self time (excluding children)
+            let self_time = self_times.get(&path).copied().unwrap_or(total);
 
-            // Create indentation based on depth
-            let indent = "  ".repeat(depth);
-            let display_name = format!("{}{}", indent, name);
+            // Calculate percentages of TARGET frame budget (not actual frame time)
+            let self_pct = if total_budget > 0.0 { (self_time / total_budget) * 100.0 } else { 0.0 };
+            let total_pct = if total_budget > 0.0 { (total / total_budget) * 100.0 } else { 0.0 };
+
+            // Skip scopes below 0.1% self time
+            if self_pct < 0.1 && depth > 0 {
+                continue;
+            }
+
+            // Root scopes show full path; children show only their leaf name, indented
+            let display_name = if depth == 0 {
+                path.clone()
+            } else {
+                let name = path.split('/').last().unwrap_or(&path);
+                let indent = "  ".repeat(depth);
+                format!("{}{}", indent, name)
+            };
 
             // Truncate if too long
             let display_name = if display_name.len() > 36 {
@@ -432,13 +446,6 @@ impl Profiler {
             } else {
                 display_name
             };
-
-            // Get self time (excluding children)
-            let self_time = self_times.get(&path).copied().unwrap_or(total);
-
-            // Calculate percentages of TARGET frame budget (not actual frame time)
-            let self_pct = if total_budget > 0.0 { (self_time / total_budget) * 100.0 } else { 0.0 };
-            let total_pct = if total_budget > 0.0 { (total / total_budget) * 100.0 } else { 0.0 };
 
             output.push_str(&format!(
                 "{:<36} {:>6.1}%   {:>6.1}%   {:>5}\n",
