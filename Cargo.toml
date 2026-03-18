@@ -7,6 +7,8 @@ members = [
     "crates/unison-render",
     "crates/unison-lighting",
     "crates/unison-profiler",
+    "crates/unison-input",
+    "crates/unison-web",
 ]
 
 [workspace.package]
@@ -23,8 +25,35 @@ unison-physics = { path = "crates/unison-physics" }
 unison-render = { path = "crates/unison-render" }
 unison-lighting = { path = "crates/unison-lighting" }
 unison-profiler = { path = "crates/unison-profiler" }
+unison-input = { path = "crates/unison-input" }
+unison-web = { path = "crates/unison-web" }
 
 # External dependencies
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 ron = "0.8"
+
+# Web platform dependencies
+wasm-bindgen = "0.2"
+js-sys = "0.3"
+web-sys = { version = "0.3", features = [
+    "Window",
+    "Document",
+    "Element",
+    "HtmlCanvasElement",
+    "WebGl2RenderingContext",
+    "WebGlProgram",
+    "WebGlShader",
+    "WebGlBuffer",
+    "WebGlUniformLocation",
+    "WebGlTexture",
+    "WebGlVertexArrayObject",
+    "Performance",
+    "KeyboardEvent",
+    "MouseEvent",
+    "TouchEvent",
+    "Touch",
+    "TouchList",
+    "EventTarget",
+    "console",
+] }

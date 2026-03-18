@@ -1,0 +1,92 @@
+//! requestAnimationFrame game loop with fixed timestep
+
+use std::cell::RefCell;
+use std::rc::Rc;
+use wasm_bindgen::prelude::*;
+use wasm_bindgen::JsCast;
+
+use unison2d::{Engine, Game};
+use unison_input::InputState;
+
+/// Fixed timestep: 60 updates per second
+const FIXED_DT: f32 = 1.0 / 60.0;
+/// Max accumulated time per frame (prevents spiral of death)
+const MAX_ACCUMULATOR: f32 = 0.1;
+
+/// Start the requestAnimationFrame loop.
+///
+/// Takes ownership of the game and engine. The loop runs until the page is closed.
+pub fn start_loop<G: Game + 'static>(
+    mut game: G,
+    engine: Rc<RefCell<Engine<G::Action>>>,
+    input: Rc<RefCell<InputState>>,
+) {
+    let f: Rc<RefCell<Option<Closure<dyn FnMut(f64)>>>> = Rc::new(RefCell::new(None));
+    let g = f.clone();
+
+    let mut accumulator: f32 = 0.0;
+    let mut last_time: Option<f64> = None;
+
+    // Initialize the game
+    {
+        let mut engine_ref = engine.borrow_mut();
+        engine_ref.fixed_dt = FIXED_DT;
+        game.init(&mut engine_ref);
+    }
+
+    *g.borrow_mut() = Some(Closure::wrap(Box::new(move |timestamp: f64| {
+        // Calculate delta time
+        let dt = if let Some(prev) = last_time {
+            ((timestamp - prev) / 1000.0) as f32
+        } else {
+            FIXED_DT
+        };
+        last_time = Some(timestamp);
+
+        // Clamp accumulator to prevent spiral of death
+        accumulator += dt.min(MAX_ACCUMULATOR);
+
+        // Swap input state from DOM event handler into engine
+        {
+            let mut engine_ref = engine.borrow_mut();
+            let mut input_ref = input.borrow_mut();
+            std::mem::swap(&mut engine_ref.input, &mut *input_ref);
+        }
+
+        // Snapshot for render interpolation
+        engine.borrow_mut().snapshot_for_render();
+
+        // Fixed timestep updates
+        while accumulator >= FIXED_DT {
+            {
+                let mut engine_ref = engine.borrow_mut();
+                engine_ref.pre_update();
+                game.update(&mut engine_ref);
+                engine_ref.post_update();
+            }
+            accumulator -= FIXED_DT;
+        }
+
+        // Reset input for next frame (the DOM handlers will fill it with new events)
+        input.borrow_mut().begin_frame();
+
+        // Render
+        {
+            let mut engine_ref = engine.borrow_mut();
+            engine_ref.auto_render();
+            game.render(&mut engine_ref);
+        }
+
+        // Request next frame
+        request_animation_frame(f.borrow().as_ref().unwrap());
+    }) as Box<dyn FnMut(f64)>));
+
+    request_animation_frame(g.borrow().as_ref().unwrap());
+}
+
+fn request_animation_frame(f: &Closure<dyn FnMut(f64)>) {
+    web_sys::window()
+        .expect("no window")
+        .request_animation_frame(f.as_ref().unchecked_ref())
+        .expect("requestAnimationFrame failed");
+}

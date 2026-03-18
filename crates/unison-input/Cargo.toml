@@ -1,0 +1,9 @@
+[package]
+name = "unison-input"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Unison 2D Game Engine - Two-layer input system (raw state + action mapping)"
+
+[dependencies]
+unison-math = { workspace = true }

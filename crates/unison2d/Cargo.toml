@@ -12,3 +12,4 @@ unison-physics = { workspace = true }
 unison-render = { workspace = true }
 unison-lighting = { workspace = true }
 unison-profiler = { workspace = true }
+unison-input = { workspace = true }

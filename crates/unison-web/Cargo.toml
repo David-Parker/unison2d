@@ -1,0 +1,16 @@
+[package]
+name = "unison-web"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Unison 2D Game Engine - Web platform (WebGL2 renderer, DOM input, rAF game loop)"
+
+[dependencies]
+unison-math = { workspace = true }
+unison-render = { workspace = true }
+unison-input = { workspace = true }
+unison-profiler = { workspace = true }
+unison2d = { workspace = true }
+wasm-bindgen = { workspace = true }
+js-sys = { workspace = true }
+web-sys = { workspace = true }
