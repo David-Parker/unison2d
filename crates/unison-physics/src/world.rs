@@ -1234,11 +1234,16 @@ impl PhysicsWorld {
             // Post-solve all bodies
             for body in self.soft_bodies.iter_mut() {
                 body.substep_post(substep_dt);
-                body.apply_damping(0.005); // Light damping per substep
             }
             for body in self.rigid_bodies.iter_mut() {
                 body.post_solve(substep_dt);
             }
+        }
+
+        // Light damping applied once per step (not per substep) to avoid
+        // over-damping that prevents gravitational acceleration.
+        for body in self.soft_bodies.iter_mut() {
+            body.apply_damping(0.005);
         }
 
         // Clear force/torque accumulators AFTER all substeps so forces apply uniformly
@@ -1315,12 +1320,17 @@ impl PhysicsWorld {
                 profile_scope!("physics.post_solve");
                 for body in self.soft_bodies.iter_mut() {
                     body.substep_post(substep_dt);
-                    body.apply_damping(0.005); // Light damping per substep
                 }
                 for body in self.rigid_bodies.iter_mut() {
                     body.post_solve(substep_dt);
                 }
             }
+        }
+
+        // Light damping applied once per step (not per substep) to avoid
+        // over-damping that prevents gravitational acceleration.
+        for body in self.soft_bodies.iter_mut() {
+            body.apply_damping(0.005);
         }
 
         // Clear force/torque accumulators AFTER all substeps so forces apply uniformly
