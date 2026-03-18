@@ -1385,6 +1385,37 @@ impl XPBDSoftBody {
         }
     }
 
+    /// Damp only internal deformation velocity, preserving bulk (center-of-mass) motion.
+    /// This kills internal oscillation/bouncing without affecting fall speed or movement.
+    pub fn apply_internal_damping(&mut self, damping: f32) {
+        // Compute mass-weighted average velocity (center-of-mass velocity)
+        let mut avg_vx = 0.0f32;
+        let mut avg_vy = 0.0f32;
+        let mut total_mass = 0.0f32;
+        for i in 0..self.num_verts {
+            if self.inv_mass[i] > 0.0 {
+                let m = 1.0 / self.inv_mass[i];
+                avg_vx += self.vel[i * 2] * m;
+                avg_vy += self.vel[i * 2 + 1] * m;
+                total_mass += m;
+            }
+        }
+        if total_mass < 1e-10 { return; }
+        avg_vx /= total_mass;
+        avg_vy /= total_mass;
+
+        // Damp each vertex's velocity toward the average
+        let factor = 1.0 - damping;
+        for i in 0..self.num_verts {
+            if self.inv_mass[i] > 0.0 {
+                let rel_vx = self.vel[i * 2] - avg_vx;
+                let rel_vy = self.vel[i * 2 + 1] - avg_vy;
+                self.vel[i * 2] = avg_vx + rel_vx * factor;
+                self.vel[i * 2 + 1] = avg_vy + rel_vy * factor;
+            }
+        }
+    }
+
     /// Pre-solve and constraint solving (call collide_with_body after this, then finalize_substep)
     pub fn substep_pre(&mut self, dt: f32, gravity: f32, ground_y: Option<f32>) {
         self.substep_pre_with_friction(dt, gravity, ground_y, 0.8, 0.3);

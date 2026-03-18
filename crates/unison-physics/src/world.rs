@@ -1247,10 +1247,16 @@ impl PhysicsWorld {
             }
         }
 
-        // Light damping applied once per step (not per substep) to avoid
-        // over-damping that prevents gravitational acceleration.
+        // Damping applied once per step (not per substep).
+        // Stiff materials get internal-only damping to kill oscillation without
+        // affecting fall speed. Soft materials get light global damping.
         for body in self.soft_bodies.iter_mut() {
-            body.apply_damping(0.005);
+            let compliance = body.edge_compliance + body.area_compliance;
+            if compliance < 1e-7 {
+                body.apply_internal_damping(0.08);
+            } else {
+                body.apply_damping(0.005);
+            }
         }
 
         // Clear force/torque accumulators AFTER all substeps so forces apply uniformly
@@ -1334,10 +1340,16 @@ impl PhysicsWorld {
             }
         }
 
-        // Light damping applied once per step (not per substep) to avoid
-        // over-damping that prevents gravitational acceleration.
+        // Damping applied once per step (not per substep).
+        // Stiff materials get internal-only damping to kill oscillation without
+        // affecting fall speed. Soft materials get light global damping.
         for body in self.soft_bodies.iter_mut() {
-            body.apply_damping(0.005);
+            let compliance = body.edge_compliance + body.area_compliance;
+            if compliance < 1e-7 {
+                body.apply_internal_damping(0.08);
+            } else {
+                body.apply_damping(0.005);
+            }
         }
 
         // Clear force/torque accumulators AFTER all substeps so forces apply uniformly
