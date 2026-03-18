@@ -1,0 +1,8 @@
+[package]
+name = "unison-math"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Unison 2D Game Engine - Shared math and color types"
+
+[dependencies]

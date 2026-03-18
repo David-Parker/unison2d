@@ -87,13 +87,19 @@ name = "unison-lighting"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "unison-math",
  "unison-profiler",
 ]
+
+[[package]]
+name = "unison-math"
+version = "0.1.0"
 
 [[package]]
 name = "unison-physics"
 version = "0.1.0"
 dependencies = [
+ "unison-math",
  "unison-profiler",
  "wide",
 ]
@@ -105,12 +111,16 @@ version = "0.1.0"
 [[package]]
 name = "unison-render"
 version = "0.1.0"
+dependencies = [
+ "unison-math",
+]
 
 [[package]]
 name = "unison2d"
 version = "0.1.0"
 dependencies = [
  "unison-lighting",
+ "unison-math",
  "unison-physics",
  "unison-profiler",
  "unison-render",
