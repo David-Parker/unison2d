@@ -176,7 +176,7 @@ impl<A: Copy + Eq + Hash> Engine<A> {
         }
     }
 
-    /// Check if an object is touching the ground.
+    /// Check if an object is touching the ground, a platform, or another body below it.
     pub fn is_grounded(&self, id: ObjectId) -> bool {
         self.with_handle(id, |h| self.physics.is_grounded(h, 0.5))
             .unwrap_or(false)

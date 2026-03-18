@@ -41,7 +41,7 @@ Single struct that owns and orchestrates all subsystems.
 | `apply_force(id, force)` | Continuous force (call each frame) |
 | `apply_torque(id, torque)` | Continuous rotation (negative = clockwise) |
 | `apply_impulse(id, impulse)` | Instantaneous velocity change |
-| `is_grounded(id) -> bool` | Is touching ground? |
+| `is_grounded(id) -> bool` | Is touching ground, platform, or another body? |
 
 ### Camera
 

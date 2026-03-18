@@ -316,6 +316,81 @@ impl RigidBody {
             }
         }
     }
+
+    /// Get the distance from a point to the nearest surface when the point is outside.
+    /// Returns (distance, normal_x, normal_y) pointing outward from the surface.
+    pub fn nearest_surface_dist(&self, px: f32, py: f32) -> Option<(f32, f32, f32)> {
+        match &self.collider {
+            Collider::Circle { radius } => {
+                let dx = px - self.position.x;
+                let dy = py - self.position.y;
+                let dist_sq = dx * dx + dy * dy;
+                let radius_sq = radius * radius;
+
+                if dist_sq >= radius_sq && dist_sq > 1e-10 {
+                    let dist = dist_sq.sqrt();
+                    let gap = dist - radius;
+                    let nx = dx / dist;
+                    let ny = dy / dist;
+                    Some((gap, nx, ny))
+                } else {
+                    None
+                }
+            }
+            Collider::AABB { half_width, half_height } => {
+                // Transform point to local space
+                let cos_r = self.rotation.cos();
+                let sin_r = self.rotation.sin();
+                let dx = px - self.position.x;
+                let dy = py - self.position.y;
+                let local_x = dx * cos_r + dy * sin_r;
+                let local_y = -dx * sin_r + dy * cos_r;
+
+                // Only compute for points outside the AABB
+                if local_x.abs() >= *half_width || local_y.abs() >= *half_height {
+                    // Clamp to nearest point on AABB surface
+                    let cx = local_x.clamp(-*half_width, *half_width);
+                    let cy = local_y.clamp(-*half_height, *half_height);
+                    let sx = local_x - cx;
+                    let sy = local_y - cy;
+                    let dist_sq = sx * sx + sy * sy;
+
+                    if dist_sq > 1e-10 {
+                        // Point is near corner or edge at a distance
+                        let dist = dist_sq.sqrt();
+                        let local_nx = sx / dist;
+                        let local_ny = sy / dist;
+                        let nx = local_nx * cos_r - local_ny * sin_r;
+                        let ny = local_nx * sin_r + local_ny * cos_r;
+                        Some((dist, nx, ny))
+                    } else {
+                        // Point is exactly on an edge — find which edge
+                        let dx_left = (local_x + half_width).abs();
+                        let dx_right = (local_x - half_width).abs();
+                        let dy_bottom = (local_y + half_height).abs();
+                        let dy_top = (local_y - half_height).abs();
+                        let min_d = dx_left.min(dx_right).min(dy_bottom).min(dy_top);
+
+                        let (local_nx, local_ny) = if min_d == dx_left {
+                            (-1.0, 0.0)
+                        } else if min_d == dx_right {
+                            (1.0, 0.0)
+                        } else if min_d == dy_bottom {
+                            (0.0, -1.0)
+                        } else {
+                            (0.0, 1.0)
+                        };
+
+                        let nx = local_nx * cos_r - local_ny * sin_r;
+                        let ny = local_nx * sin_r + local_ny * cos_r;
+                        Some((0.0, nx, ny))
+                    }
+                } else {
+                    None // Point is inside
+                }
+            }
+        }
+    }
 }
 
 /// Configuration for creating a rigid body
@@ -351,7 +426,7 @@ impl Default for RigidBodyConfig {
             velocity: Vec2::ZERO,
             angular_velocity: 0.0,
             is_kinematic: false,
-            friction: 0.5,
+            friction: 0.8,
             restitution: 0.3,
         }
     }

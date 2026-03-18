@@ -72,7 +72,7 @@ world.get_velocity(handle)       // -> Option<Vec2>
 world.get_angular_velocity(handle) // -> Option<f32>
 world.get_aabb(handle)           // -> Option<(min_x, min_y, max_x, max_y)>
 world.get_lowest_y(handle)       // -> Option<f32>
-world.is_grounded(handle, 0.1)   // -> bool
+world.is_grounded(handle, 0.1)   // -> bool (checks ground, platforms, and other bodies)
 world.get_contact(handle, 0.1)   // -> Option<BodyHandle>
 world.get_kinetic_energy(handle) // -> Option<f32>
 world.total_kinetic_energy()     // -> f32
@@ -193,7 +193,7 @@ RigidBodyConfig::new()
     .with_rotation(angle)
     .with_velocity(vx, vy)
     .with_angular_velocity(omega)
-    .with_friction(0.5)
+    .with_friction(0.8)          // default: 0.8
     .with_restitution(0.3)
     .as_kinematic()              // immovable
 ```

@@ -1018,15 +1018,12 @@ impl PhysicsWorld {
         }
     }
 
-    /// Check if body is near ground (within threshold).
-    /// For soft bodies, uses the lowest vertex position and checks that
-    /// the body is not moving upward significantly (to avoid false positives mid-jump).
+    /// Check if body is touching the ground, a platform, or another body below it.
+    /// For soft bodies, also checks that the body is not moving upward significantly
+    /// (to avoid false positives mid-jump).
     pub fn is_grounded(&self, handle: BodyHandle, threshold: f32) -> bool {
-        let Some(ground_y) = self.ground_y else { return false };
-        let Some(lowest) = self.get_lowest_y(handle) else { return false };
-
-        // Position check: lowest point within threshold of ground
-        if lowest >= ground_y + threshold {
+        // Use surface contact detection which checks ground + all other bodies
+        if self.get_surface_contact_y(handle, threshold).is_none() {
             return false;
         }
 
@@ -1335,17 +1332,21 @@ impl PhysicsWorld {
     /// Internal: resolve collisions between soft body vertices and rigid bodies
     fn resolve_soft_rigid_collisions(&mut self) {
         let min_dist = 0.15; // Same as collision system
+        let contact_threshold = 0.05; // Near-contact zone for rolling friction
 
         for soft_body in self.soft_bodies.iter_mut() {
             for rigid_body in self.rigid_bodies.iter_mut() {
-                // Broad phase: check AABB overlap
+                // Broad phase: check AABB overlap (expanded by contact_threshold for near-contact friction)
                 let soft_aabb = soft_body.get_aabb();
                 let rigid_aabb = rigid_body.get_aabb();
+                let margin = min_dist + contact_threshold;
 
-                if soft_aabb.2 + min_dist < rigid_aabb.0 || rigid_aabb.2 + min_dist < soft_aabb.0 ||
-                   soft_aabb.3 + min_dist < rigid_aabb.1 || rigid_aabb.3 + min_dist < soft_aabb.1 {
+                if soft_aabb.2 + margin < rigid_aabb.0 || rigid_aabb.2 + margin < soft_aabb.0 ||
+                   soft_aabb.3 + margin < rigid_aabb.1 || rigid_aabb.3 + margin < soft_aabb.1 {
                     continue;
                 }
+
+                let friction = rigid_body.friction;
 
                 // Narrow phase: check each soft body vertex against rigid collider
                 for i in 0..soft_body.num_verts {
@@ -1382,6 +1383,44 @@ impl PhysicsWorld {
                             let ry = vy - rigid_body.position.y;
                             let torque = (rx * (-ny * rigid_push) - ry * (-nx * rigid_push)) * rigid_body.inv_inertia;
                             rigid_body.angular_velocity += torque;
+                        }
+
+                        // Coulomb friction: damp tangential displacement at the contact.
+                        // Same model as ground friction — decompose displacement into
+                        // normal and tangential components, then reduce the tangent part.
+                        let prev_x = soft_body.prev_pos[i * 2];
+                        let prev_y = soft_body.prev_pos[i * 2 + 1];
+                        let dx = soft_body.pos[i * 2] - prev_x;
+                        let dy = soft_body.pos[i * 2 + 1] - prev_y;
+
+                        // Project displacement onto contact normal
+                        let vel_normal = dx * nx + dy * ny;
+                        // Tangential component = total - normal projection
+                        let tan_x = dx - vel_normal * nx;
+                        let tan_y = dy - vel_normal * ny;
+
+                        let friction_factor = 1.0 - friction;
+                        soft_body.pos[i * 2] = prev_x + vel_normal * nx + tan_x * friction_factor;
+                        soft_body.pos[i * 2 + 1] = prev_y + vel_normal * ny + tan_y * friction_factor;
+                    } else {
+                        // Near-contact friction: check if vertex is just outside the rigid body.
+                        // This gives rolling friction for vertices close to the surface.
+                        let near = rigid_body.nearest_surface_dist(vx, vy);
+                        if let Some((dist, nx, ny)) = near {
+                            if dist < contact_threshold {
+                                let prev_x = soft_body.prev_pos[i * 2];
+                                let prev_y = soft_body.prev_pos[i * 2 + 1];
+                                let dx = soft_body.pos[i * 2] - prev_x;
+                                let dy = soft_body.pos[i * 2 + 1] - prev_y;
+
+                                let vel_normal = dx * nx + dy * ny;
+                                let tan_x = dx - vel_normal * nx;
+                                let tan_y = dy - vel_normal * ny;
+
+                                let friction_factor = 1.0 - friction * 0.3;
+                                soft_body.pos[i * 2] = prev_x + vel_normal * nx + tan_x * friction_factor;
+                                soft_body.pos[i * 2 + 1] = prev_y + vel_normal * ny + tan_y * friction_factor;
+                            }
                         }
                     }
                 }
