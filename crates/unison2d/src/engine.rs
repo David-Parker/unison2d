@@ -273,6 +273,16 @@ impl<A: Copy + Eq + Hash> Engine<A> {
         self.physics.set_ground(None);
     }
 
+    /// Set ground friction (0.0 = ice, 1.0 = very sticky). Default: 0.8
+    pub fn set_ground_friction(&mut self, friction: f32) {
+        self.physics.set_ground_friction(friction);
+    }
+
+    /// Set ground bounciness (0.0 = no bounce, 1.0 = perfect bounce). Default: 0.3
+    pub fn set_ground_restitution(&mut self, restitution: f32) {
+        self.physics.set_ground_restitution(restitution);
+    }
+
     /// Get the current fixed timestep delta (typically 1/60).
     pub fn dt(&self) -> f32 {
         self.fixed_dt

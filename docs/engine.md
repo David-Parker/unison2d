@@ -71,6 +71,8 @@ Single struct that owns and orchestrates all subsystems.
 | `set_background(Color)` | Set clear color |
 | `set_ground(y)` | Set flat ground at y |
 | `clear_ground()` | Remove ground |
+| `set_ground_friction(f32)` | Ground friction (0=ice, 1=sticky). Default: 0.8 |
+| `set_ground_restitution(f32)` | Ground bounciness (0=none, 1=perfect). Default: 0.3 |
 | `dt() -> f32` | Fixed timestep delta |
 
 ### Raw Access (Escape Hatches)
