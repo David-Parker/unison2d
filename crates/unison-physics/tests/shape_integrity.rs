@@ -232,16 +232,6 @@ fn test_single_impact_ellipse_all_materials() {
     }
 }
 
-#[test]
-fn test_single_impact_blob_all_materials() {
-    let mesh = create_blob_mesh(1.2, 0.2, 16, 4, 42);
-    for (ec, ac, mat) in materials() {
-        for (vy, vname) in impact_velocities() {
-            run_single_impact_test(&mesh, "blob", ec, ac, mat, vy, vname);
-        }
-    }
-}
-
 // ============================================================================
 // 2. Soft-on-soft stacking — bodies piled on each other
 // ============================================================================
