@@ -187,6 +187,9 @@ pub struct CollisionSystem {
     candidates: Vec<Candidate>,
     candidates_valid: bool,
     num_bodies_prepared: usize,
+    // Temporal coherence: previous frame AABBs for skip detection
+    prev_aabbs: Vec<(f32, f32, f32, f32)>,
+    prev_overlapping_pairs: Vec<(usize, usize)>,
     // Diagnostic counters (public for profiling)
     pub stats_candidates: u32,
     pub stats_cached_edges: u32,
@@ -212,6 +215,8 @@ impl CollisionSystem {
             candidates: Vec::with_capacity(1024),
             candidates_valid: false,
             num_bodies_prepared: 0,
+            prev_aabbs: Vec::with_capacity(32),
+            prev_overlapping_pairs: Vec::with_capacity(64),
             stats_candidates: 0,
             stats_cached_edges: 0,
             stats_overlapping_pairs: 0,
@@ -229,11 +234,14 @@ impl CollisionSystem {
 
     /// Prepare collision data: broad phase, edge cache, spatial hash.
     /// Call once per frame before the substep loop.
-    /// Candidates are invalidated and will be rebuilt on next resolve call.
+    ///
+    /// Uses temporal coherence: if AABBs haven't moved much since last frame
+    /// and the overlapping pair set is unchanged, skips the expensive edge cache
+    /// and spatial hash rebuild. Candidates from the previous frame are reused
+    /// and re-evaluated with fresh positions during resolve.
     pub fn prepare(&mut self, bodies: &[XPBDSoftBody]) {
         let num_bodies = bodies.len();
         self.num_bodies_prepared = num_bodies;
-        self.candidates_valid = false;
 
         // Step 1: Compute AABBs for all bodies
         self.aabbs.clear();
@@ -255,82 +263,138 @@ impl CollisionSystem {
         }
 
         if self.overlapping_pairs.is_empty() {
+            self.candidates_valid = false;
+            self.prev_aabbs.clear();
+            self.prev_aabbs.extend_from_slice(&self.aabbs);
+            self.prev_overlapping_pairs.clear();
             return;
         }
 
-        // Step 3: Build danger zones, edge cache, and spatial hash
-        {
-            profile_scope!("edge_cache");
-            self.cached_edges.clear();
-            self.edge_hash.clear();
+        // Step 3: Check temporal coherence — can we skip the expensive rebuild?
+        let can_reuse = self.candidates_valid
+            && num_bodies == self.prev_aabbs.len()
+            && self.overlapping_pairs == self.prev_overlapping_pairs
+            && self.aabbs_within_threshold(bodies);
 
+        if can_reuse {
+            // AABBs haven't moved much and pair set is stable.
+            // Keep existing candidates — they'll be re-evaluated with fresh
+            // positions during resolve. Still need to update danger zones and
+            // body_needs_collision for the current frame's overlapping pairs.
             self.body_needs_collision.clear();
             self.body_needs_collision.resize(num_bodies, false);
-            self.danger_zones.clear();
-            self.danger_zones.resize(num_bodies, (f32::INFINITY, f32::INFINITY, f32::NEG_INFINITY, f32::NEG_INFINITY));
-            let margin = self.min_dist;
             for &(i, j) in &self.overlapping_pairs {
                 self.body_needs_collision[i] = true;
                 self.body_needs_collision[j] = true;
-                let aj = self.aabbs[j];
-                let di = &mut self.danger_zones[i];
-                di.0 = di.0.min(aj.0 - margin);
-                di.1 = di.1.min(aj.1 - margin);
-                di.2 = di.2.max(aj.2 + margin);
-                di.3 = di.3.max(aj.3 + margin);
-                let ai = self.aabbs[i];
-                let dj = &mut self.danger_zones[j];
-                dj.0 = dj.0.min(ai.0 - margin);
-                dj.1 = dj.1.min(ai.1 - margin);
-                dj.2 = dj.2.max(ai.2 + margin);
-                dj.3 = dj.3.max(ai.3 + margin);
             }
-
-            for (body_idx, body) in bodies.iter().enumerate() {
-                if !self.body_needs_collision[body_idx] { continue; }
-                let dz = self.danger_zones[body_idx];
-
-                for edge in &body.edge_constraints {
-                    let w0 = body.inv_mass[edge.v0];
-                    let w1 = body.inv_mass[edge.v1];
-
-                    if w0 == 0.0 && w1 == 0.0 { continue; }
-
-                    let e0x = body.pos[edge.v0 * 2];
-                    let e0y = body.pos[edge.v0 * 2 + 1];
-                    let e1x = body.pos[edge.v1 * 2];
-                    let e1y = body.pos[edge.v1 * 2 + 1];
-
-                    // Skip edges entirely outside the danger zone
-                    let edge_min_x = e0x.min(e1x);
-                    let edge_max_x = e0x.max(e1x);
-                    let edge_min_y = e0y.min(e1y);
-                    let edge_max_y = e0y.max(e1y);
-                    if edge_max_x < dz.0 || edge_min_x > dz.2 ||
-                       edge_max_y < dz.1 || edge_min_y > dz.3 { continue; }
-
-                    let dx = e1x - e0x;
-                    let dy = e1y - e0y;
-                    if dx * dx + dy * dy < 1e-10 { continue; }
-
-                    let edge_idx = self.cached_edges.len();
-                    self.cached_edges.push(CachedEdge {
-                        body_idx,
-                        v0: edge.v0,
-                        v1: edge.v1,
-                        w0,
-                        w1,
-                    });
-
-                    self.edge_hash.insert(body_idx, edge_idx, e0x, e0y);
-                    self.edge_hash.insert(body_idx, edge_idx, e1x, e1y);
-                }
-            }
-
-            self.edge_hash.build();
+            // candidates_valid stays true — reuse across frames
+        } else {
+            // Full rebuild needed
+            self.candidates_valid = false;
+            self.full_rebuild(bodies);
         }
+
+        // Save state for next frame's coherence check
+        self.prev_aabbs.clear();
+        self.prev_aabbs.extend_from_slice(&self.aabbs);
+        self.prev_overlapping_pairs.clear();
+        self.prev_overlapping_pairs.extend_from_slice(&self.overlapping_pairs);
+
         self.stats_cached_edges = self.cached_edges.len() as u32;
         self.stats_overlapping_pairs = self.overlapping_pairs.len() as u32;
+    }
+
+    /// Check if all AABBs are within movement threshold of previous frame.
+    /// Threshold is min_dist — if any body moved more than that, candidates
+    /// could miss new collisions.
+    fn aabbs_within_threshold(&self, _bodies: &[XPBDSoftBody]) -> bool {
+        let threshold = self.min_dist;
+        for i in 0..self.aabbs.len() {
+            let (ax0, ay0, ax1, ay1) = self.aabbs[i];
+            let (bx0, by0, bx1, by1) = self.prev_aabbs[i];
+            if (ax0 - bx0).abs() > threshold
+                || (ay0 - by0).abs() > threshold
+                || (ax1 - bx1).abs() > threshold
+                || (ay1 - by1).abs() > threshold
+            {
+                return false;
+            }
+        }
+        true
+    }
+
+    /// Full rebuild of danger zones, edge cache, and spatial hash.
+    fn full_rebuild(&mut self, bodies: &[XPBDSoftBody]) {
+        let num_bodies = self.num_bodies_prepared;
+
+        profile_scope!("edge_cache");
+        self.cached_edges.clear();
+        self.edge_hash.clear();
+
+        self.body_needs_collision.clear();
+        self.body_needs_collision.resize(num_bodies, false);
+        self.danger_zones.clear();
+        self.danger_zones.resize(num_bodies, (f32::INFINITY, f32::INFINITY, f32::NEG_INFINITY, f32::NEG_INFINITY));
+        let margin = self.min_dist;
+        for &(i, j) in &self.overlapping_pairs {
+            self.body_needs_collision[i] = true;
+            self.body_needs_collision[j] = true;
+            let aj = self.aabbs[j];
+            let di = &mut self.danger_zones[i];
+            di.0 = di.0.min(aj.0 - margin);
+            di.1 = di.1.min(aj.1 - margin);
+            di.2 = di.2.max(aj.2 + margin);
+            di.3 = di.3.max(aj.3 + margin);
+            let ai = self.aabbs[i];
+            let dj = &mut self.danger_zones[j];
+            dj.0 = dj.0.min(ai.0 - margin);
+            dj.1 = dj.1.min(ai.1 - margin);
+            dj.2 = dj.2.max(ai.2 + margin);
+            dj.3 = dj.3.max(ai.3 + margin);
+        }
+
+        for (body_idx, body) in bodies.iter().enumerate() {
+            if !self.body_needs_collision[body_idx] { continue; }
+            let dz = self.danger_zones[body_idx];
+
+            for edge in &body.edge_constraints {
+                let w0 = body.inv_mass[edge.v0];
+                let w1 = body.inv_mass[edge.v1];
+
+                if w0 == 0.0 && w1 == 0.0 { continue; }
+
+                let e0x = body.pos[edge.v0 * 2];
+                let e0y = body.pos[edge.v0 * 2 + 1];
+                let e1x = body.pos[edge.v1 * 2];
+                let e1y = body.pos[edge.v1 * 2 + 1];
+
+                // Skip edges entirely outside the danger zone
+                let edge_min_x = e0x.min(e1x);
+                let edge_max_x = e0x.max(e1x);
+                let edge_min_y = e0y.min(e1y);
+                let edge_max_y = e0y.max(e1y);
+                if edge_max_x < dz.0 || edge_min_x > dz.2 ||
+                   edge_max_y < dz.1 || edge_min_y > dz.3 { continue; }
+
+                let dx = e1x - e0x;
+                let dy = e1y - e0y;
+                if dx * dx + dy * dy < 1e-10 { continue; }
+
+                let edge_idx = self.cached_edges.len();
+                self.cached_edges.push(CachedEdge {
+                    body_idx,
+                    v0: edge.v0,
+                    v1: edge.v1,
+                    w0,
+                    w1,
+                });
+
+                self.edge_hash.insert(body_idx, edge_idx, e0x, e0y);
+                self.edge_hash.insert(body_idx, edge_idx, e1x, e1y);
+            }
+        }
+
+        self.edge_hash.build();
     }
 
     /// Legacy single-call API: builds and resolves in one call.
@@ -658,8 +722,153 @@ impl CollisionSystem {
         0
     }
 
-    /// Resolve collisions with kinematic body awareness (scalar version).
+    /// Resolve collisions with kinematic body awareness (SIMD version).
+    /// Batches distance computation for 4 candidates at a time, then applies
+    /// corrections scalar with kinematic awareness.
+    #[cfg(feature = "simd")]
+    fn resolve_candidate_collisions_kinematic(&self, bodies: &mut [XPBDSoftBody], is_kinematic: &[bool]) -> u32 {
+        let mut total_collisions = 0u32;
+        let min_dist = self.min_dist;
+        let min_dist_sq = min_dist * min_dist;
+        let epsilon_v = f32x4::splat(1e-10);
+        let zero_v = f32x4::splat(0.0);
+        let one_v = f32x4::splat(1.0);
+
+        let n = self.candidates.len();
+        let chunks = n / 4;
+
+        for chunk in 0..chunks {
+            let base = chunk * 4;
+
+            // Gather positions for 4 candidates
+            let mut vx_arr = [0.0f32; 4];
+            let mut vy_arr = [0.0f32; 4];
+            let mut e0x_arr = [0.0f32; 4];
+            let mut e0y_arr = [0.0f32; 4];
+            let mut e1x_arr = [0.0f32; 4];
+            let mut e1y_arr = [0.0f32; 4];
+
+            for j in 0..4 {
+                let c = &self.candidates[base + j];
+                let ba = c.body_a as usize;
+                let vi = c.vert as usize;
+                let bb = c.body_b as usize;
+                let ev0 = c.edge_v0 as usize;
+                let ev1 = c.edge_v1 as usize;
+
+                vx_arr[j] = bodies[ba].pos[vi * 2];
+                vy_arr[j] = bodies[ba].pos[vi * 2 + 1];
+                e0x_arr[j] = bodies[bb].pos[ev0 * 2];
+                e0y_arr[j] = bodies[bb].pos[ev0 * 2 + 1];
+                e1x_arr[j] = bodies[bb].pos[ev1 * 2];
+                e1y_arr[j] = bodies[bb].pos[ev1 * 2 + 1];
+            }
+
+            // SIMD distance computation
+            let vx_v = f32x4::new(vx_arr);
+            let vy_v = f32x4::new(vy_arr);
+            let e0x_v = f32x4::new(e0x_arr);
+            let e0y_v = f32x4::new(e0y_arr);
+            let e1x_v = f32x4::new(e1x_arr);
+            let e1y_v = f32x4::new(e1y_arr);
+
+            let edx_v = e1x_v - e0x_v;
+            let edy_v = e1y_v - e0y_v;
+            let len_sq_v = edx_v * edx_v + edy_v * edy_v;
+
+            let rel_x = vx_v - e0x_v;
+            let rel_y = vy_v - e0y_v;
+            let dot_v = rel_x * edx_v + rel_y * edy_v;
+            let t_v = (dot_v / len_sq_v.max(epsilon_v)).max(zero_v).min(one_v);
+
+            let cx_v = e0x_v + t_v * edx_v;
+            let cy_v = e0y_v + t_v * edy_v;
+
+            let dx_v = vx_v - cx_v;
+            let dy_v = vy_v - cy_v;
+            let dist_sq_v = dx_v * dx_v + dy_v * dy_v;
+
+            // Extract for scalar correction with kinematic handling
+            let dist_sqs = dist_sq_v.to_array();
+            let ts = t_v.to_array();
+            let dxs = dx_v.to_array();
+            let dys = dy_v.to_array();
+            let len_sqs = len_sq_v.to_array();
+
+            for j in 0..4 {
+                if len_sqs[j] < 1e-10 { continue; }
+                if dist_sqs[j] >= min_dist_sq || dist_sqs[j] <= 1e-10 { continue; }
+
+                let c = &self.candidates[base + j];
+                let ba = c.body_a as usize;
+                let vi = c.vert as usize;
+                let bb = c.body_b as usize;
+                let v0 = c.edge_v0 as usize;
+                let v1 = c.edge_v1 as usize;
+
+                let a_kinematic = is_kinematic.get(ba).copied().unwrap_or(false);
+                let b_kinematic = is_kinematic.get(bb).copied().unwrap_or(false);
+                if a_kinematic && b_kinematic { continue; }
+
+                total_collisions += 1;
+                let t = ts[j];
+                let dist = dist_sqs[j].sqrt();
+                let overlap = min_dist - dist;
+                let nx = dxs[j] / dist;
+                let ny = dys[j] / dist;
+
+                if b_kinematic {
+                    bodies[ba].pos[vi * 2] += nx * overlap;
+                    bodies[ba].pos[vi * 2 + 1] += ny * overlap;
+                } else if a_kinematic {
+                    let edge_w0 = f32::from_bits(c.w0);
+                    let edge_w1 = f32::from_bits(c.w1);
+                    let w_edge = (1.0 - t) * edge_w0 + t * edge_w1;
+                    if w_edge < 1e-10 { continue; }
+
+                    let e0_factor = (1.0 - t) * edge_w0 / w_edge;
+                    let e1_factor = t * edge_w1 / w_edge;
+
+                    bodies[bb].pos[v0 * 2] -= nx * overlap * e0_factor;
+                    bodies[bb].pos[v0 * 2 + 1] -= ny * overlap * e0_factor;
+                    bodies[bb].pos[v1 * 2] -= nx * overlap * e1_factor;
+                    bodies[bb].pos[v1 * 2 + 1] -= ny * overlap * e1_factor;
+                } else {
+                    let edge_w0 = f32::from_bits(c.w0);
+                    let edge_w1 = f32::from_bits(c.w1);
+                    let w_vert = bodies[ba].inv_mass[vi];
+                    let w_edge = (1.0 - t) * edge_w0 + t * edge_w1;
+                    let w_total = w_vert + w_edge;
+                    if w_total < 1e-10 { continue; }
+
+                    let vert_corr = overlap * (w_vert / w_total);
+                    let edge_corr = overlap * (w_edge / w_total);
+
+                    bodies[ba].pos[vi * 2] += nx * vert_corr;
+                    bodies[ba].pos[vi * 2 + 1] += ny * vert_corr;
+
+                    let e0_factor = (1.0 - t) * edge_w0 / w_edge.max(1e-10);
+                    let e1_factor = t * edge_w1 / w_edge.max(1e-10);
+
+                    bodies[bb].pos[v0 * 2] -= nx * edge_corr * e0_factor;
+                    bodies[bb].pos[v0 * 2 + 1] -= ny * edge_corr * e0_factor;
+                    bodies[bb].pos[v1 * 2] -= nx * edge_corr * e1_factor;
+                    bodies[bb].pos[v1 * 2 + 1] -= ny * edge_corr * e1_factor;
+                }
+            }
+        }
+
+        // Scalar remainder
+        for i in (chunks * 4)..n {
+            total_collisions += self.resolve_single_candidate_kinematic(bodies, i, min_dist, min_dist_sq, is_kinematic);
+        }
+
+        total_collisions
+    }
+
+    /// Resolve collisions with kinematic body awareness (scalar fallback).
     /// Kinematic bodies don't get moved during collision resolution.
+    #[cfg(not(feature = "simd"))]
     fn resolve_candidate_collisions_kinematic(&self, bodies: &mut [XPBDSoftBody], is_kinematic: &[bool]) -> u32 {
         let mut total_collisions = 0u32;
         let min_dist = self.min_dist;

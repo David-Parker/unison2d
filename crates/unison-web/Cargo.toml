@@ -14,3 +14,7 @@ unison2d = { workspace = true }
 wasm-bindgen = { workspace = true }
 js-sys = { workspace = true }
 web-sys = { workspace = true }
+
+[features]
+default = []
+simd = ["unison2d/simd"]
