@@ -1385,33 +1385,65 @@ impl XPBDSoftBody {
         }
     }
 
-    /// Damp only internal deformation velocity, preserving bulk (center-of-mass) motion.
-    /// This kills internal oscillation/bouncing without affecting fall speed or movement.
+    /// Damp only internal deformation velocity, preserving bulk motion and rotation.
+    /// This kills internal oscillation/bouncing without affecting fall speed,
+    /// movement, or rolling.
     pub fn apply_internal_damping(&mut self, damping: f32) {
-        // Compute mass-weighted average velocity (center-of-mass velocity)
+        // Compute mass-weighted center of mass and velocity
+        let mut cx = 0.0f32;
+        let mut cy = 0.0f32;
         let mut avg_vx = 0.0f32;
         let mut avg_vy = 0.0f32;
         let mut total_mass = 0.0f32;
         for i in 0..self.num_verts {
             if self.inv_mass[i] > 0.0 {
                 let m = 1.0 / self.inv_mass[i];
+                cx += self.pos[i * 2] * m;
+                cy += self.pos[i * 2 + 1] * m;
                 avg_vx += self.vel[i * 2] * m;
                 avg_vy += self.vel[i * 2 + 1] * m;
                 total_mass += m;
             }
         }
         if total_mass < 1e-10 { return; }
+        cx /= total_mass;
+        cy /= total_mass;
         avg_vx /= total_mass;
         avg_vy /= total_mass;
 
-        // Damp each vertex's velocity toward the average
+        // Compute angular velocity (omega) around center of mass
+        let mut omega_num = 0.0f32;
+        let mut omega_den = 0.0f32;
+        for i in 0..self.num_verts {
+            if self.inv_mass[i] > 0.0 {
+                let m = 1.0 / self.inv_mass[i];
+                let rx = self.pos[i * 2] - cx;
+                let ry = self.pos[i * 2 + 1] - cy;
+                let rel_vx = self.vel[i * 2] - avg_vx;
+                let rel_vy = self.vel[i * 2 + 1] - avg_vy;
+                // omega = sum(m * r x v) / sum(m * r²)
+                omega_num += m * (rx * rel_vy - ry * rel_vx);
+                omega_den += m * (rx * rx + ry * ry);
+            }
+        }
+        let omega = if omega_den > 1e-10 { omega_num / omega_den } else { 0.0 };
+
+        // Damp only the deformation component: subtract rigid body motion
+        // (linear + angular), damp the remainder, add rigid motion back.
         let factor = 1.0 - damping;
         for i in 0..self.num_verts {
             if self.inv_mass[i] > 0.0 {
-                let rel_vx = self.vel[i * 2] - avg_vx;
-                let rel_vy = self.vel[i * 2 + 1] - avg_vy;
-                self.vel[i * 2] = avg_vx + rel_vx * factor;
-                self.vel[i * 2 + 1] = avg_vy + rel_vy * factor;
+                let rx = self.pos[i * 2] - cx;
+                let ry = self.pos[i * 2 + 1] - cy;
+                // Rigid body velocity at this vertex = linear + omega × r
+                let rigid_vx = avg_vx + (-ry * omega);
+                let rigid_vy = avg_vy + (rx * omega);
+                // Deformation = actual - rigid
+                let def_vx = self.vel[i * 2] - rigid_vx;
+                let def_vy = self.vel[i * 2 + 1] - rigid_vy;
+                // Damp deformation, preserve rigid
+                self.vel[i * 2] = rigid_vx + def_vx * factor;
+                self.vel[i * 2 + 1] = rigid_vy + def_vy * factor;
             }
         }
     }

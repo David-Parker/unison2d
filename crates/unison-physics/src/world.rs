@@ -1241,15 +1241,19 @@ impl PhysicsWorld {
             // Post-solve all bodies
             for body in self.soft_bodies.iter_mut() {
                 body.substep_post(substep_dt);
+                // Per-substep internal damping for stiff materials — kills
+                // deformation energy before it accumulates into a bounce.
+                let compliance = body.edge_compliance + body.area_compliance;
+                if compliance < 1e-7 {
+                    body.apply_internal_damping(0.15);
+                }
             }
             for body in self.rigid_bodies.iter_mut() {
                 body.post_solve(substep_dt);
             }
         }
 
-        // Damping applied once per step (not per substep).
-        // Stiff materials get internal-only damping to kill oscillation without
-        // affecting fall speed. Soft materials get light global damping.
+        // Light global damping once per step for soft materials.
         for body in self.soft_bodies.iter_mut() {
             let compliance = body.edge_compliance + body.area_compliance;
             if compliance < 1e-7 {
@@ -1333,6 +1337,10 @@ impl PhysicsWorld {
                 profile_scope!("physics.post_solve");
                 for body in self.soft_bodies.iter_mut() {
                     body.substep_post(substep_dt);
+                    let compliance = body.edge_compliance + body.area_compliance;
+                    if compliance < 1e-7 {
+                        body.apply_internal_damping(0.15);
+                    }
                 }
                 for body in self.rigid_bodies.iter_mut() {
                     body.post_solve(substep_dt);
@@ -1340,9 +1348,7 @@ impl PhysicsWorld {
             }
         }
 
-        // Damping applied once per step (not per substep).
-        // Stiff materials get internal-only damping to kill oscillation without
-        // affecting fall speed. Soft materials get light global damping.
+        // Light global damping once per step for soft materials.
         for body in self.soft_bodies.iter_mut() {
             let compliance = body.edge_compliance + body.area_compliance;
             if compliance < 1e-7 {
