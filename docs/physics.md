@@ -36,6 +36,7 @@ The XPBD solver includes adaptive constraint behavior:
 - **Adaptive edge compliance**: Edges compressed below 40% or stretched beyond 250% of rest length get compliance capped at 0.1 for aggressive correction.
 - **Adaptive area compliance**: Inverted triangles (signed area flipped) get zero compliance for stiff materials (alpha < 1.0) or 1% compliance for soft materials, preventing fold-through without energy injection.
 - **Rotation-aware forensics**: `MeshForensics::analyze` compares sorted dimensions (min-to-min, max-to-max) so rigid body rotation doesn't register as collapse.
+- **Internal damping**: Stiff materials (compliance < 1e-7) get per-substep deformation-only damping that preserves linear and angular momentum. This kills post-impact oscillation without affecting fall speed or rolling. Soft materials get light global damping (0.5% per frame).
 
 ### Adding Bodies
 
@@ -288,7 +289,7 @@ Direct access to the XPBD solver. Most users should use `PhysicsWorld` instead.
 
 Key public fields: `pos`, `prev_pos`, `vel`, `inv_mass`, `triangles`, `edge_constraints`, `area_constraints`, `edge_compliance`, `area_compliance`.
 
-Key methods: `pre_solve`, `post_solve`, `solve_constraints`, `apply_damping`, `substep`, `collide_with_body`, `get_center`, `get_aabb`, `get_kinetic_energy`.
+Key methods: `pre_solve`, `post_solve`, `solve_constraints`, `apply_damping`, `apply_internal_damping`, `substep`, `collide_with_body`, `get_center`, `get_aabb`, `get_kinetic_energy`.
 
 ## Low-Level: CollisionSystem
 

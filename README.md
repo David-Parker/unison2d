@@ -10,11 +10,14 @@ A Rust 2D game engine built for the LLM agent era. No GUIs — everything is con
 
 ```
 unison2d/crates/
-├── unison2d/       # Core crate (re-exports all subsystems)
+├── unison2d/       # Core crate (Engine, Game trait, re-exports)
+├── unison-math/    # Shared Vec2, Color, Rect types
 ├── unison-physics/ # XPBD soft body & rigid body physics
 ├── unison-render/  # Platform-agnostic rendering traits
 ├── unison-lighting/# 2D dynamic lighting & shadows
-└── unison-profiler/# Function-level profiling
+├── unison-input/   # Two-layer input (raw + actions)
+├── unison-profiler/# Function-level profiling
+└── unison-web/     # Web platform (WebGL2, DOM input, rAF loop)
 ```
 
 All subsystems are independent. Use `unison2d` to get everything, or depend on individual crates.
@@ -38,7 +41,9 @@ Then access subsystems:
 use unison2d::physics::{PhysicsWorld, BodyConfig, Material, Mesh};
 use unison2d::render::{Renderer, Camera, Color};
 use unison2d::lighting::{LightingManager, Light};
+use unison2d::input::{InputState, KeyCode};
 use unison2d::profiler::{Profiler, profile_scope};
+use unison2d::math::Vec2;
 ```
 
 ## Documentation
