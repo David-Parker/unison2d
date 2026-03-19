@@ -543,6 +543,12 @@ impl Renderer for WebGlRenderer {
     fn bind_render_target(&mut self, target: RenderTargetId) {
         let gl = &self.gl;
 
+        // Unbind any texture from TEXTURE0 to prevent feedback loops.
+        // A stale texture binding from a prior draw call can conflict with
+        // the FBO's color attachment if they reference the same texture.
+        gl.active_texture(GL::TEXTURE0);
+        gl.bind_texture(GL::TEXTURE_2D, None);
+
         if target == RenderTargetId::SCREEN {
             gl.bind_framebuffer(GL::FRAMEBUFFER, None);
             gl.viewport(0, 0, self.canvas_width as i32, self.canvas_height as i32);
