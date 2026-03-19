@@ -8,7 +8,7 @@ use unison_math::{Color, Rect};
 use unison_profiler::profile_scope;
 
 /// Manages all lights and their shadow maps in a scene.
-pub struct LightingManager {
+pub struct LightingSystem {
     /// All lights in the scene.
     lights: Vec<Option<Light>>,
     /// Global ambient light color.
@@ -25,13 +25,13 @@ pub struct LightingManager {
     free_slots: Vec<usize>,
 }
 
-impl Default for LightingManager {
+impl Default for LightingSystem {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl LightingManager {
+impl LightingSystem {
     /// Create a new lighting manager.
     pub fn new() -> Self {
         Self {

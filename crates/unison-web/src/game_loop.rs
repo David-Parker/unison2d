@@ -67,9 +67,6 @@ pub fn start_loop<G: Game + 'static>(
             input_ref.copy_held_from(&engine_ref.input);
         }
 
-        // Snapshot for render interpolation
-        engine.borrow_mut().snapshot_for_render();
-
         // Fixed timestep updates
         let mut first_tick = true;
         while accumulator >= FIXED_DT {
@@ -83,15 +80,13 @@ pub fn start_loop<G: Game + 'static>(
                 first_tick = false;
                 engine_ref.pre_update();
                 game.update(&mut engine_ref);
-                engine_ref.post_update();
             }
             accumulator -= FIXED_DT;
         }
 
-        // Render
+        // Render once per frame — the game controls all rendering
         {
             let mut engine_ref = engine.borrow_mut();
-            engine_ref.auto_render();
             game.render(&mut engine_ref);
         }
 

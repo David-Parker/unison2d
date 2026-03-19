@@ -34,6 +34,20 @@ Implements `Renderer` trait from `unison-render`. Supports all 5 `RenderCommand`
 
 Two shader programs: solid-color and textured (with tint). Camera transform applied as a 3x3 view-projection matrix uniform.
 
+### Render Targets (FBOs)
+
+The WebGL2 renderer implements offscreen render targets:
+
+| Method | Description |
+|--------|-------------|
+| `create_render_target(w, h)` | Creates FBO + RGBA8 texture attachment |
+| `bind_render_target(target)` | Binds FBO, sets viewport to target size |
+| `destroy_render_target(target)` | Deletes FBO, keeps the texture |
+
+`RenderTargetId::SCREEN` binds the default framebuffer and restores canvas viewport.
+
+Render target textures are registered in the renderer's texture map and can be used directly in `DrawSprite` commands for compositing.
+
 ## Input Wiring
 
 DOM events mapped to `InputState`:
@@ -57,11 +71,13 @@ Game keys (arrows, space, tab) have `preventDefault()` to avoid page scrolling.
 Fixed timestep accumulator pattern:
 - Calls `Profiler::begin_frame()` at the start of each frame
 - Accumulates real delta time each frame
-- Steps `game.update()` at 60Hz intervals (multiple steps if needed)
+- Calls `engine.pre_update()` then `game.update()` at 60Hz intervals (multiple steps if needed)
 - Caps accumulator at 100ms to prevent spiral of death
 - Calls `game.render()` once per frame after all updates
 - Calls `Profiler::end_frame()` to accumulate frame statistics
 - Every 120 frames, logs profiler stats to the browser console via `web_sys::console::log_1` and resets
+
+The game loop does NOT auto-render or auto-step physics — the game controls both via `world.step(dt)` and `world.auto_render(renderer)` in its `update()` and `render()` callbacks.
 
 ## Dependencies
 

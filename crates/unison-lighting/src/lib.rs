@@ -14,11 +14,11 @@
 //! # Usage
 //!
 //! ```ignore
-//! use unison_lighting::{LightingManager, Light, ShadowQuality};
+//! use unison_lighting::{LightingSystem, Light, ShadowQuality};
 //! use unison_math::{Vec2, Color, Rect};
 //!
 //! // Create lighting manager
-//! let mut lighting = LightingManager::new();
+//! let mut lighting = LightingSystem::new();
 //! lighting.set_shadow_quality(ShadowQuality::Medium);
 //! lighting.set_ambient(Color::rgb(0.1, 0.1, 0.15));
 //!
@@ -83,5 +83,5 @@ pub mod render;
 pub use light::{Light, LightType};
 pub use config::{LightConfig, AmbientConfig, SceneLightingConfig};
 pub use shadow::{ShadowQuality, ShadowMap, ShadowMapId, LightHandle, ShadowCaster, ShadowMapCache};
-pub use manager::LightingManager;
+pub use manager::LightingSystem;
 pub use render::{LightingRenderer, OccluderData, LightingData, LightRenderData, NullLightingRenderer};

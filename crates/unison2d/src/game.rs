@@ -1,7 +1,7 @@
 //! Game trait — the application lifecycle interface.
 //!
 //! Games implement this trait and pass themselves to a platform's `run()` function.
-//! The platform handles the frame loop; the game handles logic and (optionally) rendering.
+//! The platform handles the frame loop; the game handles logic and rendering.
 
 use std::hash::Hash;
 use crate::engine::Engine;
@@ -9,19 +9,26 @@ use crate::engine::Engine;
 /// The main game trait. Implement this to create a game.
 ///
 /// ```ignore
-/// struct MyGame { player: ObjectId }
+/// struct MyGame { world: World, player: ObjectId }
 ///
 /// impl Game for MyGame {
 ///     type Action = MyAction;
 ///
 ///     fn init(&mut self, engine: &mut Engine<MyAction>) {
-///         self.player = engine.spawn_soft_body(/* ... */);
 ///         engine.bind_key(KeyCode::Space, MyAction::Jump);
+///         self.player = self.world.objects.spawn_soft_body(/* ... */);
 ///     }
 ///
 ///     fn update(&mut self, engine: &mut Engine<MyAction>) {
 ///         if engine.action_just_started(MyAction::Jump) {
-///             engine.apply_impulse(self.player, Vec2::new(0.0, 10.0));
+///             self.world.objects.apply_impulse(self.player, Vec2::new(0.0, 10.0));
+///         }
+///         self.world.step(engine.dt());
+///     }
+///
+///     fn render(&mut self, engine: &mut Engine<MyAction>) {
+///         if let Some(renderer) = engine.renderer_mut() {
+///             self.world.auto_render(renderer);
 ///         }
 ///     }
 /// }
@@ -31,17 +38,14 @@ pub trait Game {
     type Action: Copy + Eq + Hash + 'static;
 
     /// Called once after the engine is initialized.
-    /// Set up your game world, spawn objects, bind input actions.
+    /// Bind input actions on engine, set up your world(s), spawn objects.
     fn init(&mut self, engine: &mut Engine<Self::Action>);
 
     /// Called once per fixed timestep tick.
-    /// Read input via `engine.action_*()`, apply forces, update game state.
-    /// Physics is stepped automatically after this returns.
+    /// Read input via `engine.action_*()`, apply forces to your world, step physics.
     fn update(&mut self, engine: &mut Engine<Self::Action>);
 
-    /// Called once per frame for custom rendering.
-    /// The engine auto-renders all spawned objects before calling this.
-    /// Override to draw additional things (UI, debug lines, particles).
-    /// Default implementation does nothing.
-    fn render(&mut self, _engine: &mut Engine<Self::Action>) {}
+    /// Called once per frame for rendering.
+    /// The game is responsible for rendering its world(s) using `engine.renderer_mut()`.
+    fn render(&mut self, engine: &mut Engine<Self::Action>);
 }

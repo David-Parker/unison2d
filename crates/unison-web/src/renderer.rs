@@ -2,12 +2,12 @@
 
 use std::collections::HashMap;
 use web_sys::{
-    WebGl2RenderingContext as GL, WebGlBuffer, WebGlProgram, WebGlShader, WebGlTexture,
-    WebGlUniformLocation, WebGlVertexArrayObject,
+    WebGl2RenderingContext as GL, WebGlBuffer, WebGlFramebuffer, WebGlProgram, WebGlShader,
+    WebGlTexture, WebGlUniformLocation, WebGlVertexArrayObject,
 };
 use unison_math::Color;
 use unison_render::{
-    Camera, RenderCommand, Renderer, TextureDescriptor, TextureFilter,
+    Camera, RenderCommand, RenderTargetId, Renderer, TextureDescriptor, TextureFilter,
     TextureFormat, TextureId, TextureWrap,
 };
 
@@ -30,6 +30,10 @@ pub struct WebGlRenderer {
     // Texture storage
     textures: HashMap<u32, WebGlTexture>,
     next_texture_id: u32,
+    // Render targets (offscreen FBOs)
+    render_targets: HashMap<u32, WebGlFramebuffer>,
+    render_target_sizes: HashMap<u32, (u32, u32)>,
+    next_render_target_id: u32,
     // State
     canvas_width: f32,
     canvas_height: f32,
@@ -104,6 +108,9 @@ impl WebGlRenderer {
             index_buffer,
             textures: HashMap::new(),
             next_texture_id: 1,
+            render_targets: HashMap::new(),
+            render_target_sizes: HashMap::new(),
+            next_render_target_id: 1, // 0 = SCREEN
             canvas_width: width,
             canvas_height: height,
         })
@@ -465,6 +472,94 @@ impl Renderer for WebGlRenderer {
 
     fn screen_size(&self) -> (f32, f32) {
         (self.canvas_width, self.canvas_height)
+    }
+
+    fn create_render_target(&mut self, width: u32, height: u32) -> Result<(RenderTargetId, TextureId), String> {
+        let gl = &self.gl;
+
+        // Create framebuffer
+        let fbo = gl.create_framebuffer()
+            .ok_or("Failed to create framebuffer")?;
+
+        // Create color texture
+        let texture = gl.create_texture()
+            .ok_or("Failed to create render target texture")?;
+        gl.bind_texture(GL::TEXTURE_2D, Some(&texture));
+        gl.tex_image_2d_with_i32_and_i32_and_i32_and_format_and_type_and_opt_u8_array(
+            GL::TEXTURE_2D,
+            0,
+            GL::RGBA8 as i32,
+            width as i32,
+            height as i32,
+            0,
+            GL::RGBA,
+            GL::UNSIGNED_BYTE,
+            None,
+        ).map_err(|e| format!("Failed to allocate render target texture: {:?}", e))?;
+
+        // Linear filtering, clamp to edge
+        gl.tex_parameteri(GL::TEXTURE_2D, GL::TEXTURE_MIN_FILTER, GL::LINEAR as i32);
+        gl.tex_parameteri(GL::TEXTURE_2D, GL::TEXTURE_MAG_FILTER, GL::LINEAR as i32);
+        gl.tex_parameteri(GL::TEXTURE_2D, GL::TEXTURE_WRAP_S, GL::CLAMP_TO_EDGE as i32);
+        gl.tex_parameteri(GL::TEXTURE_2D, GL::TEXTURE_WRAP_T, GL::CLAMP_TO_EDGE as i32);
+
+        // Attach texture to framebuffer
+        gl.bind_framebuffer(GL::FRAMEBUFFER, Some(&fbo));
+        gl.framebuffer_texture_2d(
+            GL::FRAMEBUFFER,
+            GL::COLOR_ATTACHMENT0,
+            GL::TEXTURE_2D,
+            Some(&texture),
+            0,
+        );
+
+        // Check completeness
+        let status = gl.check_framebuffer_status(GL::FRAMEBUFFER);
+        if status != GL::FRAMEBUFFER_COMPLETE {
+            gl.bind_framebuffer(GL::FRAMEBUFFER, None);
+            gl.delete_framebuffer(Some(&fbo));
+            gl.delete_texture(Some(&texture));
+            return Err(format!("Framebuffer not complete: status {}", status));
+        }
+
+        // Unbind
+        gl.bind_framebuffer(GL::FRAMEBUFFER, None);
+        gl.bind_texture(GL::TEXTURE_2D, None);
+
+        // Register texture so it can be used in draw commands
+        let tex_id = self.next_texture_id;
+        self.next_texture_id += 1;
+        self.textures.insert(tex_id, texture);
+
+        // Register render target
+        let rt_id = self.next_render_target_id;
+        self.next_render_target_id += 1;
+        self.render_targets.insert(rt_id, fbo);
+        self.render_target_sizes.insert(rt_id, (width, height));
+
+        Ok((RenderTargetId(rt_id), TextureId(tex_id)))
+    }
+
+    fn bind_render_target(&mut self, target: RenderTargetId) {
+        let gl = &self.gl;
+
+        if target == RenderTargetId::SCREEN {
+            gl.bind_framebuffer(GL::FRAMEBUFFER, None);
+            gl.viewport(0, 0, self.canvas_width as i32, self.canvas_height as i32);
+        } else if let Some(fbo) = self.render_targets.get(&target.0) {
+            gl.bind_framebuffer(GL::FRAMEBUFFER, Some(fbo));
+            if let Some(&(w, h)) = self.render_target_sizes.get(&target.0) {
+                gl.viewport(0, 0, w as i32, h as i32);
+            }
+        }
+    }
+
+    fn destroy_render_target(&mut self, target: RenderTargetId) {
+        if let Some(fbo) = self.render_targets.remove(&target.0) {
+            self.gl.delete_framebuffer(Some(&fbo));
+        }
+        self.render_target_sizes.remove(&target.0);
+        // Note: the associated texture is NOT destroyed — the caller may still use it
     }
 }
 

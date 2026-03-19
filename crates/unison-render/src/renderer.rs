@@ -80,6 +80,18 @@ pub enum RenderCommand {
     },
 }
 
+/// Opaque handle to an offscreen render target.
+///
+/// Created by [`Renderer::create_render_target`]. The special value
+/// [`RenderTargetId::SCREEN`] refers to the default framebuffer (the screen).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct RenderTargetId(pub u32);
+
+impl RenderTargetId {
+    /// The default framebuffer (screen).
+    pub const SCREEN: Self = Self(0);
+}
+
 /// Renderer trait that platform crates implement
 pub trait Renderer {
     /// Error type for renderer operations
@@ -108,4 +120,24 @@ pub trait Renderer {
 
     /// Get the screen/canvas size
     fn screen_size(&self) -> (f32, f32);
+
+    // ── Render targets ──
+
+    /// Create an offscreen render target of the given size.
+    ///
+    /// Returns the target ID and a texture ID for the color attachment.
+    /// The texture can be used in draw commands (e.g., for compositing).
+    fn create_render_target(&mut self, _width: u32, _height: u32) -> Result<(RenderTargetId, TextureId), Self::Error> {
+        unimplemented!("Renderer does not support render targets")
+    }
+
+    /// Bind a render target for subsequent draw calls.
+    ///
+    /// Pass [`RenderTargetId::SCREEN`] to bind the default framebuffer.
+    fn bind_render_target(&mut self, _target: RenderTargetId) {
+        unimplemented!("Renderer does not support render targets")
+    }
+
+    /// Destroy a render target (but not its associated texture).
+    fn destroy_render_target(&mut self, _target: RenderTargetId) {}
 }

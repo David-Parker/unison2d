@@ -1,0 +1,400 @@
+//! ObjectSystem — manages game objects and their underlying physics simulation.
+//!
+//! Owns the `PhysicsWorld` and the object registry. Provides a high-level API for
+//! spawning, querying, and applying forces to objects. Raw physics access is
+//! available via `physics()` / `physics_mut()`.
+
+use std::collections::HashMap;
+
+use unison_math::{Color, Vec2};
+use unison_physics::{BodyHandle, PhysicsWorld};
+use unison_render::{DrawMesh, RenderCommand, TextureId};
+
+use crate::object::{ObjectEntry, ObjectId, ObjectKind, RigidBodyDesc, SoftBodyDesc};
+
+/// Manages game objects and their physics simulation.
+///
+/// Each object is a soft body or rigid body backed by a `BodyHandle` in the
+/// underlying `PhysicsWorld`. The system tracks the mapping between `ObjectId`
+/// (game-facing) and `BodyHandle` (physics-facing).
+pub struct ObjectSystem {
+    physics: PhysicsWorld,
+    entries: HashMap<ObjectId, ObjectEntry>,
+    handle_map: HashMap<BodyHandle, ObjectId>,
+    next_id: u64,
+}
+
+impl ObjectSystem {
+    /// Create a new ObjectSystem with default physics settings.
+    pub fn new() -> Self {
+        let mut physics = PhysicsWorld::new();
+        physics.set_gravity(-9.8);
+
+        Self {
+            physics,
+            entries: HashMap::new(),
+            handle_map: HashMap::new(),
+            next_id: 0,
+        }
+    }
+
+    // ── Spawning ──
+
+    /// Spawn a soft body object. Returns an ObjectId for future reference.
+    pub fn spawn_soft_body(&mut self, desc: SoftBodyDesc) -> ObjectId {
+        let uvs = desc.mesh.uvs_or_default();
+        let config = desc.to_body_config();
+        let handle = self.physics.add_body(&desc.mesh, config);
+        let color = desc.color;
+
+        let id = self.next_object_id();
+        self.handle_map.insert(handle, id);
+        self.entries.insert(id, ObjectEntry {
+            kind: ObjectKind::SoftBody { handle, color, uvs },
+        });
+        id
+    }
+
+    /// Spawn a rigid body object. Returns an ObjectId for future reference.
+    pub fn spawn_rigid_body(&mut self, desc: RigidBodyDesc) -> ObjectId {
+        let config = desc.to_rigid_body_config();
+        let handle = self.physics.add_rigid_body(config);
+        let color = desc.color;
+
+        let id = self.next_object_id();
+        self.handle_map.insert(handle, id);
+        self.entries.insert(id, ObjectEntry {
+            kind: ObjectKind::RigidBody { handle, color },
+        });
+        id
+    }
+
+    /// Convenience: spawn a static rectangle (platform, wall, floor).
+    pub fn spawn_static_rect(&mut self, position: Vec2, size: Vec2, color: Color) -> ObjectId {
+        self.spawn_rigid_body(RigidBodyDesc {
+            collider: unison_physics::Collider::aabb(size.x / 2.0, size.y / 2.0),
+            position,
+            color,
+            is_static: true,
+        })
+    }
+
+    /// Remove an object from the world.
+    pub fn despawn(&mut self, id: ObjectId) {
+        if let Some(entry) = self.entries.remove(&id) {
+            let handle = entry.handle();
+            self.physics.remove_body(handle);
+            self.handle_map.remove(&handle);
+        }
+    }
+
+    // ── Queries ──
+
+    /// Get the position of an object.
+    pub fn get_position(&self, id: ObjectId) -> Vec2 {
+        self.with_handle(id, |h| self.physics.get_position(h).unwrap_or(Vec2::ZERO))
+            .unwrap_or(Vec2::ZERO)
+    }
+
+    /// Set the position of an object.
+    pub fn set_position(&mut self, id: ObjectId, pos: Vec2) {
+        if let Some(handle) = self.get_handle(id) {
+            self.physics.set_position(handle, pos.x, pos.y);
+        }
+    }
+
+    /// Apply a force to an object (continuous, call each frame).
+    pub fn apply_force(&mut self, id: ObjectId, force: Vec2) {
+        if let Some(handle) = self.get_handle(id) {
+            self.physics.apply_force(handle, force.x, force.y);
+        }
+    }
+
+    /// Apply a torque to an object (continuous rotation, call each frame).
+    /// Positive = counter-clockwise, negative = clockwise.
+    pub fn apply_torque(&mut self, id: ObjectId, torque: f32, dt: f32) {
+        if let Some(handle) = self.get_handle(id) {
+            self.physics.apply_torque(handle, torque, dt);
+        }
+    }
+
+    /// Apply an impulse to an object (instantaneous velocity change).
+    pub fn apply_impulse(&mut self, id: ObjectId, impulse: Vec2) {
+        if let Some(handle) = self.get_handle(id) {
+            self.physics.apply_impulse(handle, impulse.x, impulse.y);
+        }
+    }
+
+    /// Check if an object is touching the ground, a platform, or another body below it.
+    pub fn is_grounded(&self, id: ObjectId) -> bool {
+        self.with_handle(id, |h| self.physics.is_grounded(h, 0.5))
+            .unwrap_or(false)
+    }
+
+    /// Check if two objects are touching (AABB overlap with threshold).
+    pub fn is_touching(&self, a: ObjectId, b: ObjectId) -> bool {
+        let (ha, hb) = match (self.get_handle(a), self.get_handle(b)) {
+            (Some(ha), Some(hb)) => (ha, hb),
+            _ => return false,
+        };
+        self.physics
+            .get_contact(ha, 0.3)
+            .map_or(false, |contact| contact == hb)
+    }
+
+    /// Get the first object in contact with the given object, if any.
+    pub fn get_contact(&self, id: ObjectId) -> Option<ObjectId> {
+        let handle = self.get_handle(id)?;
+        let contact_handle = self.physics.get_contact(handle, 0.3)?;
+        self.handle_map.get(&contact_handle).copied()
+    }
+
+    /// Get the velocity of an object.
+    pub fn get_velocity(&self, id: ObjectId) -> Vec2 {
+        self.with_handle(id, |h| self.physics.get_velocity(h).unwrap_or(Vec2::ZERO))
+            .unwrap_or(Vec2::ZERO)
+    }
+
+    /// Set the velocity of an object.
+    pub fn set_velocity(&mut self, id: ObjectId, vel: Vec2) {
+        if let Some(handle) = self.get_handle(id) {
+            self.physics.set_velocity(handle, vel.x, vel.y);
+        }
+    }
+
+    // ── Physics config ──
+
+    /// Set the gravity vector (negative = downward).
+    pub fn set_gravity(&mut self, gravity: Vec2) {
+        self.physics.set_gravity(gravity.y);
+    }
+
+    /// Set a flat ground plane at the given Y position.
+    pub fn set_ground(&mut self, y: f32) {
+        self.physics.set_ground(Some(y));
+    }
+
+    /// Remove the ground plane.
+    pub fn clear_ground(&mut self) {
+        self.physics.set_ground(None);
+    }
+
+    /// Set ground friction (0.0 = ice, 1.0 = very sticky). Default: 0.8
+    pub fn set_ground_friction(&mut self, friction: f32) {
+        self.physics.set_ground_friction(friction);
+    }
+
+    /// Set ground bounciness (0.0 = no bounce, 1.0 = perfect bounce). Default: 0.3
+    pub fn set_ground_restitution(&mut self, restitution: f32) {
+        self.physics.set_ground_restitution(restitution);
+    }
+
+    // ── Raw access ──
+
+    /// Direct access to the physics world for advanced operations.
+    pub fn physics_mut(&mut self) -> &mut PhysicsWorld {
+        &mut self.physics
+    }
+
+    /// Direct read access to the physics world.
+    pub fn physics(&self) -> &PhysicsWorld {
+        &self.physics
+    }
+
+    // ── Simulation ──
+
+    /// Step the physics simulation by `dt` seconds.
+    pub fn step(&mut self, dt: f32) {
+        self.physics.step(dt);
+    }
+
+    /// Snapshot physics state for interpolated rendering.
+    pub fn snapshot_for_render(&mut self) {
+        self.physics.snapshot_for_render();
+    }
+
+    // ── Rendering ──
+
+    /// Collect render commands for all objects.
+    pub fn render_commands(&self) -> Vec<RenderCommand> {
+        let mut commands = Vec::new();
+
+        for entry in self.entries.values() {
+            match &entry.kind {
+                ObjectKind::SoftBody { handle, color, uvs } => {
+                    if let Some((positions, indices)) = self.physics.get_body_render_data(*handle) {
+                        commands.push(RenderCommand::Mesh(DrawMesh {
+                            positions,
+                            uvs: uvs.clone(),
+                            indices: indices.to_vec(),
+                            texture: TextureId::NONE,
+                            color: *color,
+                        }));
+                    }
+                }
+                ObjectKind::RigidBody { handle, color } => {
+                    if let Some(body) = self.physics.get_rigid_body(*handle) {
+                        let he = body.collider.half_extents();
+                        commands.push(RenderCommand::Rect {
+                            position: [body.position.x - he.x, body.position.y - he.y],
+                            size: [he.x * 2.0, he.y * 2.0],
+                            color: *color,
+                        });
+                    }
+                }
+            }
+        }
+
+        commands
+    }
+
+    // ── Info ──
+
+    /// Number of objects currently alive.
+    pub fn object_count(&self) -> usize {
+        self.entries.len()
+    }
+
+    // ── Helpers ──
+
+    fn next_object_id(&mut self) -> ObjectId {
+        let id = ObjectId(self.next_id);
+        self.next_id += 1;
+        id
+    }
+
+    fn get_handle(&self, id: ObjectId) -> Option<BodyHandle> {
+        self.entries.get(&id).map(|entry| entry.handle())
+    }
+
+    fn with_handle<T, F: FnOnce(BodyHandle) -> T>(&self, id: ObjectId, f: F) -> Option<T> {
+        self.get_handle(id).map(f)
+    }
+}
+
+impl Default for ObjectSystem {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use unison_physics::mesh::create_ring_mesh;
+
+    #[test]
+    fn spawn_and_query_soft_body() {
+        let mut objects = ObjectSystem::new();
+        let mesh = create_ring_mesh(1.0, 0.5, 8, 2);
+
+        let id = objects.spawn_soft_body(SoftBodyDesc {
+            mesh,
+            material: unison_physics::Material::RUBBER,
+            position: Vec2::new(0.0, 5.0),
+            color: Color::WHITE,
+        });
+
+        let pos = objects.get_position(id);
+        assert!((pos.x).abs() < 0.5);
+        assert!((pos.y - 5.0).abs() < 0.5);
+    }
+
+    #[test]
+    fn spawn_and_query_rigid_body() {
+        let mut objects = ObjectSystem::new();
+
+        let id = objects.spawn_rigid_body(RigidBodyDesc {
+            collider: unison_physics::Collider::aabb(5.0, 0.5),
+            position: Vec2::new(0.0, -3.0),
+            color: Color::from_hex(0x2d5016),
+            is_static: true,
+        });
+
+        let pos = objects.get_position(id);
+        assert!((pos.x).abs() < 0.01);
+        assert!((pos.y + 3.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn spawn_static_rect() {
+        let mut objects = ObjectSystem::new();
+
+        let id = objects.spawn_static_rect(
+            Vec2::new(0.0, -5.0),
+            Vec2::new(100.0, 2.0),
+            Color::from_hex(0x2d5016),
+        );
+
+        let pos = objects.get_position(id);
+        assert!((pos.y + 5.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn despawn_removes_object() {
+        let mut objects = ObjectSystem::new();
+        let mesh = create_ring_mesh(1.0, 0.5, 8, 2);
+
+        let id = objects.spawn_soft_body(SoftBodyDesc {
+            mesh,
+            material: unison_physics::Material::RUBBER,
+            position: Vec2::ZERO,
+            color: Color::WHITE,
+        });
+
+        objects.despawn(id);
+        let pos = objects.get_position(id);
+        assert_eq!(pos, Vec2::ZERO);
+    }
+
+    #[test]
+    fn object_count() {
+        let mut objects = ObjectSystem::new();
+        assert_eq!(objects.object_count(), 0);
+
+        let mesh = create_ring_mesh(1.0, 0.5, 8, 2);
+        let id = objects.spawn_soft_body(SoftBodyDesc {
+            mesh,
+            material: unison_physics::Material::RUBBER,
+            position: Vec2::ZERO,
+            color: Color::WHITE,
+        });
+
+        assert_eq!(objects.object_count(), 1);
+        objects.despawn(id);
+        assert_eq!(objects.object_count(), 0);
+    }
+
+    #[test]
+    fn set_gravity_and_ground() {
+        let mut objects = ObjectSystem::new();
+        objects.set_gravity(Vec2::new(0.0, -20.0));
+        objects.set_ground(-5.0);
+
+        assert_eq!(objects.physics.gravity(), -20.0);
+        assert_eq!(objects.physics.ground(), Some(-5.0));
+    }
+
+    #[test]
+    fn render_commands_collected() {
+        let mut objects = ObjectSystem::new();
+        let mesh = create_ring_mesh(1.0, 0.5, 8, 2);
+
+        objects.spawn_soft_body(SoftBodyDesc {
+            mesh,
+            material: unison_physics::Material::RUBBER,
+            position: Vec2::ZERO,
+            color: Color::WHITE,
+        });
+
+        objects.spawn_rigid_body(RigidBodyDesc {
+            collider: unison_physics::Collider::aabb(1.0, 1.0),
+            position: Vec2::new(5.0, 0.0),
+            color: Color::RED,
+            is_static: true,
+        });
+
+        let cmds = objects.render_commands();
+        assert_eq!(cmds.len(), 2);
+    }
+}

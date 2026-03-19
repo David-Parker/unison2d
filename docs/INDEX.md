@@ -6,7 +6,7 @@ Read the relevant doc before working with a crate. Update docs when changing pub
 
 | Crate | Description | Doc |
 |-------|-------------|-----|
-| `unison2d` | Core crate: Engine, Game trait, object management | [engine.md](engine.md) |
+| `unison2d` | Core crate: World, Engine, Game trait, Level trait | [engine.md](engine.md) |
 | `unison-input` | Two-layer input (raw state + action mapping) | [input.md](input.md) |
 | `unison-web` | Web platform (WebGL2, DOM input, rAF loop) | [web.md](web.md) |
 | `unison-math` | Shared Vec2, Color, Rect types | [math.md](math.md) |

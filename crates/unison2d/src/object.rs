@@ -78,6 +78,16 @@ pub(crate) struct ObjectEntry {
     pub(crate) kind: ObjectKind,
 }
 
+impl ObjectEntry {
+    /// Get the physics BodyHandle for this object.
+    pub(crate) fn handle(&self) -> BodyHandle {
+        match &self.kind {
+            ObjectKind::SoftBody { handle, .. } => *handle,
+            ObjectKind::RigidBody { handle, .. } => *handle,
+        }
+    }
+}
+
 impl SoftBodyDesc {
     /// Convert to physics BodyConfig for adding to PhysicsWorld
     pub(crate) fn to_body_config(&self) -> BodyConfig {

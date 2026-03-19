@@ -2,49 +2,49 @@
 
 2D dynamic lighting with soft shadows. Uses `Vec2`, `Color`, and `Rect` from `unison-math`.
 
-## LightingManager
+## LightingSystem
 
 Central coordinator for all lights and shadow maps.
 
 ```rust
 use unison_math::{Color, Rect, Vec2};
 
-let mut manager = LightingManager::new();
-manager.set_ambient(Color::rgb(0.1, 0.1, 0.15));
-manager.set_shadow_quality(ShadowQuality::High);
+let mut lighting = LightingSystem::new();
+lighting.set_ambient(Color::rgb(0.1, 0.1, 0.15));
+lighting.set_shadow_quality(ShadowQuality::High);
 ```
 
 ### Adding & Managing Lights
 
 ```rust
-let handle = manager.add_light(Light::point(Vec2::new(5.0, 3.0), 10.0)
+let handle = lighting.add_light(Light::point(Vec2::new(5.0, 3.0), 10.0)
     .with_color(Color::rgb(1.0, 0.9, 0.7))
     .with_intensity(1.5)
     .with_shadows(true));
 
-manager.get_light(handle)          // -> Option<&Light>
-manager.get_light_mut(handle)      // -> Option<&mut Light>
-manager.remove_light(handle);
-manager.light_count()              // -> usize
-manager.all_lights()               // -> impl Iterator<Item = &Light>
+lighting.get_light(handle)          // -> Option<&Light>
+lighting.get_light_mut(handle)      // -> Option<&mut Light>
+lighting.remove_light(handle);
+lighting.light_count()              // -> usize
+lighting.all_lights()               // -> impl Iterator<Item = &Light>
 ```
 
 ### Shadow Updates
 
 ```rust
 // Mark dirty when lights or occluders move
-manager.mark_dirty(handle);
-manager.mark_all_dirty();
+lighting.mark_dirty(handle);
+lighting.mark_all_dirty();
 
 // Recompute shadow maps
-manager.update_shadows(&occluders); // &[&dyn ShadowCaster]
+lighting.update_shadows(&occluders); // &[&dyn ShadowCaster]
 ```
 
 ### Frustum Culling
 
 ```rust
 let bounds = Rect::from_center(Vec2::new(cam_x, cam_y), Vec2::new(width, height));
-let visible = manager.get_visible_lights(&bounds); // -> Vec<&Light>
+let visible = lighting.get_visible_lights(&bounds); // -> Vec<&Light>
 ```
 
 ## Light

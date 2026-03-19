@@ -18,7 +18,29 @@ pub trait Renderer {
     fn create_texture(&mut self, desc: &TextureDescriptor) -> Result<TextureId, Self::Error>;
     fn destroy_texture(&mut self, id: TextureId);
     fn screen_size(&self) -> (f32, f32);
+
+    // Render targets (default: unimplemented)
+    fn create_render_target(&mut self, width: u32, height: u32) -> Result<(RenderTargetId, TextureId), Self::Error>;
+    fn bind_render_target(&mut self, target: RenderTargetId);
+    fn destroy_render_target(&mut self, target: RenderTargetId);
 }
+```
+
+## RenderTargetId
+
+Opaque handle to an offscreen render target (framebuffer).
+
+```rust
+RenderTargetId::SCREEN   // the default framebuffer (screen)
+```
+
+Created by `Renderer::create_render_target()`, which returns `(RenderTargetId, TextureId)`. The texture can be used in draw commands (e.g., for compositing camera outputs on screen).
+
+```rust
+let (target, texture) = renderer.create_render_target(800, 600)?;
+renderer.bind_render_target(target);   // subsequent draws go to this target
+renderer.bind_render_target(RenderTargetId::SCREEN);  // back to screen
+renderer.destroy_render_target(target);  // FBO freed, texture kept
 ```
 
 ## RenderCommand
