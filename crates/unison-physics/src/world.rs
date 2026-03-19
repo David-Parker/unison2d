@@ -252,7 +252,7 @@ impl PhysicsWorld {
             ground_y: None,
             ground_friction: 0.8,
             ground_restitution: 0.3,
-            substeps: 3,
+            substeps: 4,
             pre_collision_iters: 3,
             post_collision_iters: 2,
             contact_iters: 5,
