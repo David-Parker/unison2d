@@ -353,10 +353,21 @@ impl CollisionSystem {
         self.resolve_collisions_with_kinematic(bodies, &[])
     }
 
+    /// Resolve collisions with a configurable iteration count.
+    /// Higher values improve contact quality without increasing substeps.
+    pub fn resolve_collisions_n(&mut self, bodies: &mut [XPBDSoftBody], iterations: u32) -> u32 {
+        self.resolve_collisions_with_kinematic_n(bodies, &[], iterations)
+    }
+
     /// Resolve collisions with kinematic body support.
     /// Kinematic bodies participate in collisions but don't get moved.
     /// `is_kinematic` slice should match bodies length (or be empty for no kinematic).
     pub fn resolve_collisions_with_kinematic(&mut self, bodies: &mut [XPBDSoftBody], is_kinematic: &[bool]) -> u32 {
+        self.resolve_collisions_with_kinematic_n(bodies, is_kinematic, 3)
+    }
+
+    /// Resolve collisions with kinematic support and configurable iteration count.
+    pub fn resolve_collisions_with_kinematic_n(&mut self, bodies: &mut [XPBDSoftBody], is_kinematic: &[bool], iterations: u32) -> u32 {
         if self.overlapping_pairs.is_empty() {
             return 0;
         }
@@ -368,12 +379,12 @@ impl CollisionSystem {
             self.candidates_valid = true;
         }
 
-        // Resolve candidates, up to 3 iterations with fresh positions
+        // Resolve candidates with configurable iteration count
         let mut total = 0;
         let mut iters = 0u32;
         {
             profile_scope!("narrow_phase");
-            for _ in 0..3 {
+            for _ in 0..iterations {
                 iters += 1;
                 let found = self.resolve_candidate_collisions_kinematic(bodies, is_kinematic);
                 total += found;

@@ -225,6 +225,8 @@ pub struct PhysicsWorld {
     pre_collision_iters: u32,
     /// Constraint solver iterations after collision
     post_collision_iters: u32,
+    /// Collision resolution iterations per substep (soft-soft and soft-rigid)
+    contact_iters: u32,
 
     // Handle tracking
     next_handle: usize,
@@ -250,9 +252,10 @@ impl PhysicsWorld {
             ground_y: None,
             ground_friction: 0.8,
             ground_restitution: 0.3,
-            substeps: 4,
+            substeps: 3,
             pre_collision_iters: 3,
             post_collision_iters: 2,
+            contact_iters: 5,
             next_handle: 0,
             render_inflation: 0.075,
         }
@@ -314,6 +317,21 @@ impl PhysicsWorld {
     pub fn set_solver_iterations(&mut self, pre_collision: u32, post_collision: u32) {
         self.pre_collision_iters = pre_collision.max(1);
         self.post_collision_iters = post_collision.max(1);
+    }
+
+    /// Set contact resolution iterations per substep (default: 3)
+    ///
+    /// Controls how many times soft-soft and soft-rigid collisions are resolved
+    /// each substep. Increasing this improves collision quality (especially
+    /// rigid-rigid and soft-rigid contacts) without the cost of more substeps.
+    /// Useful when substeps are low but you need solid contact response.
+    pub fn set_contact_iterations(&mut self, iterations: u32) {
+        self.contact_iters = iterations.max(1);
+    }
+
+    /// Get current contact resolution iterations per substep
+    pub fn contact_iterations(&self) -> u32 {
+        self.contact_iters
     }
 
     /// Add a soft body from a mesh with configuration
@@ -1246,13 +1264,23 @@ impl PhysicsWorld {
             // Resolve soft-soft collisions
             {
                 profile_scope!("soft_collisions");
-                self.collision_system.resolve_collisions(&mut self.soft_bodies);
+                self.collision_system.resolve_collisions_n(&mut self.soft_bodies, self.contact_iters);
             }
 
             // Resolve soft-vs-rigid collisions
             {
                 profile_scope!("soft_rigid_collisions");
-                self.resolve_soft_rigid_collisions();
+                for _ in 0..self.contact_iters {
+                    self.resolve_soft_rigid_collisions();
+                }
+            }
+
+            // Resolve rigid-vs-rigid collisions
+            {
+                profile_scope!("rigid_rigid_collisions");
+                for _ in 0..self.contact_iters {
+                    self.resolve_rigid_rigid_collisions();
+                }
             }
 
             // Note: constraint solving already done in substep_pre_with_friction_iters
@@ -1342,13 +1370,23 @@ impl PhysicsWorld {
             // Resolve soft-soft collisions
             {
                 profile_scope!("soft_collisions");
-                self.collision_system.resolve_collisions(&mut self.soft_bodies);
+                self.collision_system.resolve_collisions_n(&mut self.soft_bodies, self.contact_iters);
             }
 
             // Resolve soft-vs-rigid collisions
             {
                 profile_scope!("soft_rigid_collisions");
-                self.resolve_soft_rigid_collisions();
+                for _ in 0..self.contact_iters {
+                    self.resolve_soft_rigid_collisions();
+                }
+            }
+
+            // Resolve rigid-vs-rigid collisions
+            {
+                profile_scope!("rigid_rigid_collisions");
+                for _ in 0..self.contact_iters {
+                    self.resolve_rigid_rigid_collisions();
+                }
             }
 
             // Note: constraint solving is already done in substep_pre_with_terrain_iters
@@ -1483,6 +1521,295 @@ impl PhysicsWorld {
                 }
             }
         }
+    }
+
+    /// Internal: resolve collisions between rigid body pairs.
+    /// Handles circle-circle, circle-AABB, and AABB-AABB with position correction,
+    /// friction, restitution, and angular response.
+    fn resolve_rigid_rigid_collisions(&mut self) {
+        let n = self.rigid_bodies.len();
+        if n < 2 { return; }
+
+        for i in 0..n {
+            for j in (i + 1)..n {
+                // Broad phase: AABB overlap
+                let aabb_a = self.rigid_bodies[i].get_aabb();
+                let aabb_b = self.rigid_bodies[j].get_aabb();
+                if aabb_a.2 < aabb_b.0 || aabb_b.2 < aabb_a.0 ||
+                   aabb_a.3 < aabb_b.1 || aabb_b.3 < aabb_a.1 {
+                    continue;
+                }
+
+                // Collision group check
+                let groups_a = self.rigid_body_data[i].collision_groups;
+                let groups_b = self.rigid_body_data[j].collision_groups;
+                if !groups_a.can_collide(&groups_b) { continue; }
+
+                // Narrow phase: compute contact (penetration, normal)
+                let contact = Self::rigid_narrow_phase(
+                    &self.rigid_bodies[i],
+                    &self.rigid_bodies[j],
+                );
+                let Some((penetration, nx, ny, contact_x, contact_y)) = contact else { continue };
+
+                let wa = self.rigid_bodies[i].inv_mass;
+                let wb = self.rigid_bodies[j].inv_mass;
+                let w_total = wa + wb;
+                if w_total < 1e-10 { continue; } // both kinematic
+
+                // Position correction
+                let push_a = penetration * (wa / w_total);
+                let push_b = penetration * (wb / w_total);
+
+                self.rigid_bodies[i].position.x += nx * push_a;
+                self.rigid_bodies[i].position.y += ny * push_a;
+                self.rigid_bodies[j].position.x -= nx * push_b;
+                self.rigid_bodies[j].position.y -= ny * push_b;
+
+                // Angular response from contact offset
+                {
+                    let a = &mut self.rigid_bodies[i];
+                    if a.inv_inertia > 0.0 {
+                        let rx = contact_x - a.position.x;
+                        let ry = contact_y - a.position.y;
+                        let torque = (rx * (ny * push_a) - ry * (nx * push_a)) * a.inv_inertia;
+                        a.angular_velocity += torque;
+                    }
+                }
+                {
+                    let b = &mut self.rigid_bodies[j];
+                    if b.inv_inertia > 0.0 {
+                        let rx = contact_x - b.position.x;
+                        let ry = contact_y - b.position.y;
+                        let torque = (rx * (-ny * push_b) - ry * (-nx * push_b)) * b.inv_inertia;
+                        b.angular_velocity += torque;
+                    }
+                }
+
+                // Restitution: bounce along normal using prev_position velocity
+                let restitution = (self.rigid_bodies[i].restitution
+                    * self.rigid_bodies[j].restitution).sqrt();
+                let friction = (self.rigid_bodies[i].friction
+                    + self.rigid_bodies[j].friction) * 0.5;
+
+                // Relative velocity along normal (from position delta)
+                let va_x = self.rigid_bodies[i].position.x - self.rigid_bodies[i].prev_position.x;
+                let va_y = self.rigid_bodies[i].position.y - self.rigid_bodies[i].prev_position.y;
+                let vb_x = self.rigid_bodies[j].position.x - self.rigid_bodies[j].prev_position.x;
+                let vb_y = self.rigid_bodies[j].position.y - self.rigid_bodies[j].prev_position.y;
+                let rel_vn = (va_x - vb_x) * nx + (va_y - vb_y) * ny;
+
+                // Only apply restitution for separating correction (approaching bodies)
+                if rel_vn < 0.0 {
+                    let bounce = -rel_vn * restitution;
+                    if wa > 0.0 {
+                        let a = &mut self.rigid_bodies[i];
+                        a.position.x += nx * bounce * (wa / w_total);
+                        a.position.y += ny * bounce * (wa / w_total);
+                    }
+                    if wb > 0.0 {
+                        let b = &mut self.rigid_bodies[j];
+                        b.position.x -= nx * bounce * (wb / w_total);
+                        b.position.y -= ny * bounce * (wb / w_total);
+                    }
+                }
+
+                // Friction: damp tangential velocity
+                let rel_tx = (va_x - vb_x) - rel_vn * nx;
+                let rel_ty = (va_y - vb_y) - rel_vn * ny;
+                let tan_mag = (rel_tx * rel_tx + rel_ty * rel_ty).sqrt();
+                if tan_mag > 1e-8 {
+                    let damp = (friction * penetration).min(tan_mag);
+                    let tx = rel_tx / tan_mag;
+                    let ty = rel_ty / tan_mag;
+                    if wa > 0.0 {
+                        let a = &mut self.rigid_bodies[i];
+                        a.position.x -= tx * damp * (wa / w_total);
+                        a.position.y -= ty * damp * (wa / w_total);
+                    }
+                    if wb > 0.0 {
+                        let b = &mut self.rigid_bodies[j];
+                        b.position.x += tx * damp * (wb / w_total);
+                        b.position.y += ty * damp * (wb / w_total);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Narrow phase contact between two rigid bodies.
+    /// Returns (penetration, nx, ny, contact_x, contact_y) with normal pointing from B to A.
+    fn rigid_narrow_phase(a: &RigidBody, b: &RigidBody) -> Option<(f32, f32, f32, f32, f32)> {
+        use crate::rigid::Collider;
+        match (&a.collider, &b.collider) {
+            (Collider::Circle { radius: ra }, Collider::Circle { radius: rb }) => {
+                let dx = a.position.x - b.position.x;
+                let dy = a.position.y - b.position.y;
+                let dist_sq = dx * dx + dy * dy;
+                let min_dist = ra + rb;
+                if dist_sq >= min_dist * min_dist || dist_sq < 1e-10 {
+                    return None;
+                }
+                let dist = dist_sq.sqrt();
+                let pen = min_dist - dist;
+                let nx = dx / dist;
+                let ny = dy / dist;
+                let cx = b.position.x + nx * *rb;
+                let cy = b.position.y + ny * *rb;
+                Some((pen, nx, ny, cx, cy))
+            }
+            (Collider::Circle { radius }, Collider::AABB { half_width, half_height }) => {
+                Self::circle_aabb_contact(
+                    a.position, *radius,
+                    b.position, b.rotation, *half_width, *half_height,
+                    false,
+                )
+            }
+            (Collider::AABB { half_width, half_height }, Collider::Circle { radius }) => {
+                Self::circle_aabb_contact(
+                    b.position, *radius,
+                    a.position, a.rotation, *half_width, *half_height,
+                    true,
+                ).map(|(pen, nx, ny, cx, cy)| (pen, -nx, -ny, cx, cy))
+            }
+            (Collider::AABB { half_width: hw_a, half_height: hh_a },
+             Collider::AABB { half_width: hw_b, half_height: hh_b }) => {
+                Self::aabb_aabb_contact(
+                    a.position, a.rotation, *hw_a, *hh_a,
+                    b.position, b.rotation, *hw_b, *hh_b,
+                )
+            }
+        }
+    }
+
+    /// Circle vs AABB contact. Normal points from AABB toward circle.
+    /// If `flipped`, the caller will negate the normal.
+    fn circle_aabb_contact(
+        circle_pos: Vec2, radius: f32,
+        box_pos: Vec2, box_rot: f32, hw: f32, hh: f32,
+        _flipped: bool,
+    ) -> Option<(f32, f32, f32, f32, f32)> {
+        // Transform circle center into box local space
+        let cos_r = box_rot.cos();
+        let sin_r = box_rot.sin();
+        let dx = circle_pos.x - box_pos.x;
+        let dy = circle_pos.y - box_pos.y;
+        let lx = dx * cos_r + dy * sin_r;
+        let ly = -dx * sin_r + dy * cos_r;
+
+        // Closest point on AABB to circle center (in local space)
+        let cx = lx.clamp(-hw, hw);
+        let cy = ly.clamp(-hh, hh);
+
+        let sx = lx - cx;
+        let sy = ly - cy;
+        let dist_sq = sx * sx + sy * sy;
+
+        if dist_sq >= radius * radius {
+            return None;
+        }
+
+        let (pen, local_nx, local_ny);
+        if dist_sq > 1e-10 {
+            // Circle center is outside the box
+            let dist = dist_sq.sqrt();
+            pen = radius - dist;
+            local_nx = sx / dist;
+            local_ny = sy / dist;
+        } else {
+            // Circle center is inside the box — push along shortest axis
+            let pen_l = lx + hw;
+            let pen_r = hw - lx;
+            let pen_b = ly + hh;
+            let pen_t = hh - ly;
+            let min_pen = pen_l.min(pen_r).min(pen_b).min(pen_t);
+            pen = min_pen + radius;
+            if min_pen == pen_l { local_nx = -1.0; local_ny = 0.0; }
+            else if min_pen == pen_r { local_nx = 1.0; local_ny = 0.0; }
+            else if min_pen == pen_b { local_nx = 0.0; local_ny = -1.0; }
+            else { local_nx = 0.0; local_ny = 1.0; }
+        }
+
+        // Transform normal back to world space
+        let nx = local_nx * cos_r - local_ny * sin_r;
+        let ny = local_nx * sin_r + local_ny * cos_r;
+        // Contact point on box surface (world space)
+        let world_cx = cx * cos_r - cy * sin_r + box_pos.x;
+        let world_cy = cx * sin_r + cy * cos_r + box_pos.y;
+        Some((pen, nx, ny, world_cx, world_cy))
+    }
+
+    /// AABB vs AABB contact using SAT on the 4 face normals of both boxes.
+    fn aabb_aabb_contact(
+        pos_a: Vec2, rot_a: f32, hw_a: f32, hh_a: f32,
+        pos_b: Vec2, rot_b: f32, hw_b: f32, hh_b: f32,
+    ) -> Option<(f32, f32, f32, f32, f32)> {
+        // Get corners for both boxes
+        let corners_a = Self::box_corners(pos_a, rot_a, hw_a, hh_a);
+        let corners_b = Self::box_corners(pos_b, rot_b, hw_b, hh_b);
+
+        // 4 axes: 2 from each box's face normals
+        let axes = [
+            Self::box_axis(rot_a, 0),
+            Self::box_axis(rot_a, 1),
+            Self::box_axis(rot_b, 0),
+            Self::box_axis(rot_b, 1),
+        ];
+
+        let mut min_overlap = f32::INFINITY;
+        let mut best_nx = 0.0f32;
+        let mut best_ny = 0.0f32;
+
+        for (ax, ay) in axes {
+            let (min_a, max_a) = Self::project_corners(&corners_a, ax, ay);
+            let (min_b, max_b) = Self::project_corners(&corners_b, ax, ay);
+
+            let overlap = (max_a.min(max_b)) - (min_a.max(min_b));
+            if overlap <= 0.0 { return None; } // separating axis found
+
+            if overlap < min_overlap {
+                min_overlap = overlap;
+                // Normal should point from B toward A
+                let d = (pos_a.x - pos_b.x) * ax + (pos_a.y - pos_b.y) * ay;
+                if d >= 0.0 { best_nx = ax; best_ny = ay; }
+                else { best_nx = -ax; best_ny = -ay; }
+            }
+        }
+
+        let cx = (pos_a.x + pos_b.x) * 0.5;
+        let cy = (pos_a.y + pos_b.y) * 0.5;
+        Some((min_overlap, best_nx, best_ny, cx, cy))
+    }
+
+    #[inline]
+    fn box_corners(pos: Vec2, rot: f32, hw: f32, hh: f32) -> [(f32, f32); 4] {
+        let c = rot.cos();
+        let s = rot.sin();
+        [
+            (pos.x + hw * c - hh * s, pos.y + hw * s + hh * c),
+            (pos.x - hw * c - hh * s, pos.y - hw * s + hh * c),
+            (pos.x - hw * c + hh * s, pos.y - hw * s - hh * c),
+            (pos.x + hw * c + hh * s, pos.y + hw * s - hh * c),
+        ]
+    }
+
+    #[inline]
+    fn box_axis(rot: f32, index: usize) -> (f32, f32) {
+        let c = rot.cos();
+        let s = rot.sin();
+        if index == 0 { (c, s) } else { (-s, c) }
+    }
+
+    #[inline]
+    fn project_corners(corners: &[(f32, f32); 4], ax: f32, ay: f32) -> (f32, f32) {
+        let mut min_v = f32::INFINITY;
+        let mut max_v = f32::NEG_INFINITY;
+        for &(cx, cy) in corners {
+            let d = cx * ax + cy * ay;
+            min_v = min_v.min(d);
+            max_v = max_v.max(d);
+        }
+        (min_v, max_v)
     }
 
     /// Try to put body to sleep if resting (soft bodies only)

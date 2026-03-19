@@ -17,6 +17,7 @@ world.set_ground_friction(0.5);
 world.set_ground_restitution(0.3);
 world.set_substeps(8);
 world.set_solver_iterations(3, 2); // pre-collision, post-collision
+world.set_contact_iterations(5);   // collision passes per substep
 ```
 
 ### Solver Defaults
@@ -27,6 +28,7 @@ world.set_solver_iterations(3, 2); // pre-collision, post-collision
 | Substeps | 4 | Physics substeps per frame |
 | Pre-collision iterations | 3 | Constraint solves before collision |
 | Post-collision iterations | 2 | Constraint solves after collision |
+| Contact iterations | 3 | Collision resolution passes per substep |
 | Ground friction | 0.8 | Coulomb friction coefficient |
 | Ground restitution | 0.3 | Bounciness |
 
@@ -37,6 +39,7 @@ The XPBD solver includes adaptive constraint behavior:
 - **Adaptive area compliance**: Inverted triangles (signed area flipped) get zero compliance for stiff materials (alpha < 1.0) or 1% compliance for soft materials, preventing fold-through without energy injection.
 - **Rotation-aware forensics**: `MeshForensics::analyze` compares sorted dimensions (min-to-min, max-to-max) so rigid body rotation doesn't register as collapse.
 - **Internal damping**: Stiff materials (compliance < 1e-7) get per-substep deformation-only damping that preserves linear and angular momentum. This kills post-impact oscillation without affecting fall speed or rolling. Soft materials get light global damping (0.5% per frame).
+- **Rigid-rigid collisions**: Circle-circle, circle-AABB, and AABB-AABB pairs are resolved with position-based correction, angular response at the contact point, restitution (geometric mean), and Coulomb friction. Runs `contact_iterations` times per substep alongside soft-rigid.
 
 ### Adding Bodies
 
@@ -304,5 +307,6 @@ Spatial-hash based broad-phase collision detection.
 ```rust
 let mut collision = CollisionSystem::new(min_dist);
 collision.prepare(&bodies);     // broad phase
-collision.resolve_collisions(&mut bodies); // narrow phase + resolve
+collision.resolve_collisions(&mut bodies);           // narrow phase (3 iters default)
+collision.resolve_collisions_n(&mut bodies, 5);      // narrow phase with custom iter count
 ```
