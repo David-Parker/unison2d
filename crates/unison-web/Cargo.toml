@@ -18,3 +18,4 @@ web-sys = { workspace = true }
 [features]
 default = []
 simd = ["unison2d/simd"]
+profiling = ["unison-profiler/enabled", "unison2d/profiling"]

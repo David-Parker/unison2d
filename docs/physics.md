@@ -234,6 +234,24 @@ RigidBodyConfig::new()
 Collider::circle(radius)
 Collider::aabb(half_width, half_height)
 collider.half_extents()  // -> Vec2
+collider.get_aabb(position, rotation)                  // -> (min_x, min_y, max_x, max_y)
+collider.get_aabb_with_trig(position, abs_cos, abs_sin) // same, with pre-computed trig
+```
+
+### PointQuery
+
+Unified result from `RigidBody::query_point`, combining penetration and near-surface checks in a single geometric pass.
+
+```rust
+use unison_physics::rigid::PointQuery;
+
+let cos_r = body.rotation.cos();
+let sin_r = body.rotation.sin();
+match body.query_point(px, py, contact_threshold, cos_r, sin_r) {
+    PointQuery::Penetrating(depth, nx, ny) => { /* inside collider */ }
+    PointQuery::NearSurface(dist, nx, ny)  => { /* outside but within threshold */ }
+    PointQuery::Far                        => { /* too far away */ }
+}
 ```
 
 ## Math

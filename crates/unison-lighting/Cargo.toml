@@ -8,7 +8,7 @@ description = "Unison 2D Game Engine - Dynamic lighting and shadows"
 [dependencies]
 serde.workspace = true
 unison-math = { path = "../unison-math" }
-unison-profiler = { path = "../unison-profiler" }
+unison-profiler = { path = "../unison-profiler", default-features = false }
 
 [features]
 default = []

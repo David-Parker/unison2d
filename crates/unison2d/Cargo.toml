@@ -17,3 +17,4 @@ unison-input = { workspace = true }
 [features]
 default = []
 simd = ["unison-physics/simd"]
+profiling = ["unison-profiler/enabled", "unison-physics/profiling", "unison-lighting/profiling"]

@@ -4,7 +4,7 @@
 //! and simulation stepping. Supports both soft bodies (XPBD) and true rigid bodies.
 
 use crate::mesh::Mesh;
-use crate::rigid::{RigidBody, RigidBodyConfig};
+use crate::rigid::{RigidBody, RigidBodyConfig, PointQuery};
 use crate::xpbd::{XPBDSoftBody, CollisionSystem};
 use unison_math::Vec2;
 use unison_profiler::profile_scope;
@@ -1428,13 +1428,21 @@ impl PhysicsWorld {
     fn resolve_soft_rigid_collisions(&mut self) {
         let min_dist = 0.15; // Same as collision system
         let contact_threshold = 0.05; // Near-contact zone for rolling friction
+        let margin = min_dist + contact_threshold;
 
         for soft_body in self.soft_bodies.iter_mut() {
+            // Cache soft body AABB once per soft body (not per rigid body)
+            let soft_aabb = soft_body.get_aabb();
+
             for rigid_body in self.rigid_bodies.iter_mut() {
-                // Broad phase: check AABB overlap (expanded by contact_threshold for near-contact friction)
-                let soft_aabb = soft_body.get_aabb();
-                let rigid_aabb = rigid_body.get_aabb();
-                let margin = min_dist + contact_threshold;
+                // Pre-compute trig values for this rigid body (rotation is constant during resolution)
+                let cos_r = rigid_body.rotation.cos();
+                let sin_r = rigid_body.rotation.sin();
+
+                // Broad phase: AABB overlap using pre-computed trig
+                let rigid_aabb = rigid_body.collider.get_aabb_with_trig(
+                    rigid_body.position, cos_r.abs(), sin_r.abs()
+                );
 
                 if soft_aabb.2 + margin < rigid_aabb.0 || rigid_aabb.2 + margin < soft_aabb.0 ||
                    soft_aabb.3 + margin < rigid_aabb.1 || rigid_aabb.3 + margin < soft_aabb.1 {
@@ -1443,7 +1451,13 @@ impl PhysicsWorld {
 
                 let friction = rigid_body.friction;
 
-                // Narrow phase: check each soft body vertex against rigid collider
+                // Expanded rigid AABB for per-vertex culling
+                let cull_min_x = rigid_aabb.0 - margin;
+                let cull_min_y = rigid_aabb.1 - margin;
+                let cull_max_x = rigid_aabb.2 + margin;
+                let cull_max_y = rigid_aabb.3 + margin;
+
+                // Single-pass: unified query_point handles both penetration and near-surface
                 for i in 0..soft_body.num_verts {
                     if soft_body.inv_mass[i] == 0.0 {
                         continue;
@@ -1452,71 +1466,67 @@ impl PhysicsWorld {
                     let vx = soft_body.pos[i * 2];
                     let vy = soft_body.pos[i * 2 + 1];
 
-                    if let Some((penetration, nx, ny)) = rigid_body.contains_point(vx, vy) {
-                        // Push soft body vertex out of rigid body
-                        let soft_w = soft_body.inv_mass[i];
-                        let rigid_w = rigid_body.inv_mass;
-                        let total_w = soft_w + rigid_w;
+                    // Per-vertex AABB culling (4 comparisons vs expensive narrow phase)
+                    if vx < cull_min_x || vx > cull_max_x || vy < cull_min_y || vy > cull_max_y {
+                        continue;
+                    }
 
-                        if total_w < 1e-10 {
-                            // Rigid is kinematic, push soft body entirely
-                            soft_body.pos[i * 2] += nx * penetration;
-                            soft_body.pos[i * 2 + 1] += ny * penetration;
-                        } else {
-                            // Distribute push based on inverse mass
-                            let soft_push = penetration * (soft_w / total_w);
-                            let rigid_push = penetration * (rigid_w / total_w);
+                    match rigid_body.query_point(vx, vy, contact_threshold, cos_r, sin_r) {
+                        PointQuery::Penetrating(penetration, nx, ny) => {
+                            // Push soft body vertex out of rigid body
+                            let soft_w = soft_body.inv_mass[i];
+                            let rigid_w = rigid_body.inv_mass;
+                            let total_w = soft_w + rigid_w;
 
-                            soft_body.pos[i * 2] += nx * soft_push;
-                            soft_body.pos[i * 2 + 1] += ny * soft_push;
+                            if total_w < 1e-10 {
+                                soft_body.pos[i * 2] += nx * penetration;
+                                soft_body.pos[i * 2 + 1] += ny * penetration;
+                            } else {
+                                let soft_push = penetration * (soft_w / total_w);
+                                let rigid_push = penetration * (rigid_w / total_w);
 
-                            rigid_body.position.x -= nx * rigid_push;
-                            rigid_body.position.y -= ny * rigid_push;
+                                soft_body.pos[i * 2] += nx * soft_push;
+                                soft_body.pos[i * 2 + 1] += ny * soft_push;
 
-                            // Apply torque to rigid body based on contact point
-                            let rx = vx - rigid_body.position.x;
-                            let ry = vy - rigid_body.position.y;
-                            let torque = (rx * (-ny * rigid_push) - ry * (-nx * rigid_push)) * rigid_body.inv_inertia;
-                            rigid_body.angular_velocity += torque;
-                        }
+                                rigid_body.position.x -= nx * rigid_push;
+                                rigid_body.position.y -= ny * rigid_push;
 
-                        // Coulomb friction: damp tangential displacement at the contact.
-                        // Same model as ground friction — decompose displacement into
-                        // normal and tangential components, then reduce the tangent part.
-                        let prev_x = soft_body.prev_pos[i * 2];
-                        let prev_y = soft_body.prev_pos[i * 2 + 1];
-                        let dx = soft_body.pos[i * 2] - prev_x;
-                        let dy = soft_body.pos[i * 2 + 1] - prev_y;
-
-                        // Project displacement onto contact normal
-                        let vel_normal = dx * nx + dy * ny;
-                        // Tangential component = total - normal projection
-                        let tan_x = dx - vel_normal * nx;
-                        let tan_y = dy - vel_normal * ny;
-
-                        let friction_factor = 1.0 - friction;
-                        soft_body.pos[i * 2] = prev_x + vel_normal * nx + tan_x * friction_factor;
-                        soft_body.pos[i * 2 + 1] = prev_y + vel_normal * ny + tan_y * friction_factor;
-                    } else {
-                        // Near-contact friction: check if vertex is just outside the rigid body.
-                        // This gives rolling friction for vertices close to the surface.
-                        let near = rigid_body.nearest_surface_dist(vx, vy);
-                        if let Some((dist, nx, ny)) = near {
-                            if dist < contact_threshold {
-                                let prev_x = soft_body.prev_pos[i * 2];
-                                let prev_y = soft_body.prev_pos[i * 2 + 1];
-                                let dx = soft_body.pos[i * 2] - prev_x;
-                                let dy = soft_body.pos[i * 2 + 1] - prev_y;
-
-                                let vel_normal = dx * nx + dy * ny;
-                                let tan_x = dx - vel_normal * nx;
-                                let tan_y = dy - vel_normal * ny;
-
-                                let friction_factor = 1.0 - friction * 0.3;
-                                soft_body.pos[i * 2] = prev_x + vel_normal * nx + tan_x * friction_factor;
-                                soft_body.pos[i * 2 + 1] = prev_y + vel_normal * ny + tan_y * friction_factor;
+                                let rx = vx - rigid_body.position.x;
+                                let ry = vy - rigid_body.position.y;
+                                let torque = (rx * (-ny * rigid_push) - ry * (-nx * rigid_push)) * rigid_body.inv_inertia;
+                                rigid_body.angular_velocity += torque;
                             }
+
+                            // Coulomb friction
+                            let prev_x = soft_body.prev_pos[i * 2];
+                            let prev_y = soft_body.prev_pos[i * 2 + 1];
+                            let dx = soft_body.pos[i * 2] - prev_x;
+                            let dy = soft_body.pos[i * 2 + 1] - prev_y;
+
+                            let vel_normal = dx * nx + dy * ny;
+                            let tan_x = dx - vel_normal * nx;
+                            let tan_y = dy - vel_normal * ny;
+
+                            let friction_factor = 1.0 - friction;
+                            soft_body.pos[i * 2] = prev_x + vel_normal * nx + tan_x * friction_factor;
+                            soft_body.pos[i * 2 + 1] = prev_y + vel_normal * ny + tan_y * friction_factor;
                         }
+                        PointQuery::NearSurface(_dist, nx, ny) => {
+                            // Near-contact rolling friction
+                            let prev_x = soft_body.prev_pos[i * 2];
+                            let prev_y = soft_body.prev_pos[i * 2 + 1];
+                            let dx = soft_body.pos[i * 2] - prev_x;
+                            let dy = soft_body.pos[i * 2 + 1] - prev_y;
+
+                            let vel_normal = dx * nx + dy * ny;
+                            let tan_x = dx - vel_normal * nx;
+                            let tan_y = dy - vel_normal * ny;
+
+                            let friction_factor = 1.0 - friction * 0.3;
+                            soft_body.pos[i * 2] = prev_x + vel_normal * nx + tan_x * friction_factor;
+                            soft_body.pos[i * 2 + 1] = prev_y + vel_normal * ny + tan_y * friction_factor;
+                        }
+                        PointQuery::Far => {}
                     }
                 }
             }

@@ -203,27 +203,26 @@ impl Profiler {
 
     /// Begin a new frame (call at start of frame)
     pub fn begin_frame() {
-        #[cfg(feature = "enabled")]
         PROFILER.with(|p| {
             let mut state = p.borrow_mut();
-            if state.enabled {
-                state.frame_start_time = now();
-            }
+            state.frame_start_time = now();
         });
     }
 
     /// End the current frame and accumulate statistics
     pub fn end_frame() {
-        #[cfg(feature = "enabled")]
         PROFILER.with(|p| {
             let mut state = p.borrow_mut();
+
+            // Always track frame time for FPS reporting
+            let frame_time = now() - state.frame_start_time;
+            state.total_frame_time += frame_time;
+            state.frame_count += 1;
+
+            // Only accumulate scope data when profiling is enabled
             if !state.enabled {
                 return;
             }
-
-            // Calculate frame time
-            let frame_time = now() - state.frame_start_time;
-            state.total_frame_time += frame_time;
 
             // Drain into temp vec to avoid borrow issues
             let current: Vec<_> = state.current_frame.drain().collect();
@@ -235,8 +234,6 @@ impl Profiler {
                 entry.0 += duration;
                 entry.1 += 1;
             }
-
-            state.frame_count += 1;
         });
     }
 
@@ -355,13 +352,14 @@ impl Profiler {
         let avg_frame_time = Self::avg_frame_time();
         let target_frame_time = Self::target_frame_time();
         let target_fps = 1000.0 / target_frame_time;
+        let actual_fps = if avg_frame_time > 0.0 { 1000.0 / avg_frame_time } else { 0.0 };
 
         if stats.is_empty() {
-            return format!("No profiling data ({} frames)", frame_count);
+            return format!(
+                "=== FPS ({} frames) === {:.0} FPS ({:.2}ms/frame)",
+                frame_count, actual_fps, avg_frame_time
+            );
         }
-
-        // Calculate actual FPS
-        let actual_fps = if avg_frame_time > 0.0 { 1000.0 / avg_frame_time } else { 0.0 };
 
         // Total budget = frame_count * target_frame_time
         let total_budget = frame_count as f64 * target_frame_time;
@@ -558,7 +556,7 @@ mod tests {
         assert_eq!(stats.len(), 1);
         assert_eq!(stats[0].0, "test");
         assert_eq!(stats[0].2, 30.0); // total
-        assert_eq!(stats[0].3, 2);    // count
+        assert_eq!(stats[0].3, 1);    // count (frames where scope appeared)
     }
 
     #[test]

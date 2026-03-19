@@ -34,6 +34,7 @@ impl Collider {
     }
 
     /// Get the AABB bounds for this collider at a given position and rotation
+    #[inline]
     pub fn get_aabb(&self, position: Vec2, rotation: f32) -> (f32, f32, f32, f32) {
         match self {
             Collider::Circle { radius } => (
@@ -43,33 +44,39 @@ impl Collider {
                 position.y + radius,
             ),
             Collider::AABB { half_width, half_height } => {
-                // For rotated AABB, compute bounding box of the rotated rectangle
-                let cos_r = rotation.cos();
-                let sin_r = rotation.sin();
+                let cos_r = rotation.cos().abs();
+                let sin_r = rotation.sin().abs();
+                let extent_x = half_width * cos_r + half_height * sin_r;
+                let extent_y = half_width * sin_r + half_height * cos_r;
+                (
+                    position.x - extent_x,
+                    position.y - extent_y,
+                    position.x + extent_x,
+                    position.y + extent_y,
+                )
+            }
+        }
+    }
 
-                // Corner offsets
-                let corners = [
-                    (*half_width, *half_height),
-                    (-*half_width, *half_height),
-                    (-*half_width, -*half_height),
-                    (*half_width, -*half_height),
-                ];
-
-                let mut min_x = f32::INFINITY;
-                let mut min_y = f32::INFINITY;
-                let mut max_x = f32::NEG_INFINITY;
-                let mut max_y = f32::NEG_INFINITY;
-
-                for (cx, cy) in corners {
-                    let rx = cx * cos_r - cy * sin_r + position.x;
-                    let ry = cx * sin_r + cy * cos_r + position.y;
-                    min_x = min_x.min(rx);
-                    min_y = min_y.min(ry);
-                    max_x = max_x.max(rx);
-                    max_y = max_y.max(ry);
-                }
-
-                (min_x, min_y, max_x, max_y)
+    /// Get the AABB bounds using pre-computed trig values
+    #[inline]
+    pub fn get_aabb_with_trig(&self, position: Vec2, abs_cos: f32, abs_sin: f32) -> (f32, f32, f32, f32) {
+        match self {
+            Collider::Circle { radius } => (
+                position.x - radius,
+                position.y - radius,
+                position.x + radius,
+                position.y + radius,
+            ),
+            Collider::AABB { half_width, half_height } => {
+                let extent_x = half_width * abs_cos + half_height * abs_sin;
+                let extent_y = half_width * abs_sin + half_height * abs_cos;
+                (
+                    position.x - extent_x,
+                    position.y - extent_y,
+                    position.x + extent_x,
+                    position.y + extent_y,
+                )
             }
         }
     }
@@ -77,6 +84,18 @@ impl Collider {
 
 /// A rigid body with position, rotation, and velocity state
 #[derive(Clone, Debug)]
+/// Result of a unified point query against a rigid body collider.
+/// Combines contains_point and nearest_surface_dist into a single geometric query,
+/// avoiding redundant trig/distance computations.
+pub enum PointQuery {
+    /// Point is inside the collider: (penetration_depth, normal_x, normal_y)
+    Penetrating(f32, f32, f32),
+    /// Point is outside but within contact_threshold: (distance, normal_x, normal_y)
+    NearSurface(f32, f32, f32),
+    /// Point is too far away
+    Far,
+}
+
 pub struct RigidBody {
     /// Current position
     pub position: Vec2,
@@ -159,6 +178,7 @@ impl RigidBody {
     }
 
     /// Get the AABB for this body
+    #[inline]
     pub fn get_aabb(&self) -> (f32, f32, f32, f32) {
         self.collider.get_aabb(self.position, self.rotation)
     }
@@ -257,6 +277,7 @@ impl RigidBody {
     }
 
     /// Check if a point is inside this collider (for soft body collision)
+    #[inline]
     pub fn contains_point(&self, px: f32, py: f32) -> Option<(f32, f32, f32)> {
         match &self.collider {
             Collider::Circle { radius } => {
@@ -319,6 +340,7 @@ impl RigidBody {
 
     /// Get the distance from a point to the nearest surface when the point is outside.
     /// Returns (distance, normal_x, normal_y) pointing outward from the surface.
+    #[inline]
     pub fn nearest_surface_dist(&self, px: f32, py: f32) -> Option<(f32, f32, f32)> {
         match &self.collider {
             Collider::Circle { radius } => {
@@ -387,6 +409,118 @@ impl RigidBody {
                     }
                 } else {
                     None // Point is inside
+                }
+            }
+        }
+    }
+
+    /// Unified point query: determines penetration, near-surface, or far in a single
+    /// geometric computation. Accepts pre-computed cos/sin for AABB colliders to avoid
+    /// redundant trig calls across vertices.
+    #[inline]
+    pub fn query_point(&self, px: f32, py: f32, contact_threshold: f32, cos_r: f32, sin_r: f32) -> PointQuery {
+        match &self.collider {
+            Collider::Circle { radius } => {
+                let dx = px - self.position.x;
+                let dy = py - self.position.y;
+                let dist_sq = dx * dx + dy * dy;
+
+                if dist_sq < 1e-10 {
+                    return PointQuery::Far;
+                }
+
+                let radius_sq = radius * radius;
+                if dist_sq < radius_sq {
+                    let dist = dist_sq.sqrt();
+                    let penetration = radius - dist;
+                    let nx = dx / dist;
+                    let ny = dy / dist;
+                    PointQuery::Penetrating(penetration, nx, ny)
+                } else {
+                    let dist = dist_sq.sqrt();
+                    let gap = dist - radius;
+                    if gap < contact_threshold {
+                        let nx = dx / dist;
+                        let ny = dy / dist;
+                        PointQuery::NearSurface(gap, nx, ny)
+                    } else {
+                        PointQuery::Far
+                    }
+                }
+            }
+            Collider::AABB { half_width, half_height } => {
+                let dx = px - self.position.x;
+                let dy = py - self.position.y;
+                let local_x = dx * cos_r + dy * sin_r;
+                let local_y = -dx * sin_r + dy * cos_r;
+
+                if local_x.abs() < *half_width && local_y.abs() < *half_height {
+                    // Inside — compute penetration
+                    let pen_left = local_x + half_width;
+                    let pen_right = half_width - local_x;
+                    let pen_bottom = local_y + half_height;
+                    let pen_top = half_height - local_y;
+
+                    let min_pen = pen_left.min(pen_right).min(pen_bottom).min(pen_top);
+
+                    let (local_nx, local_ny) = if min_pen == pen_left {
+                        (-1.0, 0.0)
+                    } else if min_pen == pen_right {
+                        (1.0, 0.0)
+                    } else if min_pen == pen_bottom {
+                        (0.0, -1.0)
+                    } else {
+                        (0.0, 1.0)
+                    };
+
+                    let nx = local_nx * cos_r - local_ny * sin_r;
+                    let ny = local_nx * sin_r + local_ny * cos_r;
+                    PointQuery::Penetrating(min_pen, nx, ny)
+                } else {
+                    // Outside — compute distance to nearest surface point
+                    let cx = local_x.clamp(-*half_width, *half_width);
+                    let cy = local_y.clamp(-*half_height, *half_height);
+                    let sx = local_x - cx;
+                    let sy = local_y - cy;
+                    let dist_sq = sx * sx + sy * sy;
+
+                    if dist_sq > contact_threshold * contact_threshold {
+                        return PointQuery::Far;
+                    }
+
+                    if dist_sq > 1e-10 {
+                        let dist = dist_sq.sqrt();
+                        if dist < contact_threshold {
+                            let local_nx = sx / dist;
+                            let local_ny = sy / dist;
+                            let nx = local_nx * cos_r - local_ny * sin_r;
+                            let ny = local_nx * sin_r + local_ny * cos_r;
+                            PointQuery::NearSurface(dist, nx, ny)
+                        } else {
+                            PointQuery::Far
+                        }
+                    } else {
+                        // On the edge — find which edge
+                        let dx_left = (local_x + half_width).abs();
+                        let dx_right = (local_x - half_width).abs();
+                        let dy_bottom = (local_y + half_height).abs();
+                        let dy_top = (local_y - half_height).abs();
+                        let min_d = dx_left.min(dx_right).min(dy_bottom).min(dy_top);
+
+                        let (local_nx, local_ny) = if min_d == dx_left {
+                            (-1.0, 0.0)
+                        } else if min_d == dx_right {
+                            (1.0, 0.0)
+                        } else if min_d == dy_bottom {
+                            (0.0, -1.0)
+                        } else {
+                            (0.0, 1.0)
+                        };
+
+                        let nx = local_nx * cos_r - local_ny * sin_r;
+                        let ny = local_nx * sin_r + local_ny * cos_r;
+                        PointQuery::NearSurface(0.0, nx, ny)
+                    }
                 }
             }
         }
