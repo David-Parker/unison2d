@@ -110,17 +110,23 @@ world.reset_rest_lengths(handle);              // restore original shape
 
 ### Render Data
 
-```rust
-// All bodies
-world.get_render_data() // -> Vec<(&[f32], &[u32])> (positions, triangles)
+Soft body render positions are automatically inflated outward from center by `render_inflation` (default: half of collision skin) to visually hide the collision gap.
 
-// Single body with interpolation
+```rust
+// Single body (positions inflated for rendering)
+world.get_body_render_data(handle)             // -> Option<(Vec<f32>, &[u32])>
+
+// Single body with interpolation (also inflated)
 world.get_body_render_data_interpolated(handle, alpha) // -> Option<(Vec<f32>, &[u32])>
 world.get_position_interpolated(handle, alpha)         // -> Option<Vec2>
 
 // Rigid body interpolated
 world.get_rigid_body_render_data_interpolated(handle, alpha)
     // -> Option<(Vec2, Vec2, f32)>  (position, half_extents, rotation)
+
+// Control inflation
+world.set_render_inflation(0.025);  // default: 0.025
+world.render_inflation()            // -> f32
 ```
 
 ### Iteration

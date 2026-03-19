@@ -366,7 +366,7 @@ impl<A: Copy + Eq + Hash> Engine<A> {
                 ObjectKind::SoftBody { handle, color, uvs } => {
                     if let Some((positions, indices)) = self.physics.get_body_render_data(*handle) {
                         commands.push(RenderCommand::Mesh(DrawMesh {
-                            positions: positions.to_vec(),
+                            positions,
                             uvs: uvs.clone(),
                             indices: indices.to_vec(),
                             texture: TextureId::NONE,

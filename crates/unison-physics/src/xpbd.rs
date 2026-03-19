@@ -187,9 +187,6 @@ pub struct CollisionSystem {
     candidates: Vec<Candidate>,
     candidates_valid: bool,
     num_bodies_prepared: usize,
-    // Temporal coherence: previous frame AABBs for skip detection
-    prev_aabbs: Vec<(f32, f32, f32, f32)>,
-    prev_overlapping_pairs: Vec<(usize, usize)>,
     // Diagnostic counters (public for profiling)
     pub stats_candidates: u32,
     pub stats_cached_edges: u32,
@@ -215,8 +212,6 @@ impl CollisionSystem {
             candidates: Vec::with_capacity(1024),
             candidates_valid: false,
             num_bodies_prepared: 0,
-            prev_aabbs: Vec::with_capacity(32),
-            prev_overlapping_pairs: Vec::with_capacity(64),
             stats_candidates: 0,
             stats_cached_edges: 0,
             stats_overlapping_pairs: 0,
@@ -234,14 +229,11 @@ impl CollisionSystem {
 
     /// Prepare collision data: broad phase, edge cache, spatial hash.
     /// Call once per frame before the substep loop.
-    ///
-    /// Uses temporal coherence: if AABBs haven't moved much since last frame
-    /// and the overlapping pair set is unchanged, skips the expensive edge cache
-    /// and spatial hash rebuild. Candidates from the previous frame are reused
-    /// and re-evaluated with fresh positions during resolve.
+    /// Candidates are invalidated and will be rebuilt on next resolve call.
     pub fn prepare(&mut self, bodies: &[XPBDSoftBody]) {
         let num_bodies = bodies.len();
         self.num_bodies_prepared = num_bodies;
+        self.candidates_valid = false;
 
         // Step 1: Compute AABBs for all bodies
         self.aabbs.clear();
@@ -263,64 +255,14 @@ impl CollisionSystem {
         }
 
         if self.overlapping_pairs.is_empty() {
-            self.candidates_valid = false;
-            self.prev_aabbs.clear();
-            self.prev_aabbs.extend_from_slice(&self.aabbs);
-            self.prev_overlapping_pairs.clear();
             return;
         }
 
-        // Step 3: Check temporal coherence — can we skip the expensive rebuild?
-        let can_reuse = self.candidates_valid
-            && num_bodies == self.prev_aabbs.len()
-            && self.overlapping_pairs == self.prev_overlapping_pairs
-            && self.aabbs_within_threshold(bodies);
-
-        if can_reuse {
-            // AABBs haven't moved much and pair set is stable.
-            // Keep existing candidates — they'll be re-evaluated with fresh
-            // positions during resolve. Still need to update danger zones and
-            // body_needs_collision for the current frame's overlapping pairs.
-            self.body_needs_collision.clear();
-            self.body_needs_collision.resize(num_bodies, false);
-            for &(i, j) in &self.overlapping_pairs {
-                self.body_needs_collision[i] = true;
-                self.body_needs_collision[j] = true;
-            }
-            // candidates_valid stays true — reuse across frames
-        } else {
-            // Full rebuild needed
-            self.candidates_valid = false;
-            self.full_rebuild(bodies);
-        }
-
-        // Save state for next frame's coherence check
-        self.prev_aabbs.clear();
-        self.prev_aabbs.extend_from_slice(&self.aabbs);
-        self.prev_overlapping_pairs.clear();
-        self.prev_overlapping_pairs.extend_from_slice(&self.overlapping_pairs);
+        // Step 3: Build danger zones, edge cache, and spatial hash
+        self.full_rebuild(bodies);
 
         self.stats_cached_edges = self.cached_edges.len() as u32;
         self.stats_overlapping_pairs = self.overlapping_pairs.len() as u32;
-    }
-
-    /// Check if all AABBs are within movement threshold of previous frame.
-    /// Threshold is min_dist — if any body moved more than that, candidates
-    /// could miss new collisions.
-    fn aabbs_within_threshold(&self, _bodies: &[XPBDSoftBody]) -> bool {
-        let threshold = self.min_dist;
-        for i in 0..self.aabbs.len() {
-            let (ax0, ay0, ax1, ay1) = self.aabbs[i];
-            let (bx0, by0, bx1, by1) = self.prev_aabbs[i];
-            if (ax0 - bx0).abs() > threshold
-                || (ay0 - by0).abs() > threshold
-                || (ax1 - bx1).abs() > threshold
-                || (ay1 - by1).abs() > threshold
-            {
-                return false;
-            }
-        }
-        true
     }
 
     /// Full rebuild of danger zones, edge cache, and spatial hash.

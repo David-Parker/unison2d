@@ -228,6 +228,10 @@ pub struct PhysicsWorld {
 
     // Handle tracking
     next_handle: usize,
+
+    // Render inflation: expand soft body meshes outward by this amount
+    // to visually hide the collision skin gap (min_dist).
+    render_inflation: f32,
 }
 
 impl PhysicsWorld {
@@ -250,6 +254,7 @@ impl PhysicsWorld {
             pre_collision_iters: 3,
             post_collision_iters: 2,
             next_handle: 0,
+            render_inflation: 0.075,
         }
     }
 
@@ -1488,6 +1493,45 @@ impl PhysicsWorld {
 
     // === Rendering Helpers ===
 
+    /// Inflate positions outward from body center for rendering.
+    fn inflate_positions(&self, body: &XPBDSoftBody) -> Vec<f32> {
+        let mut positions = body.pos.clone();
+        let inflation = self.render_inflation;
+        if inflation > 0.0 {
+            let n = body.num_verts;
+            let mut cx = 0.0f32;
+            let mut cy = 0.0f32;
+            for i in 0..n {
+                cx += positions[i * 2];
+                cy += positions[i * 2 + 1];
+            }
+            cx /= n as f32;
+            cy /= n as f32;
+            for i in 0..n {
+                let dx = positions[i * 2] - cx;
+                let dy = positions[i * 2 + 1] - cy;
+                let len = (dx * dx + dy * dy).sqrt();
+                if len > 1e-6 {
+                    positions[i * 2] += (dx / len) * inflation;
+                    positions[i * 2 + 1] += (dy / len) * inflation;
+                }
+            }
+        }
+        positions
+    }
+
+    /// Set render inflation amount (default: half of min_dist).
+    /// Expands soft body meshes outward at render time to hide the collision gap.
+    /// Set to 0.0 to disable.
+    pub fn set_render_inflation(&mut self, inflation: f32) {
+        self.render_inflation = inflation.max(0.0);
+    }
+
+    /// Get current render inflation
+    pub fn render_inflation(&self) -> f32 {
+        self.render_inflation
+    }
+
     /// Get all soft body positions and triangles for rendering
     pub fn get_render_data(&self) -> Vec<(&[f32], &[u32])> {
         self.soft_bodies.iter()
@@ -1496,18 +1540,22 @@ impl PhysicsWorld {
             .collect()
     }
 
-    /// Get render data for a specific soft body
-    pub fn get_body_render_data(&self, handle: BodyHandle) -> Option<(&[f32], &[u32])> {
+    /// Get render data for a specific soft body.
+    /// Positions are inflated outward from center by `render_inflation` to
+    /// visually hide the collision skin gap.
+    pub fn get_body_render_data(&self, handle: BodyHandle) -> Option<(Vec<f32>, &[u32])> {
         let BodyType::Soft(index) = self.body_types.get(handle.0)?.as_ref()? else {
             return None;
         };
         let body = self.soft_bodies.get(*index)?;
         let tris = self.triangles.get(*index)?;
-        Some((body.pos.as_slice(), tris.as_slice()))
+        let positions = self.inflate_positions(body);
+        Some((positions, tris.as_slice()))
     }
 
     /// Get interpolated render data for smoother rendering (soft bodies only).
     /// `alpha` is the interpolation factor (0.0 = previous frame, 1.0 = current frame).
+    /// Positions are inflated outward to hide the collision skin gap.
     pub fn get_body_render_data_interpolated(&self, handle: BodyHandle, alpha: f32) -> Option<(Vec<f32>, &[u32])> {
         let BodyType::Soft(index) = self.body_types.get(handle.0)?.as_ref()? else {
             return None;
@@ -1518,10 +1566,33 @@ impl PhysicsWorld {
 
         let alpha = alpha.clamp(0.0, 1.0);
         let one_minus_alpha = 1.0 - alpha;
-        let interpolated: Vec<f32> = body.pos.iter()
+        let mut interpolated: Vec<f32> = body.pos.iter()
             .zip(prev.iter())
             .map(|(&curr, &prev)| prev * one_minus_alpha + curr * alpha)
             .collect();
+
+        // Inflate outward from center
+        let inflation = self.render_inflation;
+        if inflation > 0.0 {
+            let n = body.num_verts;
+            let mut cx = 0.0f32;
+            let mut cy = 0.0f32;
+            for i in 0..n {
+                cx += interpolated[i * 2];
+                cy += interpolated[i * 2 + 1];
+            }
+            cx /= n as f32;
+            cy /= n as f32;
+            for i in 0..n {
+                let dx = interpolated[i * 2] - cx;
+                let dy = interpolated[i * 2 + 1] - cy;
+                let len = (dx * dx + dy * dy).sqrt();
+                if len > 1e-6 {
+                    interpolated[i * 2] += (dx / len) * inflation;
+                    interpolated[i * 2 + 1] += (dy / len) * inflation;
+                }
+            }
+        }
 
         Some((interpolated, tris.as_slice()))
     }
