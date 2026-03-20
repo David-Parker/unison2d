@@ -175,7 +175,7 @@ mod tests {
     use super::*;
     use unison_math::Vec2;
     use unison_physics::mesh::create_ring_mesh;
-    use crate::object::{SoftBodyDesc, RigidBodyDesc};
+    use crate::object::SoftBodyDesc;
     use unison_render::TextureId;
 
     #[test]
@@ -186,29 +186,7 @@ mod tests {
         assert_eq!(world.objects.object_count(), 0);
     }
 
-    #[test]
-    fn world_step_advances_physics() {
-        let mut world = World::new();
-        let mesh = create_ring_mesh(1.0, 0.5, 8, 2);
-
-        let id = world.objects.spawn_soft_body(SoftBodyDesc {
-            mesh,
-            material: unison_physics::Material::RUBBER,
-            position: Vec2::new(0.0, 5.0),
-            color: Color::WHITE,
-            texture: TextureId::NONE,
-        });
-
-        let pos_before = world.objects.get_position(id);
-
-        // Step a few times — gravity should pull the object down
-        for _ in 0..10 {
-            world.step(1.0 / 60.0);
-        }
-
-        let pos_after = world.objects.get_position(id);
-        assert!(pos_after.y < pos_before.y, "Object should have fallen");
-    }
+    // world_step_advances_physics moved to unison-tests crate.
 
     #[test]
     fn world_camera_follow_updates() {

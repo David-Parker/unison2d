@@ -1,0 +1,11 @@
+[package]
+name = "unison-tests"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dev-dependencies]
+unison-physics = { path = "../unison-physics" }
+unison2d = { path = "../unison2d" }
+unison-math = { path = "../unison-math" }
+unison-render = { path = "../unison-render" }

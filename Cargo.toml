@@ -10,6 +10,7 @@ members = [
     "crates/unison-input",
     "crates/unison-assets",
     "crates/unison-web",
+    "crates/unison-tests",
 ]
 
 [workspace.package]

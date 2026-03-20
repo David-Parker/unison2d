@@ -20,14 +20,22 @@ Per-crate deep dives:
 | Crate | Description | Doc |
 |-------|-------------|-----|
 | `unison2d` | Core crate: World, Engine, Game trait, Level trait | [api/engine.md](api/engine.md) |
-| `unison-input` | Two-layer input (raw state + action mapping) | [api/input.md](api/input.md) |
-| `unison-web` | Web platform (WebGL2, DOM input, rAF loop) | [api/web.md](api/web.md) |
-| `unison-math` | Shared Vec2, Color, Rect types | [api/math.md](api/math.md) |
 | `unison-physics` | XPBD soft body & rigid body physics | [api/physics.md](api/physics.md) |
 | `unison-render` | Platform-agnostic rendering traits | [api/render.md](api/render.md) |
-
-| `unison-profiler` | Function-level profiling | [api/profiler.md](api/profiler.md) |
+| `unison-input` | Two-layer input (raw state + action mapping) | [api/input.md](api/input.md) |
+| `unison-math` | Shared Vec2, Color, Rect types | [api/math.md](api/math.md) |
 | `unison-assets` | Build-time asset embedding & runtime store | [api/assets.md](api/assets.md) |
+| `unison-web` | Web platform (WebGL2, DOM input, rAF loop) | [api/web.md](api/web.md) |
+| `unison-profiler` | Function-level profiling | [api/profiler.md](api/profiler.md) |
+
+## Integration Tests
+
+`crates/unison-tests/` contains headless e2e and simulation tests. Unit tests stay in their respective crates; multi-frame simulation, regression, and stress tests live here.
+
+```bash
+cargo test -p unison-tests          # Run integration tests only
+cargo test --workspace              # Run everything
+```
 
 ## Rules
 
