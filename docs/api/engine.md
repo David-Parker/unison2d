@@ -6,7 +6,7 @@ The core architecture of Unison 2D. Games compose `World`s and `Level`s, while `
 
 ```
 Game (your struct, implements Game trait)
-├── Engine<A>        — input/actions, renderer access, compositing
+├── Engine<A>        — input/actions, renderer access, assets, compositing
 ├── World            — self-contained simulation
 │   ├── ObjectSystem   — physics + object registry
 │   ├── CameraSystem   — named cameras + follow targets
@@ -61,6 +61,14 @@ Thin shell for input, actions, renderer access, and compositing. Does NOT own a 
 |--------|-------------|
 | `create_render_target(w, h) -> Result<(RenderTargetId, TextureId)>` | Create offscreen target |
 | `destroy_render_target(target)` | Destroy target (keeps texture) |
+
+### Assets
+
+| Method | Description |
+|--------|-------------|
+| `assets() -> &AssetStore` | Read-only access to the asset store |
+| `assets_mut() -> &mut AssetStore` | Mutable access (for loading) |
+| `load_texture(path) -> Result<TextureId>` | Decode + upload a texture from the asset store in one step |
 
 ### Compositing
 
@@ -230,9 +238,10 @@ pub struct RenderContext<'a> {
 ```rust
 SoftBodyDesc {
     mesh: Mesh,           // from create_ring_mesh, etc.
-    material: Material,   // JELLO, RUBBER, WOOD, METAL
+    material: Material,   // JELLO, RUBBER, WOOD, METAL, or custom
     position: Vec2,       // initial world position
-    color: Color,         // render color
+    color: Color,         // render color (tint when textured)
+    texture: TextureId,   // TextureId::NONE for solid color
 }
 ```
 

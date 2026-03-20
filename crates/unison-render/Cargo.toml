@@ -7,3 +7,4 @@ description = "Unison 2D Game Engine - Rendering traits and abstractions"
 
 [dependencies]
 unison-math = { path = "../unison-math" }
+image = { workspace = true }

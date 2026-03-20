@@ -8,6 +8,7 @@ members = [
     "crates/unison-lighting",
     "crates/unison-profiler",
     "crates/unison-input",
+    "crates/unison-assets",
     "crates/unison-web",
 ]
 
@@ -26,12 +27,12 @@ unison-render = { path = "crates/unison-render" }
 unison-lighting = { path = "crates/unison-lighting" }
 unison-profiler = { path = "crates/unison-profiler", default-features = false }
 unison-input = { path = "crates/unison-input" }
+unison-assets = { path = "crates/unison-assets" }
 unison-web = { path = "crates/unison-web" }
 
 # External dependencies
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-ron = "0.8"
+flate2 = "1.0"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "bmp", "webp"] }
 
 # Web platform dependencies
 wasm-bindgen = "0.2"

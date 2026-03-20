@@ -38,6 +38,7 @@
 /// - [`lighting`] — 2D dynamic lighting with soft shadows
 /// - [`profiler`] — Lightweight function-level profiling
 /// - [`input`] — Two-layer input system (raw state + action mapping)
+/// - [`assets`] — Build-time asset embedding and runtime asset store
 
 // Engine layer
 mod engine;
@@ -65,3 +66,4 @@ pub use unison_render as render;
 pub use unison_lighting as lighting;
 pub use unison_profiler as profiler;
 pub use unison_input as input;
+pub use unison_assets as assets;

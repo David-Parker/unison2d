@@ -10,7 +10,7 @@ For per-crate deep dives, see the [api/](api/) directory.
 
 ```
 Game (your struct)
-├── Engine<A>        — input/actions, renderer, compositing
+├── Engine<A>        — input/actions, renderer, compositing, assets
 ├── World            — physics, objects, cameras, lighting, environment
 │   ├── ObjectSystem   — soft bodies, rigid bodies, sprites, lights
 │   ├── CameraSystem
@@ -21,7 +21,7 @@ Game (your struct)
     └── RenderContext    — renderer + compositing helpers
 ```
 
-- **Engine** is a thin shell — only input mapping and renderer access
+- **Engine** is a thin shell — only input mapping, renderer access, and asset store
 - **World** is where all simulation lives — games own one or more Worlds
 - **Level** is an optional trait for organizing scenes with lifecycle hooks
 
@@ -89,6 +89,7 @@ let id = world.spawn_soft_body(SoftBodyDesc {
     material: Material::RUBBER,
     position: Vec2::new(x, y),
     color: Color::from_hex(0xd4943a),
+    texture: TextureId::NONE,  // or a loaded TextureId
 });
 ```
 
@@ -341,6 +342,69 @@ Color::from_rgba8(255, 159, 67, 255) // from RGBA bytes
 Color::WHITE, Color::BLACK, Color::RED, Color::GREEN, Color::BLUE
 ```
 
+## Assets
+
+Assets are embedded into the binary at build time via `build.rs` and served at runtime through `AssetStore` on the Engine.
+
+### Build Setup
+
+In your game's `build.rs`:
+
+```rust
+fn main() {
+    unison_assets::build::embed_assets("project/assets", "assets.rs");
+}
+```
+
+In your game's `Cargo.toml`:
+
+```toml
+[build-dependencies]
+unison-assets = { path = "unison2d/crates/unison-assets", features = ["build"] }
+```
+
+In your game code, include the generated module and load at init:
+
+```rust
+mod assets {
+    include!(concat!(env!("OUT_DIR"), "/assets.rs"));
+}
+
+fn init(&mut self, engine: &mut Engine<Action>) {
+    engine.assets_mut().load_embedded(assets::ASSETS);
+}
+```
+
+### Querying Assets
+
+```rust
+engine.assets().get("textures/donut-pink.png")  // -> Option<&[u8]>
+engine.assets().contains("textures/player.png")  // -> bool
+engine.assets().len()                             // number of loaded assets
+engine.assets().paths()                           // iterate all asset paths
+```
+
+Asset keys are relative paths from the asset directory root, using forward slashes.
+
+### Decoding Images
+
+`unison2d::render::decode_image` decodes raw image bytes (PNG, JPEG, GIF, BMP, WebP) into a `TextureDescriptor`:
+
+```rust
+use unison2d::render::decode_image;
+
+let bytes = engine.assets().get("textures/donut-pink.png").unwrap();
+let desc = decode_image(bytes).expect("Failed to decode image");
+let texture_id = engine.renderer_mut().unwrap()
+    .create_texture(&desc).expect("Failed to upload texture");
+```
+
+Or use the convenience method on Engine:
+
+```rust
+let texture = engine.load_texture("textures/donut-pink.png")?;
+```
+
 ## Level Trait
 
 Optional scene abstraction with shared state and lifecycle hooks. Each level owns a World.
@@ -411,6 +475,8 @@ if let Some(mut ctx) = engine.render_context() {
 ```
 your-game/
 ├── project/lib.rs          # Game code
+├── project/assets/         # Game assets (embedded at build time)
+├── build.rs                # Calls unison_assets::build::embed_assets()
 ├── unison2d/               # Engine (git submodule)
 ├── Cargo.toml              # depends on unison2d + unison-web + wasm-bindgen
 ├── index.html              # Canvas element with id="canvas"
@@ -424,6 +490,9 @@ your-game/
 unison2d = { path = "unison2d/crates/unison2d" }
 unison-web = { path = "unison2d/crates/unison-web" }
 wasm-bindgen = "0.2"
+
+[build-dependencies]
+unison-assets = { path = "unison2d/crates/unison-assets", features = ["build"] }
 ```
 
 **Commands:** `make dev` (dev server), `make build` (production), `cargo test` (tests)

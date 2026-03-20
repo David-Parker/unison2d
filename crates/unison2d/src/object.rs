@@ -38,8 +38,10 @@ pub struct SoftBodyDesc {
     pub material: Material,
     /// Initial position in world coordinates
     pub position: Vec2,
-    /// Render color
+    /// Render color (used as tint when textured, solid color when not)
     pub color: Color,
+    /// Optional texture for the soft body mesh
+    pub texture: TextureId,
 }
 
 /// Description for spawning a rigid body object.
@@ -94,6 +96,7 @@ pub(crate) enum ObjectKind {
     SoftBody {
         handle: BodyHandle,
         color: Color,
+        texture: TextureId,
         uvs: Vec<f32>,
     },
     RigidBody {

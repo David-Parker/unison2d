@@ -152,17 +152,3 @@ trait LightingRenderer {
 ```
 
 `NullLightingRenderer` is provided for testing.
-
-## Config (serde)
-
-For loading lights from scene files:
-
-```rust
-SceneLightingConfig {
-    ambient: Option<AmbientConfig>,  // { color: [f32; 3] }
-    lights: Vec<LightConfig>,        // light_type, position, color, intensity, etc.
-}
-
-// Convert config to light
-let light = config.to_light()?;
-```

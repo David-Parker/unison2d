@@ -1,0 +1,13 @@
+[package]
+name = "unison-assets"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Unison 2D Game Engine - Build-time asset embedding and runtime asset store"
+
+[dependencies]
+flate2 = { workspace = true }
+
+[features]
+default = []
+build = []

@@ -10,6 +10,7 @@ use std::hash::Hash;
 
 use unison_input::{ActionMap, InputState, KeyCode, MouseButton};
 use unison_math::{Color, Rect};
+use unison_assets::AssetStore;
 use crate::level::{LevelContext, RenderContext};
 use unison_render::{Renderer, RenderCommand, DrawSprite, TextureId, RenderTargetId, Camera};
 
@@ -31,6 +32,9 @@ pub struct Engine<A: Copy + Eq + Hash> {
     // Fixed timestep delta (set by platform's game loop).
     #[doc(hidden)]
     pub fixed_dt: f32,
+
+    // Asset store for embedded assets.
+    assets: AssetStore,
 }
 
 impl<A: Copy + Eq + Hash> Engine<A> {
@@ -41,6 +45,7 @@ impl<A: Copy + Eq + Hash> Engine<A> {
             actions: ActionMap::new(),
             renderer: None,
             fixed_dt: 1.0 / 60.0,
+            assets: AssetStore::new(),
         }
     }
 
@@ -99,6 +104,35 @@ impl<A: Copy + Eq + Hash> Engine<A> {
     /// Get the current fixed timestep delta (typically 1/60).
     pub fn dt(&self) -> f32 {
         self.fixed_dt
+    }
+
+    // ── Assets ──
+
+    /// Access the asset store (read-only).
+    pub fn assets(&self) -> &AssetStore {
+        &self.assets
+    }
+
+    /// Access the asset store (mutable — for loading assets).
+    pub fn assets_mut(&mut self) -> &mut AssetStore {
+        &mut self.assets
+    }
+
+    /// Load a texture from the asset store by path.
+    ///
+    /// Decodes the image (PNG, JPEG, GIF, BMP, WebP) and uploads it to the GPU
+    /// in one step. Returns the `TextureId` for use in sprites and soft bodies.
+    ///
+    /// ```ignore
+    /// let texture = engine.load_texture("textures/donut-pink.png")?;
+    /// ```
+    pub fn load_texture(&mut self, asset_path: &str) -> Result<TextureId, String> {
+        let bytes = self.assets.get(asset_path)
+            .ok_or_else(|| format!("Asset not found: '{}'", asset_path))?;
+        let desc = unison_render::decode_image(bytes)?;
+        let renderer = self.renderer.as_mut()
+            .ok_or("No renderer available")?;
+        renderer.create_texture(&desc)
     }
 
     /// Build a [`LevelContext`] from this engine's input/dt and the given shared state.

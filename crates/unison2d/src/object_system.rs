@@ -8,7 +8,7 @@ use std::collections::HashMap;
 
 use unison_math::{Color, Vec2};
 use unison_physics::{BodyHandle, PhysicsWorld};
-use unison_render::{DrawMesh, DrawSprite, RenderCommand, TextureId};
+use unison_render::{DrawMesh, DrawSprite, RenderCommand};
 use unison_lighting::LightHandle;
 
 use crate::object::{ObjectEntry, ObjectId, ObjectKind, RigidBodyDesc, SoftBodyDesc, SpriteDesc};
@@ -47,11 +47,12 @@ impl ObjectSystem {
         let config = desc.to_body_config();
         let handle = self.physics.add_body(&desc.mesh, config);
         let color = desc.color;
+        let texture = desc.texture;
 
         let id = self.next_object_id();
         self.handle_map.insert(handle, id);
         self.entries.insert(id, ObjectEntry {
-            kind: ObjectKind::SoftBody { handle, color, uvs },
+            kind: ObjectKind::SoftBody { handle, color, texture, uvs },
         });
         id
     }
@@ -298,13 +299,13 @@ impl ObjectSystem {
 
         for entry in self.entries.values() {
             match &entry.kind {
-                ObjectKind::SoftBody { handle, color, uvs } => {
+                ObjectKind::SoftBody { handle, color, texture, uvs } => {
                     if let Some((positions, indices)) = self.physics.get_body_render_data(*handle) {
                         commands.push(RenderCommand::Mesh(DrawMesh {
                             positions,
                             uvs: uvs.clone(),
                             indices: indices.to_vec(),
-                            texture: TextureId::NONE,
+                            texture: *texture,
                             color: *color,
                         }));
                     }
@@ -373,6 +374,7 @@ impl Default for ObjectSystem {
 mod tests {
     use super::*;
     use unison_physics::mesh::create_ring_mesh;
+    use unison_render::TextureId;
 
     #[test]
     fn spawn_and_query_soft_body() {
@@ -384,6 +386,7 @@ mod tests {
             material: unison_physics::Material::RUBBER,
             position: Vec2::new(0.0, 5.0),
             color: Color::WHITE,
+            texture: TextureId::NONE,
         });
 
         let pos = objects.get_position(id);
@@ -431,6 +434,7 @@ mod tests {
             material: unison_physics::Material::RUBBER,
             position: Vec2::ZERO,
             color: Color::WHITE,
+            texture: TextureId::NONE,
         });
 
         objects.despawn(id);
@@ -449,6 +453,7 @@ mod tests {
             material: unison_physics::Material::RUBBER,
             position: Vec2::ZERO,
             color: Color::WHITE,
+            texture: TextureId::NONE,
         });
 
         assert_eq!(objects.object_count(), 1);
@@ -476,6 +481,7 @@ mod tests {
             material: unison_physics::Material::RUBBER,
             position: Vec2::ZERO,
             color: Color::WHITE,
+            texture: TextureId::NONE,
         });
 
         objects.spawn_rigid_body(RigidBodyDesc {

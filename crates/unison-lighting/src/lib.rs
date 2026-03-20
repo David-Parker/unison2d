@@ -43,45 +43,14 @@
 //! let camera = Rect::from_center(Vec2::ZERO, Vec2::new(20.0, 15.0));
 //! let visible = lighting.get_visible_lights(&camera);
 //! ```
-//!
-//! # Scene Configuration
-//!
-//! Lights can be configured in scene JSON files:
-//!
-//! ```json
-//! {
-//!     "lighting": {
-//!         "ambient": { "color": [0.1, 0.1, 0.15] },
-//!         "lights": [
-//!             {
-//!                 "light_type": "directional",
-//!                 "direction": [0.5, -1.0],
-//!                 "color": [1.0, 0.95, 0.8],
-//!                 "intensity": 0.8,
-//!                 "shadows": true
-//!             },
-//!             {
-//!                 "light_type": "point",
-//!                 "position": [10.0, 5.0],
-//!                 "radius": 8.0,
-//!                 "color": [1.0, 0.6, 0.2],
-//!                 "intensity": 1.2,
-//!                 "shadows": true
-//!             }
-//!         ]
-//!     }
-//! }
-//! ```
 
 pub mod light;
-pub mod config;
 pub mod shadow;
 pub mod manager;
 pub mod render;
 
 // Re-export commonly used types
 pub use light::{Light, LightType};
-pub use config::{LightConfig, AmbientConfig, SceneLightingConfig};
 pub use shadow::{ShadowQuality, ShadowMap, ShadowMapId, LightHandle, ShadowCaster, ShadowMapCache};
 pub use manager::LightingSystem;
 pub use render::{LightingRenderer, OccluderData, LightingData, LightRenderData, NullLightingRenderer};

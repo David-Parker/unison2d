@@ -195,6 +195,7 @@ mod tests {
     use unison_math::Vec2;
     use unison_physics::mesh::create_ring_mesh;
     use crate::object::{SoftBodyDesc, RigidBodyDesc};
+    use unison_render::TextureId;
 
     #[test]
     fn world_new_has_defaults() {
@@ -214,6 +215,7 @@ mod tests {
             material: unison_physics::Material::RUBBER,
             position: Vec2::new(0.0, 5.0),
             color: Color::WHITE,
+            texture: TextureId::NONE,
         });
 
         let pos_before = world.objects.get_position(id);
@@ -237,6 +239,7 @@ mod tests {
             material: unison_physics::Material::RUBBER,
             position: Vec2::new(10.0, 5.0),
             color: Color::WHITE,
+            texture: TextureId::NONE,
         });
 
         world.cameras.follow("main", id, 1.0); // instant snap

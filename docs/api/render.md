@@ -1,6 +1,19 @@
 # unison-render
 
-Platform-agnostic rendering abstractions. Zero dependencies. Platform crates implement the `Renderer` trait.
+Platform-agnostic rendering abstractions. Platform crates implement the `Renderer` trait. Depends on: `unison-math`, `image`.
+
+## decode_image
+
+Decode raw image bytes (PNG, JPEG, GIF, BMP, WebP) into a `TextureDescriptor`. Format is auto-detected.
+
+```rust
+let desc = decode_image(png_bytes)?;
+let id = renderer.create_texture(&desc)?;
+```
+
+Decoded textures default to `Rgba8` format with `LinearMipmap` filtering (trilinear anti-aliasing).
+
+For a one-liner, use `engine.load_texture("path")` which combines asset lookup, decode, and GPU upload.
 
 ## Renderer (trait)
 

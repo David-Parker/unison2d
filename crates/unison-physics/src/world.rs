@@ -1293,8 +1293,11 @@ impl PhysicsWorld {
                     // Per-substep internal damping for stiff materials — kills
                     // deformation energy before it accumulates into a bounce.
                     let compliance = body.edge_compliance + body.area_compliance;
-                    if compliance < 1e-7 {
-                        body.apply_internal_damping(0.15);
+                    if compliance < 1e-4 {
+                        // Scale damping: stiffer materials get more damping
+                        let t = (compliance / 1e-4).max(0.0);
+                        let damping = 0.15 * (1.0 - t) + 0.03 * t;
+                        body.apply_internal_damping(damping);
                     }
                 }
                 for body in self.rigid_bodies.iter_mut() {
@@ -1303,11 +1306,13 @@ impl PhysicsWorld {
             }
         }
 
-        // Light global damping once per step for soft materials.
+        // Post-step internal damping for all soft bodies.
         for body in self.soft_bodies.iter_mut() {
             let compliance = body.edge_compliance + body.area_compliance;
-            if compliance < 1e-7 {
-                body.apply_internal_damping(0.08);
+            if compliance < 1e-4 {
+                let t = (compliance / 1e-4).max(0.0);
+                let damping = 0.08 * (1.0 - t) + 0.01 * t;
+                body.apply_internal_damping(damping);
             } else {
                 body.apply_damping(0.005);
             }
@@ -1398,8 +1403,10 @@ impl PhysicsWorld {
                 for body in self.soft_bodies.iter_mut() {
                     body.substep_post(substep_dt);
                     let compliance = body.edge_compliance + body.area_compliance;
-                    if compliance < 1e-7 {
-                        body.apply_internal_damping(0.15);
+                    if compliance < 1e-4 {
+                        let t = (compliance / 1e-4).max(0.0);
+                        let damping = 0.15 * (1.0 - t) + 0.03 * t;
+                        body.apply_internal_damping(damping);
                     }
                 }
                 for body in self.rigid_bodies.iter_mut() {

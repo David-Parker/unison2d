@@ -27,6 +27,7 @@ Per-crate deep dives:
 | `unison-render` | Platform-agnostic rendering traits | [api/render.md](api/render.md) |
 | `unison-lighting` | 2D dynamic lighting & shadows | [api/lighting.md](api/lighting.md) |
 | `unison-profiler` | Function-level profiling | [api/profiler.md](api/profiler.md) |
+| `unison-assets` | Build-time asset embedding & runtime store | [api/assets.md](api/assets.md) |
 
 ## Rules
 
