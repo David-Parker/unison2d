@@ -88,6 +88,8 @@ pub(crate) enum ObjectKind {
         color: Color,
         texture: TextureId,
         uvs: Vec<f32>,
+        /// Precomputed boundary edge indices for shadow casting.
+        boundary_edges: Option<Vec<(u32, u32)>>,
     },
     RigidBody {
         handle: BodyHandle,
@@ -104,6 +106,8 @@ pub(crate) enum ObjectKind {
 
 pub(crate) struct ObjectEntry {
     pub(crate) kind: ObjectKind,
+    /// Whether this object casts shadows (default: true for physics objects).
+    pub(crate) casts_shadow: bool,
 }
 
 impl ObjectEntry {

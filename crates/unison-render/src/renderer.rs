@@ -49,6 +49,33 @@ pub struct DrawMesh {
     pub color: Color,
 }
 
+/// A sprite drawn with an additional shadow mask texture.
+///
+/// Used by the lighting system to render lights with shadow casting.
+/// The shader samples both the light gradient (texture) and the shadow
+/// mask, with optional PCF filtering for soft shadow edges.
+#[derive(Debug, Clone)]
+pub struct DrawLitSprite {
+    /// Light shape texture (e.g., radial gradient for point lights).
+    pub texture: TextureId,
+    /// Shadow mask texture (white = lit, black = shadowed).
+    pub shadow_mask: TextureId,
+    /// Position (x, y) in world space.
+    pub position: [f32; 2],
+    /// Size (width, height) in world units.
+    pub size: [f32; 2],
+    /// Rotation in radians.
+    pub rotation: f32,
+    /// UV coordinates (min_u, min_v, max_u, max_v).
+    pub uv: [f32; 4],
+    /// Light color (color * intensity).
+    pub color: Color,
+    /// Viewport dimensions for shadow UV calculation.
+    pub screen_size: (f32, f32),
+    /// PCF filter mode (0 = none, 5 = PCF5, 13 = PCF13).
+    pub shadow_filter: u32,
+}
+
 /// Render command enum
 #[derive(Debug, Clone)]
 pub enum RenderCommand {
@@ -56,6 +83,8 @@ pub enum RenderCommand {
     Sprite(DrawSprite),
     /// Draw a mesh
     Mesh(DrawMesh),
+    /// Draw a sprite with shadow mask sampling
+    LitSprite(DrawLitSprite),
     /// Draw a line
     Line {
         start: [f32; 2],

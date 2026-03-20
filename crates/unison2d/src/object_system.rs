@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use unison_math::{Color, Vec2};
 use unison_physics::{BodyHandle, PhysicsWorld};
 use unison_render::{DrawMesh, DrawSprite, RenderCommand};
+use unison_lighting::Occluder;
 use crate::object::{ObjectEntry, ObjectId, ObjectKind, RigidBodyDesc, SoftBodyDesc, SpriteDesc};
 
 /// Manages game objects and their physics simulation.
@@ -40,7 +41,11 @@ impl ObjectSystem {
     // ── Spawning ──
 
     /// Spawn a soft body object. Returns an ObjectId for future reference.
-    pub fn spawn_soft_body(&mut self, desc: SoftBodyDesc) -> ObjectId {
+    pub fn spawn_soft_body(&mut self, mut desc: SoftBodyDesc) -> ObjectId {
+        // Precompute boundary edges for shadow casting
+        desc.mesh.ensure_boundary_edges();
+        let boundary_edges = desc.mesh.boundary_edges.clone();
+
         let uvs = desc.mesh.uvs_or_default();
         let config = desc.to_body_config();
         let handle = self.physics.add_body(&desc.mesh, config);
@@ -50,7 +55,8 @@ impl ObjectSystem {
         let id = self.next_object_id();
         self.handle_map.insert(handle, id);
         self.entries.insert(id, ObjectEntry {
-            kind: ObjectKind::SoftBody { handle, color, texture, uvs },
+            kind: ObjectKind::SoftBody { handle, color, texture, uvs, boundary_edges },
+            casts_shadow: true,
         });
         id
     }
@@ -65,6 +71,7 @@ impl ObjectSystem {
         self.handle_map.insert(handle, id);
         self.entries.insert(id, ObjectEntry {
             kind: ObjectKind::RigidBody { handle, color },
+            casts_shadow: true,
         });
         id
     }
@@ -93,6 +100,7 @@ impl ObjectSystem {
                 rotation: desc.rotation,
                 color: desc.color,
             },
+            casts_shadow: false, // Sprites don't cast shadows by default
         });
         id
     }
@@ -207,6 +215,63 @@ impl ObjectSystem {
         }
     }
 
+    // ── Shadow config ──
+
+    /// Set whether an object casts shadows.
+    ///
+    /// Default is `true` for rigid bodies and soft bodies, `false` for sprites.
+    pub fn set_casts_shadow(&mut self, id: ObjectId, casts_shadow: bool) {
+        if let Some(entry) = self.entries.get_mut(&id) {
+            entry.casts_shadow = casts_shadow;
+        }
+    }
+
+    /// Check whether an object casts shadows.
+    pub fn casts_shadow(&self, id: ObjectId) -> bool {
+        self.entries.get(&id).map_or(false, |e| e.casts_shadow)
+    }
+
+    /// Collect occluder geometry from all shadow-casting objects.
+    ///
+    /// Returns one [`Occluder`] per shadow-casting rigid body or soft body.
+    /// The ground plane is handled separately by the lighting system via
+    /// [`LightingSystem::set_ground_shadow`](unison_lighting::LightingSystem::set_ground_shadow).
+    pub fn collect_occluders(&self) -> Vec<Occluder> {
+        let mut occluders = Vec::new();
+
+        for entry in self.entries.values() {
+            if !entry.casts_shadow {
+                continue;
+            }
+
+            match &entry.kind {
+                ObjectKind::RigidBody { handle, .. } => {
+                    if let Some(body) = self.physics.get_rigid_body(*handle) {
+                        let he = body.collider.half_extents();
+                        occluders.push(Occluder::from_aabb(
+                            body.position.x,
+                            body.position.y,
+                            he.x,
+                            he.y,
+                        ));
+                    }
+                }
+                ObjectKind::SoftBody { handle, boundary_edges, .. } => {
+                    if let Some(boundary) = boundary_edges {
+                        if let Some((positions, _)) = self.physics.get_body_render_data(*handle) {
+                            occluders.push(Occluder::from_boundary_edges(&positions, boundary));
+                        }
+                    }
+                }
+                ObjectKind::Sprite { .. } => {
+                    // Sprites don't have geometry to occlude
+                }
+            }
+        }
+
+        occluders
+    }
+
     // ── Physics config ──
 
     /// Set the gravity vector (negative = downward).
@@ -266,7 +331,7 @@ impl ObjectSystem {
 
         for entry in self.entries.values() {
             match &entry.kind {
-                ObjectKind::SoftBody { handle, color, texture, uvs } => {
+                ObjectKind::SoftBody { handle, color, texture, uvs, .. } => {
                     if let Some((positions, indices)) = self.physics.get_body_render_data(*handle) {
                         commands.push(RenderCommand::Mesh(DrawMesh {
                             positions,

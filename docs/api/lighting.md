@@ -1,14 +1,16 @@
 # unison-lighting
 
-2D lighting with lightmap compositing.
+2D lighting with lightmap compositing and shadow casting.
 
-Renders point lights and directional lights to an offscreen FBO (the "lightmap"), then composites it over the scene with multiply blending. Unlit areas are darkened to the ambient color; lit areas are tinted by the light's color and intensity.
+Renders point lights and directional lights to an offscreen FBO (the "lightmap"), then composites it over the scene with multiply blending. Unlit areas are darkened to the ambient color; lit areas are tinted by the light's color and intensity. Shadow-casting lights use a per-light shadow mask with optional PCF filtering for soft edges.
 
 ## How it works
 
 1. **Lightmap FBO** — cleared to the ambient color each frame
-2. **Additive light pass** — each point light is drawn as a radial gradient sprite, each directional light as a full-viewport solid-color quad, both with additive blending
-3. **Multiply composite** — the lightmap is drawn over the scene with multiply blending, darkening unlit areas
+2. **Additive light pass** — each light is drawn additively to the lightmap:
+   - **Without shadows:** point lights as radial gradient sprites, directional lights as full-viewport quads
+   - **With shadows:** occluder geometry is projected into shadow quads, rendered to a shadow mask FBO (white=lit, black=shadow), then the light is drawn as a `LitSprite` that samples both the gradient and shadow mask with optional PCF
+3. **Multiply composite** — the lightmap is drawn over the scene with multiply blending
 
 ## Types
 
@@ -18,10 +20,12 @@ A point light that emits in all directions with radial falloff.
 
 ```rust
 pub struct PointLight {
-    pub position: Vec2,   // World-space position
-    pub color: Color,     // Light color
-    pub intensity: f32,   // Multiplier applied to color
-    pub radius: f32,      // Radius of influence in world units
+    pub position: Vec2,            // World-space position
+    pub color: Color,              // Light color
+    pub intensity: f32,            // Multiplier applied to color
+    pub radius: f32,               // Radius of influence in world units
+    pub casts_shadows: bool,       // Whether this light casts shadows (default: false)
+    pub shadow_filter: ShadowFilter, // PCF mode for shadow edges (default: None)
 }
 
 impl PointLight {
@@ -31,13 +35,15 @@ impl PointLight {
 
 ### `DirectionalLight`
 
-A directional light that illuminates the entire scene uniformly. Without normal maps, the direction field has no visual effect — the light acts as a uniform color wash. The direction is stored for forward compatibility with Phase 4 (normal maps).
+A directional light that illuminates the entire scene uniformly. The direction is used for shadow projection — shadows are cast along this direction. Without normal maps, direction has no effect on shading.
 
 ```rust
 pub struct DirectionalLight {
-    pub direction: Vec2,  // Direction light shines FROM (stored for Phase 4)
-    pub color: Color,     // Light color
-    pub intensity: f32,   // Multiplier applied to color
+    pub direction: Vec2,           // Direction light shines FROM
+    pub color: Color,              // Light color
+    pub intensity: f32,            // Multiplier applied to color
+    pub casts_shadows: bool,       // Whether this light casts shadows (default: false)
+    pub shadow_filter: ShadowFilter, // PCF mode for shadow edges (default: None)
 }
 
 impl DirectionalLight {
@@ -45,13 +51,47 @@ impl DirectionalLight {
 }
 ```
 
+### `ShadowFilter`
+
+PCF (Percentage Closer Filtering) mode for shadow edge softness. Mirrors Godot 4's shadow filter options.
+
+```rust
+pub enum ShadowFilter {
+    None,   // Hard shadows — crisp edges
+    Pcf5,   // 5-tap PCF — cardinal + center
+    Pcf13,  // 13-tap PCF — 3×3 grid + 4 extended
+}
+```
+
 ### `LightId`
 
 Opaque handle returned by `add_light` or `add_directional_light`. Used to query, mutate, or remove a light. IDs are globally unique across both light types.
 
+### `Occluder` / `OccluderEdge`
+
+Shadow-casting shapes extracted from game objects.
+
+```rust
+pub struct OccluderEdge {
+    pub a: [f32; 2],       // First endpoint (world space)
+    pub b: [f32; 2],       // Second endpoint (world space)
+    pub normal: [f32; 2],  // Outward-facing normal
+}
+
+pub struct Occluder {
+    pub edges: Vec<OccluderEdge>,
+}
+
+impl Occluder {
+    pub fn from_aabb(cx: f32, cy: f32, hw: f32, hh: f32) -> Self;
+    pub fn from_ground(y: f32, x_min: f32, x_max: f32) -> Self;
+    pub fn from_boundary_edges(positions: &[f32], boundary_edges: &[(u32, u32)]) -> Self;
+}
+```
+
 ### `LightingSystem`
 
-Manages lights, ambient color, and the lightmap FBO.
+Manages lights, ambient color, shadows, and the lightmap FBO.
 
 ```rust
 impl LightingSystem {
@@ -82,7 +122,11 @@ impl LightingSystem {
     pub fn clear_directional_lights(&mut self);
 
     // Combined queries
-    pub fn has_lights(&self) -> bool;  // true if any point or directional lights exist
+    pub fn has_lights(&self) -> bool;
+
+    // Shadows
+    pub fn set_occluders(&mut self, occluders: Vec<Occluder>);
+    pub fn set_ground_shadow(&mut self, y: Option<f32>);
 
     // Rendering (called by World automatically)
     pub fn ensure_resources(&mut self, renderer: &mut dyn Renderer<Error = String>);
@@ -94,41 +138,58 @@ impl LightingSystem {
 
 ## Usage
 
-Lighting is integrated into `World`. Enable it, set an ambient color, and add lights:
+### Basic lighting
 
 ```rust
-// In level setup
 world.lighting.set_ambient(Color::new(0.1, 0.1, 0.15, 1.0));
 world.lighting.set_enabled(true);
 
 let light = world.lighting.add_light(PointLight::new(
     Vec2::new(5.0, 3.0),
-    Color::new(1.0, 0.9, 0.7, 1.0),  // warm white
+    Color::new(1.0, 0.9, 0.7, 1.0),
     1.0,
     6.0,
 ));
-
-// In update — move the light
-let pos = world.objects.get_position(player_id);
-if let Some(l) = world.lighting.get_light_mut(light) {
-    l.position = pos;
-}
 ```
 
-`World::auto_render` and `World::render_to_targets` handle the lightmap rendering and compositing automatically when lighting is enabled and at least one light exists.
+### Shadow casting
 
-Directional lights illuminate the entire scene uniformly:
+Enable shadows on a light by setting `casts_shadows: true`. Choose a PCF filter for soft edges:
 
 ```rust
-use unison2d::lighting::DirectionalLight;
+use unison2d::lighting::{PointLight, ShadowFilter};
 
-// Moonlight wash — subtle blue tint over everything
-world.lighting.add_directional_light(DirectionalLight::new(
-    Vec2::new(0.3, -1.0),               // direction (for future normal maps)
-    Color::new(0.15, 0.15, 0.25, 1.0),  // cool blue
-    1.0,
-));
+let light = world.lighting.add_light(PointLight {
+    position: Vec2::new(0.0, 3.0),
+    color: Color::new(1.0, 0.9, 0.7, 1.0),
+    intensity: 1.0,
+    radius: 6.0,
+    casts_shadows: true,
+    shadow_filter: ShadowFilter::Pcf5,
+});
+
+// Ground shadow prevents light bleeding below ground
+world.lighting.set_ground_shadow(Some(-4.5));
 ```
+
+### Per-object shadow control
+
+All rigid bodies and soft bodies cast shadows by default. Disable on specific objects:
+
+```rust
+world.objects.set_casts_shadow(particle_id, false);
+```
+
+`World::auto_render` and `World::render_to_targets` collect occluders and render shadows automatically.
+
+## Shadow architecture
+
+For each shadow-casting light:
+
+1. **Occluder collection** — `ObjectSystem::collect_occluders()` extracts edges from rigid bodies (AABB), soft bodies (boundary edges), and the ground plane
+2. **Shadow projection** — for each occluder edge facing away from the light, project a shadow quad away from the light
+3. **Shadow mask** — render shadow quads as black geometry on a white FBO
+4. **Lit sprite** — draw the light to the lightmap using a shader that samples both the gradient texture and shadow mask, with optional PCF filtering
 
 ## Gradient texture
 
@@ -137,4 +198,4 @@ Point lights are rendered using a 64×64 radial gradient texture generated at ru
 ## Dependencies
 
 - `unison-math` — Vec2, Color
-- `unison-render` — Renderer trait, BlendMode, Camera, RenderCommand
+- `unison-render` — Renderer trait, BlendMode, Camera, RenderCommand, DrawLitSprite

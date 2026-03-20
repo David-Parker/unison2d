@@ -15,6 +15,10 @@ pub struct Mesh {
     /// Optional UV coordinates as flat array [u0, v0, u1, v1, ...]
     /// When present, length must equal vertices.len()
     pub uvs: Option<Vec<f32>>,
+    /// Boundary edges — vertex index pairs for edges belonging to exactly
+    /// one triangle. Computed lazily via [`compute_boundary_edges`] and
+    /// cached for shadow casting.
+    pub boundary_edges: Option<Vec<(u32, u32)>>,
 }
 
 impl Mesh {
@@ -24,6 +28,7 @@ impl Mesh {
             vertices,
             triangles,
             uvs: None,
+            boundary_edges: None,
         }
     }
 
@@ -38,7 +43,19 @@ impl Mesh {
             vertices,
             triangles,
             uvs: Some(uvs),
+            boundary_edges: None,
         }
+    }
+
+    /// Compute and cache boundary edges for shadow casting.
+    ///
+    /// Boundary edges are edges that belong to exactly one triangle,
+    /// forming the outer silhouette of the mesh.
+    pub fn ensure_boundary_edges(&mut self) {
+        if self.boundary_edges.is_some() {
+            return;
+        }
+        self.boundary_edges = Some(compute_boundary_edges_from_triangles(&self.triangles));
     }
 
     /// Number of vertices
@@ -144,6 +161,35 @@ pub fn create_ring_wireframe(segments: u32, radial_divisions: u32) -> Vec<u32> {
     }
 
     line_indices
+}
+
+/// Compute boundary edges from triangle indices.
+///
+/// Boundary edges are edges that belong to exactly one triangle. These form
+/// the outer silhouette of the mesh and are used for shadow casting.
+///
+/// Returns a list of vertex index pairs `(v0, v1)` where v0 < v1.
+pub fn compute_boundary_edges_from_triangles(triangles: &[u32]) -> Vec<(u32, u32)> {
+    use std::collections::HashMap;
+
+    let mut edge_count: HashMap<(u32, u32), u32> = HashMap::new();
+
+    for tri in triangles.chunks(3) {
+        if tri.len() < 3 {
+            continue;
+        }
+        let edges = [(tri[0], tri[1]), (tri[1], tri[2]), (tri[2], tri[0])];
+        for &(a, b) in &edges {
+            let key = if a < b { (a, b) } else { (b, a) };
+            *edge_count.entry(key).or_insert(0) += 1;
+        }
+    }
+
+    edge_count
+        .into_iter()
+        .filter(|&(_, count)| count == 1)
+        .map(|(edge, _)| edge)
+        .collect()
 }
 
 /// Offset all vertices by a fixed amount

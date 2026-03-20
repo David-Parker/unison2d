@@ -13,15 +13,45 @@ use unison_render::{
 
 use crate::shaders;
 
+/// Cached uniform locations for a shader program.
+struct ProgramUniforms {
+    program: WebGlProgram,
+    u_view_projection: WebGlUniformLocation,
+    u_color: WebGlUniformLocation,
+}
+
+/// Uniform locations specific to the base (non-lit) shader.
+struct BaseUniforms {
+    u_use_texture: WebGlUniformLocation,
+    u_texture: WebGlUniformLocation,
+}
+
+/// Uniform locations specific to the lit sprite shader.
+struct LitUniforms {
+    u_use_texture: WebGlUniformLocation,
+    u_texture: WebGlUniformLocation,
+    u_shadow_mask: WebGlUniformLocation,
+    u_screen_size: WebGlUniformLocation,
+    u_shadow_filter: WebGlUniformLocation,
+}
+
+/// Which shader program is currently active.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ActiveProgram {
+    Base,
+    Lit,
+}
+
 /// WebGL2 renderer implementing the Renderer trait.
 pub struct WebGlRenderer {
     gl: GL,
-    program: WebGlProgram,
-    // Uniforms
-    u_view_projection: WebGlUniformLocation,
-    u_color: WebGlUniformLocation,
-    u_use_texture: WebGlUniformLocation,
-    u_texture: WebGlUniformLocation,
+    // Base shader (sprites, meshes, rects, lines, terrain)
+    base: ProgramUniforms,
+    base_uniforms: BaseUniforms,
+    // Lit sprite shader (light gradient × shadow mask × PCF)
+    lit: ProgramUniforms,
+    lit_uniforms: LitUniforms,
+    active_program: ActiveProgram,
     // Buffers (reused each frame)
     vao: WebGlVertexArrayObject,
     position_buffer: WebGlBuffer,
@@ -43,24 +73,61 @@ pub struct WebGlRenderer {
 impl WebGlRenderer {
     /// Create a new WebGL2 renderer from a canvas element.
     pub fn new(gl: GL, width: f32, height: f32) -> Result<Self, String> {
-        // Compile shaders and link program
+        // Compile shared vertex shader
         let vert = compile_shader(&gl, GL::VERTEX_SHADER, shaders::VERTEX_SHADER)?;
-        let frag = compile_shader(&gl, GL::FRAGMENT_SHADER, shaders::FRAGMENT_SHADER)?;
-        let program = link_program(&gl, &vert, &frag)?;
 
-        // Get uniform locations
-        let u_view_projection = gl
-            .get_uniform_location(&program, "u_view_projection")
-            .ok_or("Failed to get u_view_projection location")?;
-        let u_color = gl
-            .get_uniform_location(&program, "u_color")
-            .ok_or("Failed to get u_color location")?;
-        let u_use_texture = gl
-            .get_uniform_location(&program, "u_use_texture")
-            .ok_or("Failed to get u_use_texture location")?;
-        let u_texture = gl
-            .get_uniform_location(&program, "u_texture")
-            .ok_or("Failed to get u_texture location")?;
+        // ── Base shader program ──
+        let base_frag = compile_shader(&gl, GL::FRAGMENT_SHADER, shaders::FRAGMENT_SHADER)?;
+        let base_program = link_program(&gl, &vert, &base_frag)?;
+
+        let base = ProgramUniforms {
+            u_view_projection: gl
+                .get_uniform_location(&base_program, "u_view_projection")
+                .ok_or("base: Failed to get u_view_projection")?,
+            u_color: gl
+                .get_uniform_location(&base_program, "u_color")
+                .ok_or("base: Failed to get u_color")?,
+            program: base_program,
+        };
+        let base_uniforms = BaseUniforms {
+            u_use_texture: gl
+                .get_uniform_location(&base.program, "u_use_texture")
+                .ok_or("base: Failed to get u_use_texture")?,
+            u_texture: gl
+                .get_uniform_location(&base.program, "u_texture")
+                .ok_or("base: Failed to get u_texture")?,
+        };
+
+        // ── Lit sprite shader program ──
+        let lit_frag = compile_shader(&gl, GL::FRAGMENT_SHADER, shaders::LIT_FRAGMENT_SHADER)?;
+        let lit_program = link_program(&gl, &vert, &lit_frag)?;
+
+        let lit = ProgramUniforms {
+            u_view_projection: gl
+                .get_uniform_location(&lit_program, "u_view_projection")
+                .ok_or("lit: Failed to get u_view_projection")?,
+            u_color: gl
+                .get_uniform_location(&lit_program, "u_color")
+                .ok_or("lit: Failed to get u_color")?,
+            program: lit_program,
+        };
+        let lit_uniforms = LitUniforms {
+            u_use_texture: gl
+                .get_uniform_location(&lit.program, "u_use_texture")
+                .ok_or("lit: Failed to get u_use_texture")?,
+            u_texture: gl
+                .get_uniform_location(&lit.program, "u_texture")
+                .ok_or("lit: Failed to get u_texture")?,
+            u_shadow_mask: gl
+                .get_uniform_location(&lit.program, "u_shadow_mask")
+                .ok_or("lit: Failed to get u_shadow_mask")?,
+            u_screen_size: gl
+                .get_uniform_location(&lit.program, "u_screen_size")
+                .ok_or("lit: Failed to get u_screen_size")?,
+            u_shadow_filter: gl
+                .get_uniform_location(&lit.program, "u_shadow_filter")
+                .ok_or("lit: Failed to get u_shadow_filter")?,
+        };
 
         // Create VAO and buffers
         let vao = gl
@@ -98,11 +165,11 @@ impl WebGlRenderer {
 
         Ok(Self {
             gl,
-            program,
-            u_view_projection,
-            u_color,
-            u_use_texture,
-            u_texture,
+            base,
+            base_uniforms,
+            lit,
+            lit_uniforms,
+            active_program: ActiveProgram::Base,
             vao,
             position_buffer,
             uv_buffer,
@@ -158,15 +225,32 @@ impl WebGlRenderer {
         }
     }
 
-    /// Upload positions, UVs, and indices then draw triangles.
+    /// Ensure the base shader program is active.
+    fn use_base_program(&mut self) {
+        if self.active_program != ActiveProgram::Base {
+            self.gl.use_program(Some(&self.base.program));
+            self.active_program = ActiveProgram::Base;
+        }
+    }
+
+    /// Ensure the lit shader program is active.
+    fn use_lit_program(&mut self) {
+        if self.active_program != ActiveProgram::Lit {
+            self.gl.use_program(Some(&self.lit.program));
+            self.active_program = ActiveProgram::Lit;
+        }
+    }
+
+    /// Upload positions, UVs, and indices then draw triangles using the base shader.
     fn draw_mesh_data(
-        &self,
+        &mut self,
         positions: &[f32],
         uvs: &[f32],
         indices: &[u32],
         color: Color,
         texture: TextureId,
     ) {
+        self.use_base_program();
         let gl = &self.gl;
 
         gl.bind_vertex_array(Some(&self.vao));
@@ -198,7 +282,7 @@ impl WebGlRenderer {
 
         // Set color
         gl.uniform4f(
-            Some(&self.u_color),
+            Some(&self.base.u_color),
             color.r,
             color.g,
             color.b,
@@ -208,19 +292,91 @@ impl WebGlRenderer {
         // Bind texture if valid
         if texture.is_valid() {
             if let Some(tex) = self.textures.get(&texture.0) {
-                gl.uniform1i(Some(&self.u_use_texture), 1);
+                gl.uniform1i(Some(&self.base_uniforms.u_use_texture), 1);
                 gl.active_texture(GL::TEXTURE0);
                 gl.bind_texture(GL::TEXTURE_2D, Some(tex));
-                gl.uniform1i(Some(&self.u_texture), 0);
+                gl.uniform1i(Some(&self.base_uniforms.u_texture), 0);
             } else {
-                gl.uniform1i(Some(&self.u_use_texture), 0);
+                gl.uniform1i(Some(&self.base_uniforms.u_use_texture), 0);
             }
         } else {
-            gl.uniform1i(Some(&self.u_use_texture), 0);
+            gl.uniform1i(Some(&self.base_uniforms.u_use_texture), 0);
         }
 
         // Draw
         gl.draw_elements_with_i32(GL::TRIANGLES, indices.len() as i32, GL::UNSIGNED_INT, 0);
+
+        gl.bind_vertex_array(None);
+    }
+
+    /// Draw a lit sprite: light gradient × shadow mask with PCF.
+    fn draw_lit_sprite(
+        &mut self,
+        positions: &[f32],
+        uvs: &[f32],
+        indices: &[u32],
+        color: Color,
+        texture: TextureId,
+        shadow_mask: TextureId,
+        screen_size: (f32, f32),
+        shadow_filter: u32,
+    ) {
+        self.use_lit_program();
+        let gl = &self.gl;
+
+        gl.bind_vertex_array(Some(&self.vao));
+
+        // Upload geometry
+        gl.bind_buffer(GL::ARRAY_BUFFER, Some(&self.position_buffer));
+        unsafe {
+            let view = js_sys::Float32Array::view(positions);
+            gl.buffer_data_with_array_buffer_view(GL::ARRAY_BUFFER, &view, GL::DYNAMIC_DRAW);
+        }
+        gl.bind_buffer(GL::ARRAY_BUFFER, Some(&self.uv_buffer));
+        unsafe {
+            let view = js_sys::Float32Array::view(uvs);
+            gl.buffer_data_with_array_buffer_view(GL::ARRAY_BUFFER, &view, GL::DYNAMIC_DRAW);
+        }
+        gl.bind_buffer(GL::ELEMENT_ARRAY_BUFFER, Some(&self.index_buffer));
+        unsafe {
+            let view = js_sys::Uint32Array::view(indices);
+            gl.buffer_data_with_array_buffer_view(GL::ELEMENT_ARRAY_BUFFER, &view, GL::DYNAMIC_DRAW);
+        }
+
+        // Set uniforms
+        gl.uniform4f(Some(&self.lit.u_color), color.r, color.g, color.b, color.a);
+        gl.uniform2f(Some(&self.lit_uniforms.u_screen_size), screen_size.0, screen_size.1);
+        gl.uniform1i(Some(&self.lit_uniforms.u_shadow_filter), shadow_filter as i32);
+
+        // Bind light gradient texture to TEXTURE0 (point lights have a gradient;
+        // directional lights use TextureId::NONE for solid color)
+        if texture.is_valid() {
+            if let Some(tex) = self.textures.get(&texture.0) {
+                gl.uniform1i(Some(&self.lit_uniforms.u_use_texture), 1);
+                gl.active_texture(GL::TEXTURE0);
+                gl.bind_texture(GL::TEXTURE_2D, Some(tex));
+                gl.uniform1i(Some(&self.lit_uniforms.u_texture), 0);
+            } else {
+                gl.uniform1i(Some(&self.lit_uniforms.u_use_texture), 0);
+            }
+        } else {
+            gl.uniform1i(Some(&self.lit_uniforms.u_use_texture), 0);
+        }
+
+        // Bind shadow mask texture to TEXTURE1
+        if let Some(mask) = self.textures.get(&shadow_mask.0) {
+            gl.active_texture(GL::TEXTURE1);
+            gl.bind_texture(GL::TEXTURE_2D, Some(mask));
+            gl.uniform1i(Some(&self.lit_uniforms.u_shadow_mask), 1);
+        }
+
+        // Draw
+        gl.draw_elements_with_i32(GL::TRIANGLES, indices.len() as i32, GL::UNSIGNED_INT, 0);
+
+        // Unbind TEXTURE1
+        gl.active_texture(GL::TEXTURE1);
+        gl.bind_texture(GL::TEXTURE_2D, None);
+        gl.active_texture(GL::TEXTURE0);
 
         gl.bind_vertex_array(None);
     }
@@ -291,11 +447,23 @@ impl Renderer for WebGlRenderer {
     }
 
     fn begin_frame(&mut self, camera: &Camera) {
-        let gl = &self.gl;
-        gl.use_program(Some(&self.program));
-
         let vp = Self::build_view_projection(camera);
-        gl.uniform_matrix3fv_with_f32_array(Some(&self.u_view_projection), false, &vp);
+
+        // Set VP matrix on whichever program is currently active,
+        // and also on the other one so switches mid-frame work correctly.
+        let gl = &self.gl;
+
+        gl.use_program(Some(&self.base.program));
+        gl.uniform_matrix3fv_with_f32_array(Some(&self.base.u_view_projection), false, &vp);
+
+        gl.use_program(Some(&self.lit.program));
+        gl.uniform_matrix3fv_with_f32_array(Some(&self.lit.u_view_projection), false, &vp);
+
+        // Restore the active program
+        match self.active_program {
+            ActiveProgram::Base => gl.use_program(Some(&self.base.program)),
+            ActiveProgram::Lit => gl.use_program(Some(&self.lit.program)),
+        }
     }
 
     fn clear(&mut self, color: Color) {
@@ -306,6 +474,26 @@ impl Renderer for WebGlRenderer {
 
     fn draw(&mut self, command: RenderCommand) {
         match command {
+            RenderCommand::LitSprite(lit) => {
+                let (positions, uvs, indices) = Self::make_quad(
+                    lit.position[0],
+                    lit.position[1],
+                    lit.size[0],
+                    lit.size[1],
+                    lit.rotation,
+                    lit.uv,
+                );
+                self.draw_lit_sprite(
+                    &positions,
+                    &uvs,
+                    &indices,
+                    lit.color,
+                    lit.texture,
+                    lit.shadow_mask,
+                    lit.screen_size,
+                    lit.shadow_filter,
+                );
+            }
             RenderCommand::Mesh(mesh) => {
                 let uvs = if mesh.uvs.is_empty() {
                     vec![0.0; mesh.positions.len()]

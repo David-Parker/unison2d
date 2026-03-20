@@ -123,8 +123,8 @@ impl World {
     /// This is a convenience method for simple single-camera setups.
     /// For multi-camera rendering, use `render_to_targets()` instead.
     ///
-    /// If lighting is enabled, renders the lightmap and composites it over
-    /// the scene with multiply blending.
+    /// If lighting is enabled, renders the lightmap (with shadows if configured)
+    /// and composites it over the scene with multiply blending.
     pub fn auto_render(&mut self, renderer: &mut dyn Renderer<Error = String>) {
         let camera = match self.cameras.get("main") {
             Some(c) => c.clone(),
@@ -142,6 +142,10 @@ impl World {
 
         // Lighting pass
         if self.lighting.is_enabled() && self.lighting.has_lights() {
+            // Collect occluder geometry for shadow casting
+            let occluders = self.objects.collect_occluders();
+            self.lighting.set_occluders(occluders);
+
             self.lighting.ensure_resources(renderer);
             self.lighting.render_lightmap(renderer, &camera);
             // Bind back to screen before compositing to avoid feedback loop
@@ -168,6 +172,8 @@ impl World {
         let do_lighting = self.lighting.is_enabled() && self.lighting.has_lights();
 
         if do_lighting {
+            let occluders = self.objects.collect_occluders();
+            self.lighting.set_occluders(occluders);
             self.lighting.ensure_resources(renderer);
         }
 

@@ -4,11 +4,14 @@ use std::collections::HashMap;
 
 use unison_math::Color;
 use unison_render::{
-    BlendMode, Camera, DrawSprite, RenderCommand, RenderTargetId, Renderer, TextureId,
+    BlendMode, Camera, DrawLitSprite, DrawMesh, DrawSprite, RenderCommand, RenderTargetId,
+    Renderer, TextureId,
 };
 
 use crate::gradient::generate_radial_gradient;
 use crate::light::{DirectionalLight, LightId, PointLight};
+use crate::occluder::Occluder;
+use crate::shadow::{project_directional_shadows, project_point_shadows};
 
 /// Manages point lights, ambient color, and the lightmap FBO.
 ///
@@ -32,6 +35,12 @@ pub struct LightingSystem {
     lightmap_texture: Option<TextureId>,
     gradient_texture: Option<TextureId>,
     lightmap_size: (u32, u32),
+    // Shadow resources
+    shadow_mask_target: Option<RenderTargetId>,
+    shadow_mask_texture: Option<TextureId>,
+    shadow_mask_size: (u32, u32),
+    occluders: Vec<Occluder>,
+    ground_shadow_y: Option<f32>,
 }
 
 impl LightingSystem {
@@ -47,6 +56,11 @@ impl LightingSystem {
             lightmap_texture: None,
             gradient_texture: None,
             lightmap_size: (0, 0),
+            shadow_mask_target: None,
+            shadow_mask_texture: None,
+            shadow_mask_size: (0, 0),
+            occluders: Vec::new(),
+            ground_shadow_y: None,
         }
     }
 
@@ -163,38 +177,78 @@ impl LightingSystem {
         self.lightmap_texture
     }
 
+    // ── Shadows ──
+
+    /// Provide occluder geometry for shadow casting this frame.
+    ///
+    /// Call this each frame before `render_lightmap()` with fresh occluder
+    /// data from `ObjectSystem::collect_occluders()`.
+    pub fn set_occluders(&mut self, occluders: Vec<Occluder>) {
+        self.occluders = occluders;
+    }
+
+    /// Set the ground plane Y for ground shadow casting.
+    ///
+    /// Pass `None` to disable ground shadows. The ground occluder is a
+    /// horizontal edge spanning the camera bounds at this Y position.
+    pub fn set_ground_shadow(&mut self, y: Option<f32>) {
+        self.ground_shadow_y = y;
+    }
+
+    /// Check if any light in the system casts shadows.
+    fn has_shadow_casters(&self) -> bool {
+        self.lights.values().any(|l| l.casts_shadows)
+            || self.directional_lights.values().any(|l| l.casts_shadows)
+    }
+
     // ── Rendering ──
 
-    /// Create or resize the lightmap FBO and gradient texture.
+    /// Create or resize the lightmap FBO, shadow mask FBO, and gradient texture.
     ///
     /// Called automatically before rendering. Uses `renderer.screen_size()`
-    /// to match the lightmap to the current viewport.
+    /// to match FBO sizes to the current viewport.
     pub fn ensure_resources(&mut self, renderer: &mut dyn Renderer<Error = String>) {
         let (w, h) = renderer.screen_size();
         let (w, h) = (w as u32, h as u32);
 
-        // Already created at the right size
-        if self.lightmap_target.is_some() && self.lightmap_size == (w, h) {
-            return;
+        // ── Lightmap FBO ──
+        if !(self.lightmap_target.is_some() && self.lightmap_size == (w, h)) {
+            // Destroy old lightmap if size changed
+            if let Some(target) = self.lightmap_target.take() {
+                renderer.destroy_render_target(target);
+            }
+            if let Some(tex) = self.lightmap_texture.take() {
+                renderer.destroy_texture(tex);
+            }
+
+            let (target, texture) = renderer
+                .create_render_target(w, h)
+                .expect("Failed to create lightmap render target");
+            self.lightmap_target = Some(target);
+            self.lightmap_texture = Some(texture);
+            self.lightmap_size = (w, h);
         }
 
-        // Destroy old lightmap if size changed
-        if let Some(target) = self.lightmap_target.take() {
-            renderer.destroy_render_target(target);
-        }
-        if let Some(tex) = self.lightmap_texture.take() {
-            renderer.destroy_texture(tex);
+        // ── Shadow mask FBO ──
+        if self.has_shadow_casters() {
+            if !(self.shadow_mask_target.is_some() && self.shadow_mask_size == (w, h)) {
+                if let Some(target) = self.shadow_mask_target.take() {
+                    renderer.destroy_render_target(target);
+                }
+                if let Some(tex) = self.shadow_mask_texture.take() {
+                    renderer.destroy_texture(tex);
+                }
+
+                let (target, texture) = renderer
+                    .create_render_target(w, h)
+                    .expect("Failed to create shadow mask render target");
+                self.shadow_mask_target = Some(target);
+                self.shadow_mask_texture = Some(texture);
+                self.shadow_mask_size = (w, h);
+            }
         }
 
-        // Create lightmap FBO
-        let (target, texture) = renderer
-            .create_render_target(w, h)
-            .expect("Failed to create lightmap render target");
-        self.lightmap_target = Some(target);
-        self.lightmap_texture = Some(texture);
-        self.lightmap_size = (w, h);
-
-        // Create gradient texture (only once)
+        // ── Gradient texture (once) ──
         if self.gradient_texture.is_none() {
             let desc = generate_radial_gradient(64);
             let tex = renderer
@@ -206,11 +260,15 @@ impl LightingSystem {
 
     /// Render all lights into the internal lightmap FBO.
     ///
-    /// Clears the lightmap to the ambient color, then draws each point light
-    /// as an additive radial gradient sprite. The caller must call
-    /// [`ensure_resources`](Self::ensure_resources) first.
+    /// For each light:
+    /// - If the light casts shadows and there are occluders, renders shadow
+    ///   geometry to the shadow mask FBO, then draws the light as a
+    ///   `LitSprite` that samples both the gradient and shadow mask.
+    /// - Otherwise, draws the light as a plain additive sprite.
+    ///
+    /// The caller must call [`ensure_resources`](Self::ensure_resources) first.
     pub fn render_lightmap(&self, renderer: &mut dyn Renderer<Error = String>, camera: &Camera) {
-        let target = match self.lightmap_target {
+        let lightmap_target = match self.lightmap_target {
             Some(t) => t,
             None => return,
         };
@@ -219,14 +277,18 @@ impl LightingSystem {
             None => return,
         };
 
-        renderer.bind_render_target(target);
+        let screen_size = renderer.screen_size();
+
+        // Build combined occluder list (object occluders + optional ground)
+        let occluders = self.build_occluders(camera);
+        let has_occluders = !occluders.is_empty();
+
+        renderer.bind_render_target(lightmap_target);
         renderer.begin_frame(camera);
         renderer.clear(self.ambient);
-
-        // Draw each light additively
         renderer.set_blend_mode(BlendMode::Additive);
 
-        // Point lights — radial gradient sprites
+        // ── Point lights ──
         for light in self.lights.values() {
             let size = light.radius * 2.0;
             let color = Color::new(
@@ -235,6 +297,33 @@ impl LightingSystem {
                 light.color.b * light.intensity,
                 1.0,
             );
+
+            if light.casts_shadows && has_occluders {
+                if let Some(shadow_mask_tex) = self.shadow_mask_texture {
+                    // Render shadow mask for this light
+                    self.render_shadow_mask_point(renderer, camera, light, &occluders);
+
+                    // Switch back to lightmap and draw lit sprite
+                    renderer.bind_render_target(lightmap_target);
+                    renderer.begin_frame(camera);
+                    renderer.set_blend_mode(BlendMode::Additive);
+
+                    renderer.draw(RenderCommand::LitSprite(DrawLitSprite {
+                        texture: gradient,
+                        shadow_mask: shadow_mask_tex,
+                        position: [light.position.x, light.position.y],
+                        size: [size, size],
+                        rotation: 0.0,
+                        uv: [0.0, 0.0, 1.0, 1.0],
+                        color,
+                        screen_size,
+                        shadow_filter: light.shadow_filter.as_uniform_value(),
+                    }));
+                    continue;
+                }
+            }
+
+            // Non-shadow path: plain additive sprite
             renderer.draw(RenderCommand::Sprite(DrawSprite {
                 texture: gradient,
                 position: [light.position.x, light.position.y],
@@ -245,7 +334,7 @@ impl LightingSystem {
             }));
         }
 
-        // Directional lights — full-camera-bounds solid color quads
+        // ── Directional lights ──
         if !self.directional_lights.is_empty() {
             let (min_x, min_y, max_x, max_y) = camera.bounds();
             let cx = (min_x + max_x) / 2.0;
@@ -260,6 +349,32 @@ impl LightingSystem {
                     light.color.b * light.intensity,
                     1.0,
                 );
+
+                if light.casts_shadows && has_occluders {
+                    if let Some(shadow_mask_tex) = self.shadow_mask_texture {
+                        self.render_shadow_mask_directional(
+                            renderer, camera, light, &occluders, w, h,
+                        );
+
+                        renderer.bind_render_target(lightmap_target);
+                        renderer.begin_frame(camera);
+                        renderer.set_blend_mode(BlendMode::Additive);
+
+                        renderer.draw(RenderCommand::LitSprite(DrawLitSprite {
+                            texture: TextureId::NONE,
+                            shadow_mask: shadow_mask_tex,
+                            position: [cx, cy],
+                            size: [w, h],
+                            rotation: 0.0,
+                            uv: [0.0, 0.0, 1.0, 1.0],
+                            color,
+                            screen_size,
+                            shadow_filter: light.shadow_filter.as_uniform_value(),
+                        }));
+                        continue;
+                    }
+                }
+
                 renderer.draw(RenderCommand::Sprite(DrawSprite {
                     texture: TextureId::NONE,
                     position: [cx, cy],
@@ -272,6 +387,100 @@ impl LightingSystem {
         }
 
         renderer.set_blend_mode(BlendMode::Alpha);
+        renderer.end_frame();
+    }
+
+    /// Build the combined occluder list for this frame.
+    fn build_occluders(&self, camera: &Camera) -> Vec<Occluder> {
+        let mut occluders = self.occluders.clone();
+
+        // Add ground plane occluder if configured
+        if let Some(ground_y) = self.ground_shadow_y {
+            let (min_x, _, max_x, _) = camera.bounds();
+            // Extend slightly beyond camera bounds so shadows don't clip at edges
+            let margin = (max_x - min_x) * 0.5;
+            occluders.push(Occluder::from_ground(ground_y, min_x - margin, max_x + margin));
+        }
+
+        occluders
+    }
+
+    /// Render shadow geometry for a point light to the shadow mask FBO.
+    fn render_shadow_mask_point(
+        &self,
+        renderer: &mut dyn Renderer<Error = String>,
+        camera: &Camera,
+        light: &PointLight,
+        occluders: &[Occluder],
+    ) {
+        let shadow_target = match self.shadow_mask_target {
+            Some(t) => t,
+            None => return,
+        };
+
+        let quads = project_point_shadows(
+            [light.position.x, light.position.y],
+            light.radius,
+            occluders,
+        );
+
+        renderer.bind_render_target(shadow_target);
+        renderer.begin_frame(camera);
+        renderer.clear(Color::WHITE);
+        renderer.set_blend_mode(BlendMode::Alpha);
+
+        // Draw shadow quads as solid black
+        for quad in &quads {
+            renderer.draw(RenderCommand::Mesh(DrawMesh {
+                positions: quad.positions.to_vec(),
+                uvs: vec![0.0; quad.positions.len()],
+                indices: quad.indices.to_vec(),
+                texture: TextureId::NONE,
+                color: Color::BLACK,
+            }));
+        }
+
+        renderer.end_frame();
+    }
+
+    /// Render shadow geometry for a directional light to the shadow mask FBO.
+    fn render_shadow_mask_directional(
+        &self,
+        renderer: &mut dyn Renderer<Error = String>,
+        camera: &Camera,
+        light: &DirectionalLight,
+        occluders: &[Occluder],
+        cam_width: f32,
+        cam_height: f32,
+    ) {
+        let shadow_target = match self.shadow_mask_target {
+            Some(t) => t,
+            None => return,
+        };
+
+        // Cast distance = camera diagonal so shadows span the full viewport
+        let cast_distance = (cam_width * cam_width + cam_height * cam_height).sqrt();
+
+        let quads = project_directional_shadows(
+            [light.direction.x, light.direction.y],
+            cast_distance,
+            occluders,
+        );
+
+        renderer.bind_render_target(shadow_target);
+        renderer.begin_frame(camera);
+        renderer.clear(Color::WHITE);
+        renderer.set_blend_mode(BlendMode::Alpha);
+
+        for quad in &quads {
+            renderer.draw(RenderCommand::Mesh(DrawMesh {
+                positions: quad.positions.to_vec(),
+                uvs: vec![0.0; quad.positions.len()],
+                indices: quad.indices.to_vec(),
+                texture: TextureId::NONE,
+                color: Color::BLACK,
+            }));
+        }
 
         renderer.end_frame();
     }

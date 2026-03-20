@@ -212,15 +212,65 @@ world.lighting.add_directional_light(DirectionalLight::new(
 
 ---
 
-## Phase 3 — Shadow Casting (future)
+## Phase 3 — Shadow Casting ✓ complete
 
 **Goal:** Geometry blocks light, casting shadows.
 
-Not yet planned in detail. Likely approach:
-- `LightOccluder` concept — geometry that blocks light
-- Shadow depth rendering from each light's perspective
-- PCF filtering for soft edges
-- Biggest challenge: integrating with deformable soft body meshes
+### Deliverables
+
+- [x] `Occluder` / `OccluderEdge` types for shadow-casting shapes
+- [x] `ShadowFilter` enum (None, Pcf5, Pcf13) — Godot-style PCF modes
+- [x] `casts_shadows` + `shadow_filter` fields on `PointLight` and `DirectionalLight`
+- [x] Per-object `casts_shadow` flag + `ObjectSystem::set_casts_shadow()`
+- [x] `ObjectSystem::collect_occluders()` — edges from rigid bodies, soft bodies, ground
+- [x] Soft body boundary edge precomputation (`Mesh::ensure_boundary_edges()`)
+- [x] Shadow projection: `project_point_shadows()`, `project_directional_shadows()`
+- [x] Silhouette edge selection (back-facing test)
+- [x] `DrawLitSprite` render command (gradient × shadow mask × PCF)
+- [x] Lit sprite shader with PCF (new WebGL shader program)
+- [x] Multi-program support in WebGL renderer
+- [x] Shadow mask FBO in `LightingSystem`
+- [x] `LightingSystem::set_occluders()` + `set_ground_shadow()`
+- [x] World integration: automatic occluder collection + shadow rendering
+- [x] Integration tests (18 shadow-specific tests)
+- [x] Game integration: shadows on donut point light in all levels
+- [x] Documentation updated
+
+### Design notes
+
+Shadow casting uses a **per-light shadow mask** approach:
+
+1. For each shadow-casting light, compute shadow quads on the CPU by
+   projecting back-facing occluder edges away from the light
+2. Render shadow quads as black geometry to a shadow mask FBO (white=lit, black=shadow)
+3. Draw the light to the lightmap using a `LitSprite` shader that samples
+   both the gradient texture and shadow mask, with optional PCF filtering
+
+This avoids custom shadow map shaders while still producing quality results.
+PCF filtering (5-tap or 13-tap) softens shadow edges by sampling multiple
+shadow mask texels. The approach handles deformable soft body meshes
+naturally — boundary edges are precomputed at mesh creation and positions
+are updated from physics each frame.
+
+### API sketch
+
+```rust
+// Shadow-casting point light
+let light = world.lighting.add_light(PointLight {
+    position: Vec2::new(0.0, 3.0),
+    color: Color::new(1.0, 0.9, 0.7, 1.0),
+    intensity: 1.0,
+    radius: 6.0,
+    casts_shadows: true,
+    shadow_filter: ShadowFilter::Pcf5,
+});
+
+// Ground shadow
+world.lighting.set_ground_shadow(Some(-4.5));
+
+// Disable shadow casting for a specific object
+world.objects.set_casts_shadow(particle_id, false);
+```
 
 ---
 
