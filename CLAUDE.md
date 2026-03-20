@@ -12,7 +12,6 @@ crates/
 ├── unison-math/     # Shared Vec2, Color, Rect types
 ├── unison-physics/  # XPBD soft body & rigid body physics
 ├── unison-render/   # Rendering abstractions
-├── unison-lighting/ # 2D dynamic lighting
 ├── unison-profiler/ # Profiling utilities
 ├── unison-input/    # Two-layer input (raw + actions)
 ├── unison-assets/   # Build-time asset embedding & runtime store
@@ -26,8 +25,7 @@ Game (your struct, implements Game trait)
 ├── Engine<A>        — input/actions, renderer access, compositing
 ├── World            — self-contained simulation
 │   ├── ObjectSystem   — physics world + object registry
-│   ├── CameraSystem   — named cameras + follow targets
-│   └── LightingSystem — dynamic lights & shadows
+│   └── CameraSystem   — named cameras + follow targets
 └── Level (trait)    — optional scene abstraction
 ```
 
@@ -37,7 +35,7 @@ Game (your struct, implements Game trait)
 
 ## Crates
 
-**unison2d** — Core crate. Provides `World`, `Engine<A>`, `Game` trait, and `Level` trait. World composes `ObjectSystem`, `CameraSystem`, and `LightingSystem`. Re-exports all subsystems under `unison2d::{math, physics, render, lighting, profiler, input, assets}`. Key types: `World`, `ObjectSystem`, `CameraSystem`, `Engine<A>`, `Game`, `Level`, `ObjectId`, `SoftBodyDesc`, `RigidBodyDesc`.
+**unison2d** — Core crate. Provides `World`, `Engine<A>`, `Game` trait, and `Level` trait. World composes `ObjectSystem` and `CameraSystem`. Re-exports all subsystems under `unison2d::{math, physics, render, profiler, input, assets}`. Key types: `World`, `ObjectSystem`, `CameraSystem`, `Engine<A>`, `Game`, `Level`, `ObjectId`, `SoftBodyDesc`, `RigidBodyDesc`.
 
 **unison-input** — Two-layer input system. Layer 1: `InputState` (raw keyboard/mouse/touch). Layer 2: `ActionMap<A>` (maps raw inputs to game-defined actions). Key types: `KeyCode`, `MouseButton`, `Touch`, `TouchPhase`. Depends on: `unison-math`.
 
@@ -50,8 +48,6 @@ Game (your struct, implements Game trait)
 **unison-physics** — XPBD soft body simulation. Key types: `PhysicsWorld`, `BodyHandle`, `BodyConfig`, `Material`, `CollisionGroups`. Also has rigid bodies, mesh generation, and simulation tracing. Depends on: `unison-math`, `unison-profiler`.
 
 **unison-render** — Platform-agnostic rendering traits. Key types: `Renderer` (trait), `RenderCommand`, `RenderTargetId`, `Color` (re-exported from unison-math), `TextureId`, `TextureDescriptor`, `Sprite`, `SpriteSheet`, `Camera`. Key function: `decode_image(bytes)` — decodes PNG/JPEG/GIF/BMP/WebP into a `TextureDescriptor`. Depends on: `unison-math`, `image`.
-
-**unison-lighting** — 2D dynamic lighting with soft shadows. Uses `Vec2`, `Color`, and `Rect` from unison-math. Key types: `LightingSystem`, `Light`, `LightType` (Point/Spot/Directional/Area), `ShadowMap`, `ShadowCaster`, `ShadowQuality`, `LightingRenderer` (trait). Depends on: `unison-math`, `unison-profiler`.
 
 **unison-profiler** — Lightweight function-level profiling. Key API: `profile_scope!("name")` macro, `Profiler::get_stats()`, `Profiler::format_stats()`. Hierarchical scoping, FPS budget tracking. Zero dependencies.
 
@@ -68,7 +64,6 @@ docs/
 │   ├── input.md          # Input system
 │   ├── physics.md        # XPBD physics
 │   ├── render.md         # Rendering traits
-│   ├── lighting.md       # Dynamic lighting
 │   ├── math.md           # Vec2, Color, Rect
 │   ├── web.md            # Web platform
 │   ├── profiler.md       # Profiling

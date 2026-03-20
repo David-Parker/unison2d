@@ -257,14 +257,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "unison-lighting"
-version = "0.1.0"
-dependencies = [
- "unison-math",
- "unison-profiler",
-]
-
-[[package]]
 name = "unison-math"
 version = "0.1.0"
 
@@ -309,7 +301,6 @@ version = "0.1.0"
 dependencies = [
  "unison-assets",
  "unison-input",
- "unison-lighting",
  "unison-math",
  "unison-physics",
  "unison-profiler",

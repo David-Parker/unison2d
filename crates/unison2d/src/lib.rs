@@ -27,7 +27,7 @@
 /// ```
 ///
 /// ## Architecture
-/// - [`World`] — owns [`ObjectSystem`], [`CameraSystem`], and [`LightingSystem`](lighting::LightingSystem)
+/// - [`World`] — owns [`ObjectSystem`] and [`CameraSystem`]
 /// - [`Engine`] — thin shell for input/actions and renderer access
 /// - [`Game`] — lifecycle trait: init, update, render
 ///
@@ -35,7 +35,6 @@
 /// - [`math`] — Vec2, Color, Rect
 /// - [`physics`] — XPBD soft body & rigid body simulation
 /// - [`render`] — Platform-agnostic rendering abstractions
-/// - [`lighting`] — 2D dynamic lighting with soft shadows
 /// - [`profiler`] — Lightweight function-level profiling
 /// - [`input`] — Two-layer input system (raw state + action mapping)
 /// - [`assets`] — Build-time asset embedding and runtime asset store
@@ -51,7 +50,7 @@ mod prefab;
 mod game;
 
 pub use engine::Engine;
-pub use object::{ObjectId, SoftBodyDesc, RigidBodyDesc, SpriteDesc, LightDesc};
+pub use object::{ObjectId, SoftBodyDesc, RigidBodyDesc, SpriteDesc};
 pub use object_system::ObjectSystem;
 pub use camera_system::CameraSystem;
 pub use world::{World, Environment};
@@ -63,7 +62,6 @@ pub use game::Game;
 pub use unison_math as math;
 pub use unison_physics as physics;
 pub use unison_render as render;
-pub use unison_lighting as lighting;
 pub use unison_profiler as profiler;
 pub use unison_input as input;
 pub use unison_assets as assets;

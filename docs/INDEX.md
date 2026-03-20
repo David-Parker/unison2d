@@ -25,7 +25,7 @@ Per-crate deep dives:
 | `unison-math` | Shared Vec2, Color, Rect types | [api/math.md](api/math.md) |
 | `unison-physics` | XPBD soft body & rigid body physics | [api/physics.md](api/physics.md) |
 | `unison-render` | Platform-agnostic rendering traits | [api/render.md](api/render.md) |
-| `unison-lighting` | 2D dynamic lighting & shadows | [api/lighting.md](api/lighting.md) |
+
 | `unison-profiler` | Function-level profiling | [api/profiler.md](api/profiler.md) |
 | `unison-assets` | Build-time asset embedding & runtime store | [api/assets.md](api/assets.md) |
 

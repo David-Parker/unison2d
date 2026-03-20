@@ -1,15 +1,13 @@
-//! World — a self-contained game world with physics, objects, cameras, and lighting.
+//! World — a self-contained game world with physics, objects, and cameras.
 //!
 //! Each Level (or the Game itself) owns a `World`. Multiple worlds can coexist
 //! independently. The `World` struct composes subsystems:
 //!
 //! - `objects` ([`ObjectSystem`]) — physics simulation + object registry
 //! - `cameras` ([`CameraSystem`]) — named cameras with optional follow targets
-//! - `lighting` ([`LightingSystem`]) — dynamic lights and shadows
 
 use unison_math::{Color, Vec2};
 use unison_render::{Renderer, RenderTargetId};
-use unison_lighting::LightingSystem;
 
 use crate::object_system::ObjectSystem;
 use crate::camera_system::CameraSystem;
@@ -30,7 +28,7 @@ impl Default for Environment {
 
 /// A self-contained game world.
 ///
-/// Composes subsystems for physics/objects, cameras, and lighting.
+/// Composes subsystems for physics/objects and cameras.
 /// Call `step(dt)` each tick to advance the simulation.
 ///
 /// ```ignore
@@ -48,8 +46,6 @@ pub struct World {
     pub objects: ObjectSystem,
     /// Camera subsystem with named cameras.
     pub cameras: CameraSystem,
-    /// Lighting subsystem.
-    pub lighting: LightingSystem,
     /// Rendering environment (background color, etc.).
     pub environment: Environment,
 }
@@ -63,7 +59,6 @@ impl World {
         Self {
             objects: ObjectSystem::new(),
             cameras: CameraSystem::new(),
-            lighting: LightingSystem::new(),
             environment: Environment::default(),
         }
     }
@@ -100,23 +95,9 @@ impl World {
         self.objects.spawn_sprite(desc)
     }
 
-    /// Spawn a light object.
-    ///
-    /// Adds the light to the `LightingSystem` and registers it in the
-    /// `ObjectSystem` so it can be tracked by `ObjectId`.
-    pub fn spawn_light(&mut self, desc: crate::object::LightDesc) -> crate::object::ObjectId {
-        let light_handle = self.lighting.add_light(desc.light);
-        self.objects.spawn_light(light_handle)
-    }
-
     /// Despawn any object.
-    ///
-    /// Handles cleanup across subsystems — if the object is a light,
-    /// it is also removed from the `LightingSystem`.
     pub fn despawn(&mut self, id: crate::object::ObjectId) {
-        if let Some(light_handle) = self.objects.despawn(id) {
-            self.lighting.remove_light(light_handle);
-        }
+        self.objects.despawn(id);
     }
 
     /// Advance the world by one timestep.

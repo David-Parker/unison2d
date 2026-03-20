@@ -9,8 +9,6 @@ use std::collections::HashMap;
 use unison_math::{Color, Vec2};
 use unison_physics::{BodyHandle, PhysicsWorld};
 use unison_render::{DrawMesh, DrawSprite, RenderCommand};
-use unison_lighting::LightHandle;
-
 use crate::object::{ObjectEntry, ObjectId, ObjectKind, RigidBodyDesc, SoftBodyDesc, SpriteDesc};
 
 /// Manages game objects and their physics simulation.
@@ -99,35 +97,14 @@ impl ObjectSystem {
         id
     }
 
-    /// Register a light as a tracked object.
-    ///
-    /// The `LightHandle` should have been obtained by adding the light to
-    /// the World's `LightingSystem` first. Prefer `World::spawn_light()` which
-    /// handles both steps.
-    pub fn spawn_light(&mut self, light_handle: LightHandle) -> ObjectId {
-        let id = self.next_object_id();
-        self.entries.insert(id, ObjectEntry {
-            kind: ObjectKind::Light { light_handle },
-        });
-        id
-    }
-
     /// Remove an object from the world.
-    ///
-    /// Returns the `LightHandle` if the object was a light, so the caller
-    /// can also remove it from the `LightingSystem`. For non-light objects
-    /// the return value is `None`.
-    pub fn despawn(&mut self, id: ObjectId) -> Option<LightHandle> {
+    pub fn despawn(&mut self, id: ObjectId) {
         if let Some(entry) = self.entries.remove(&id) {
             if let Some(handle) = entry.physics_handle() {
                 self.physics.remove_body(handle);
                 self.handle_map.remove(&handle);
             }
-            if let ObjectKind::Light { light_handle } = &entry.kind {
-                return Some(*light_handle);
-            }
         }
-        None
     }
 
     // ── Queries ──
@@ -230,14 +207,6 @@ impl ObjectSystem {
         }
     }
 
-    /// Get the `LightHandle` for a light object, for direct `LightingSystem` access.
-    pub fn get_light_handle(&self, id: ObjectId) -> Option<LightHandle> {
-        match &self.entries.get(&id)?.kind {
-            ObjectKind::Light { light_handle } => Some(*light_handle),
-            _ => None,
-        }
-    }
-
     // ── Physics config ──
 
     /// Set the gravity vector (negative = downward).
@@ -327,10 +296,6 @@ impl ObjectSystem {
                         uv: [0.0, 0.0, 1.0, 1.0],
                         color: *color,
                     }));
-                }
-                ObjectKind::Light { .. } => {
-                    // Lights don't produce render commands directly;
-                    // they are handled by the LightingSystem.
                 }
             }
         }

@@ -40,7 +40,6 @@ unison2d/crates/
 ├── unison-math/     # Vec2, Color, Rect — zero dependencies
 ├── unison-physics/  # XPBD soft body & rigid body physics
 ├── unison-render/   # Platform-agnostic rendering traits
-├── unison-lighting/ # 2D dynamic lighting & soft shadows
 ├── unison-input/    # Two-layer input (raw → action mapping)
 ├── unison-profiler/ # Function-level profiling
 └── unison-web/      # Web platform (WebGL2, DOM input, rAF loop)

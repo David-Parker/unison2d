@@ -109,9 +109,8 @@ Run with `make dev`.
 ### World
 
 `World` is the central simulation container. It owns:
-- **ObjectSystem** (`world.objects`) — physics bodies, sprites, lights
+- **ObjectSystem** (`world.objects`) — physics bodies, sprites
 - **CameraSystem** (`world.cameras`) — named cameras with follow targets
-- **LightingSystem** (`world.lighting`) — dynamic lights and shadows
 - **Environment** (`world.environment`) — rendering config like background color
 
 You create objects through `world.spawn_*()` methods and advance the simulation with `world.step(dt)`.

@@ -10,7 +10,7 @@ repository.workspace = true
 unison-math = { workspace = true }
 unison-physics = { workspace = true }
 unison-render = { workspace = true }
-unison-lighting = { workspace = true }
+
 unison-profiler = { workspace = true }
 unison-input = { workspace = true }
 unison-assets = { workspace = true }
@@ -18,4 +18,4 @@ unison-assets = { workspace = true }
 [features]
 default = []
 simd = ["unison-physics/simd"]
-profiling = ["unison-profiler/enabled", "unison-physics/profiling", "unison-lighting/profiling"]
+profiling = ["unison-profiler/enabled", "unison-physics/profiling"]

@@ -9,8 +9,7 @@ Game (your struct, implements Game trait)
 ├── Engine<A>        — input/actions, renderer access, assets, compositing
 ├── World            — self-contained simulation
 │   ├── ObjectSystem   — physics + object registry
-│   ├── CameraSystem   — named cameras + follow targets
-│   └── LightingSystem — dynamic lights & shadows
+│   └── CameraSystem   — named cameras + follow targets
 └── Level (trait)    — optional scene abstraction
 ```
 
@@ -96,7 +95,7 @@ fn render(&mut self, engine: &mut Engine<Action>) {
 
 ## World
 
-Self-contained simulation. Composes subsystems for physics/objects, cameras, and lighting.
+Self-contained simulation. Composes subsystems for physics/objects and cameras.
 
 ```rust
 let mut world = World::new();
@@ -180,10 +179,6 @@ Named cameras with optional follow targets.
 | `unfollow(name)` | Stop following |
 
 Default: "main" camera at 20×15.
-
-### LightingSystem (`world.lighting`)
-
-See [lighting.md](lighting.md).
 
 ## Level Trait
 

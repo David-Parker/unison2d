@@ -11,10 +11,9 @@ For per-crate deep dives, see the [api/](api/) directory.
 ```
 Game (your struct)
 ├── Engine<A>        — input/actions, renderer, compositing, assets
-├── World            — physics, objects, cameras, lighting, environment
-│   ├── ObjectSystem   — soft bodies, rigid bodies, sprites, lights
+├── World            — physics, objects, cameras, environment
+│   ├── ObjectSystem   — soft bodies, rigid bodies, sprites
 │   ├── CameraSystem
-│   ├── LightingSystem
 │   └── Environment    — background color
 └── Level<S> (trait) — optional scene abstraction with shared state
     ├── LevelContext<S>  — input + dt + shared state
@@ -42,7 +41,7 @@ pub trait Game {
 
 ## World
 
-Self-contained simulation owning physics, objects, cameras, lighting, and environment.
+Self-contained simulation owning physics, objects, cameras, and environment.
 
 ```rust
 let mut world = World::new();
@@ -63,8 +62,7 @@ world.objects.set_ground(-5.0);
 | `spawn_rigid_body(RigidBodyDesc)` | Spawn a rigid body |
 | `spawn_static_rect(position, size, color)` | Spawn a static rectangle |
 | `spawn_sprite(SpriteDesc)` | Spawn a sprite (no physics) |
-| `spawn_light(LightDesc)` | Spawn a light (adds to LightingSystem + ObjectSystem) |
-| `despawn(id)` | Despawn any object (handles light cleanup automatically) |
+| `despawn(id)` | Despawn any object |
 
 ### Environment
 
@@ -141,24 +139,6 @@ let id = world.spawn_sprite(SpriteDesc {
 world.objects.set_sprite_position(id, Vec2::new(3.0, 4.0));
 world.objects.set_sprite_rotation(id, 0.5);
 let pos = world.objects.get_sprite_position(id);  // -> Option<Vec2>
-```
-
-### Lights
-
-Lights are added to the World's `LightingSystem` and tracked as objects.
-
-```rust
-use unison2d::lighting::Light;
-
-let id = world.spawn_light(LightDesc {
-    light: Light::point(Vec2::new(0.0, 5.0), 10.0)
-        .with_color(Color::from_hex(0xffd700))
-        .with_intensity(1.5),
-});
-
-// Access the underlying light via its handle:
-let handle = world.objects.get_light_handle(id).unwrap();
-world.lighting.get_light_mut(handle).unwrap().intensity = 2.0;
 ```
 
 ### Static Rectangles (convenience)

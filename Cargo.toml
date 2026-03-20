@@ -5,7 +5,7 @@ members = [
     "crates/unison-math",
     "crates/unison-physics",
     "crates/unison-render",
-    "crates/unison-lighting",
+
     "crates/unison-profiler",
     "crates/unison-input",
     "crates/unison-assets",
@@ -24,7 +24,7 @@ unison2d = { path = "crates/unison2d" }
 unison-math = { path = "crates/unison-math" }
 unison-physics = { path = "crates/unison-physics" }
 unison-render = { path = "crates/unison-render" }
-unison-lighting = { path = "crates/unison-lighting" }
+
 unison-profiler = { path = "crates/unison-profiler", default-features = false }
 unison-input = { path = "crates/unison-input" }
 unison-assets = { path = "crates/unison-assets" }
