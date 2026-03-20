@@ -10,6 +10,7 @@ use std::hash::Hash;
 
 use unison_input::{ActionMap, InputState, KeyCode, MouseButton};
 use unison_math::{Color, Rect};
+use crate::level::{LevelContext, RenderContext};
 use unison_render::{Renderer, RenderCommand, DrawSprite, TextureId, RenderTargetId, Camera};
 
 /// The engine struct. Manages input, actions, and renderer access.
@@ -98,6 +99,35 @@ impl<A: Copy + Eq + Hash> Engine<A> {
     /// Get the current fixed timestep delta (typically 1/60).
     pub fn dt(&self) -> f32 {
         self.fixed_dt
+    }
+
+    /// Build a [`LevelContext`] from this engine's input/dt and the given shared state.
+    ///
+    /// Convenience method to avoid manually constructing the context each frame:
+    /// ```ignore
+    /// let mut ctx = engine.level_context(&mut self.shared);
+    /// level.update(&mut ctx);
+    /// ```
+    pub fn level_context<'a, S>(&'a self, shared: &'a mut S) -> LevelContext<'a, S> {
+        LevelContext {
+            input: &self.input,
+            dt: self.fixed_dt,
+            shared,
+        }
+    }
+
+    /// Build a [`RenderContext`] from this engine's renderer.
+    ///
+    /// Convenience method to avoid manually unwrapping the renderer each frame:
+    /// ```ignore
+    /// if let Some(mut ctx) = engine.render_context() {
+    ///     level.render(&mut ctx);
+    /// }
+    /// ```
+    pub fn render_context(&mut self) -> Option<RenderContext<'_>> {
+        self.renderer.as_mut().map(|r| RenderContext {
+            renderer: &mut **r,
+        })
     }
 
     // ── Render targets ──
