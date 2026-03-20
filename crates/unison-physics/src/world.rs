@@ -1114,6 +1114,23 @@ impl PhysicsWorld {
         None
     }
 
+    /// Check whether two specific bodies have overlapping AABBs.
+    pub fn are_overlapping(&self, a: BodyHandle, b: BodyHandle, threshold: f32) -> bool {
+        let get_aabb = |h: BodyHandle| -> Option<(f32, f32, f32, f32)> {
+            let bt = self.body_types.get(h.0)?.as_ref()?;
+            Some(match bt {
+                BodyType::Soft(i) => self.soft_bodies[*i].get_aabb(),
+                BodyType::Rigid(i) => self.rigid_bodies[*i].get_aabb(),
+            })
+        };
+
+        let Some((a_min_x, a_min_y, a_max_x, a_max_y)) = get_aabb(a) else { return false };
+        let Some((b_min_x, b_min_y, b_max_x, b_max_y)) = get_aabb(b) else { return false };
+
+        a_max_x + threshold >= b_min_x && a_min_x - threshold <= b_max_x &&
+        a_max_y + threshold >= b_min_y && a_min_y - threshold <= b_max_y
+    }
+
     /// Check if body is contacting ground or any other body below it
     /// Returns the Y position of the contact surface, if any
     pub fn get_surface_contact_y(&self, handle: BodyHandle, threshold: f32) -> Option<f32> {

@@ -179,9 +179,7 @@ impl ObjectSystem {
             (Some(ha), Some(hb)) => (ha, hb),
             _ => return false,
         };
-        self.physics
-            .get_contact(ha, 0.3)
-            .map_or(false, |contact| contact == hb)
+        self.physics.are_overlapping(ha, hb, 0.3)
     }
 
     /// Get the first object in contact with the given object, if any.
