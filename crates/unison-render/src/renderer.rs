@@ -92,6 +92,17 @@ impl RenderTargetId {
     pub const SCREEN: Self = Self(0);
 }
 
+/// Blend mode for draw operations.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BlendMode {
+    /// Standard alpha blending: src * srcA + dst * (1 - srcA)
+    Alpha,
+    /// Additive blending: src * srcA + dst
+    Additive,
+    /// Multiply blending: src * dst
+    Multiply,
+}
+
 /// Renderer trait that platform crates implement
 pub trait Renderer {
     /// Error type for renderer operations
@@ -120,6 +131,14 @@ pub trait Renderer {
 
     /// Get the screen/canvas size
     fn screen_size(&self) -> (f32, f32);
+
+    // ── Blend mode ──
+
+    /// Set the blend mode for subsequent draw calls.
+    ///
+    /// Default is [`BlendMode::Alpha`]. Implementations should track state
+    /// to avoid redundant GPU calls.
+    fn set_blend_mode(&mut self, _mode: BlendMode) {}
 
     // ── Render targets ──
 

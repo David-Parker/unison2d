@@ -9,3 +9,4 @@ unison-physics = { path = "../unison-physics" }
 unison2d = { path = "../unison2d" }
 unison-math = { path = "../unison-math" }
 unison-render = { path = "../unison-render" }
+unison-lighting = { path = "../unison-lighting" }

@@ -1,13 +1,15 @@
-//! World — a self-contained game world with physics, objects, and cameras.
+//! World — a self-contained game world with physics, objects, cameras, and lighting.
 //!
 //! Each Level (or the Game itself) owns a `World`. Multiple worlds can coexist
 //! independently. The `World` struct composes subsystems:
 //!
 //! - `objects` ([`ObjectSystem`]) — physics simulation + object registry
 //! - `cameras` ([`CameraSystem`]) — named cameras with optional follow targets
+//! - `lighting` ([`LightingSystem`]) — point lights with lightmap compositing
 
 use unison_math::{Color, Vec2};
 use unison_render::{Renderer, RenderTargetId};
+use unison_lighting::LightingSystem;
 
 use crate::object_system::ObjectSystem;
 use crate::camera_system::CameraSystem;
@@ -48,6 +50,8 @@ pub struct World {
     pub cameras: CameraSystem,
     /// Rendering environment (background color, etc.).
     pub environment: Environment,
+    /// Lighting subsystem (disabled by default).
+    pub lighting: LightingSystem,
 }
 
 impl World {
@@ -60,6 +64,7 @@ impl World {
             objects: ObjectSystem::new(),
             cameras: CameraSystem::new(),
             environment: Environment::default(),
+            lighting: LightingSystem::new(),
         }
     }
 
@@ -117,13 +122,16 @@ impl World {
     ///
     /// This is a convenience method for simple single-camera setups.
     /// For multi-camera rendering, use `render_to_targets()` instead.
-    pub fn auto_render(&self, renderer: &mut dyn Renderer<Error = String>) {
+    ///
+    /// If lighting is enabled, renders the lightmap and composites it over
+    /// the scene with multiply blending.
+    pub fn auto_render(&mut self, renderer: &mut dyn Renderer<Error = String>) {
         let camera = match self.cameras.get("main") {
-            Some(c) => c,
+            Some(c) => c.clone(),
             None => return,
         };
 
-        renderer.begin_frame(camera);
+        renderer.begin_frame(&camera);
         renderer.clear(self.environment.background_color);
 
         for cmd in self.objects.render_commands() {
@@ -131,6 +139,16 @@ impl World {
         }
 
         renderer.end_frame();
+
+        // Lighting pass
+        if self.lighting.is_enabled() && self.lighting.light_count() > 0 {
+            self.lighting.ensure_resources(renderer);
+            self.lighting.render_lightmap(renderer, &camera);
+            // Bind back to screen before compositing to avoid feedback loop
+            // (render_lightmap leaves the lightmap FBO bound)
+            renderer.bind_render_target(RenderTargetId::SCREEN);
+            self.lighting.composite_lightmap(renderer, &camera);
+        }
     }
 
     /// Render all objects through each named camera into its assigned render target.
@@ -138,21 +156,29 @@ impl World {
     /// For each `(camera_name, target_id)` pair: binds the target, renders the scene
     /// through that camera, and ends the frame. Use with `Engine::composite_layer()`
     /// to arrange outputs on screen.
+    ///
+    /// If lighting is enabled, renders and composites the lightmap for each
+    /// camera/target pair.
     pub fn render_to_targets(
-        &self,
+        &mut self,
         renderer: &mut dyn Renderer<Error = String>,
         camera_targets: &[(&str, RenderTargetId)],
     ) {
         let commands = self.objects.render_commands();
+        let do_lighting = self.lighting.is_enabled() && self.lighting.light_count() > 0;
+
+        if do_lighting {
+            self.lighting.ensure_resources(renderer);
+        }
 
         for &(cam_name, target_id) in camera_targets {
             let camera = match self.cameras.get(cam_name) {
-                Some(c) => c,
+                Some(c) => c.clone(),
                 None => continue,
             };
 
             renderer.bind_render_target(target_id);
-            renderer.begin_frame(camera);
+            renderer.begin_frame(&camera);
             renderer.clear(self.environment.background_color);
 
             for cmd in &commands {
@@ -160,6 +186,13 @@ impl World {
             }
 
             renderer.end_frame();
+
+            // Lighting pass for this camera/target
+            if do_lighting {
+                self.lighting.render_lightmap(renderer, &camera);
+                renderer.bind_render_target(target_id);
+                self.lighting.composite_lightmap(renderer, &camera);
+            }
         }
     }
 }

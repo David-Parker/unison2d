@@ -1,0 +1,10 @@
+[package]
+name = "unison-lighting"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Unison 2D Game Engine - 2D lighting with lightmap compositing"
+
+[dependencies]
+unison-math = { workspace = true }
+unison-render = { workspace = true }

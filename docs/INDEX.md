@@ -22,6 +22,7 @@ Per-crate deep dives:
 | `unison2d` | Core crate: World, Engine, Game trait, Level trait | [api/engine.md](api/engine.md) |
 | `unison-physics` | XPBD soft body & rigid body physics | [api/physics.md](api/physics.md) |
 | `unison-render` | Platform-agnostic rendering traits | [api/render.md](api/render.md) |
+| `unison-lighting` | 2D lighting with lightmap compositing | [api/lighting.md](api/lighting.md) |
 | `unison-input` | Two-layer input (raw state + action mapping) | [api/input.md](api/input.md) |
 | `unison-math` | Shared Vec2, Color, Rect types | [api/math.md](api/math.md) |
 | `unison-assets` | Build-time asset embedding & runtime store | [api/assets.md](api/assets.md) |
@@ -36,6 +37,12 @@ Per-crate deep dives:
 cargo test -p unison-tests          # Run integration tests only
 cargo test --workspace              # Run everything
 ```
+
+## Plans
+
+| Plan | Status |
+|------|--------|
+| [2D Lighting System](plans/lighting.md) | Phase 1 complete — Phase 2 next (Directional Lights) |
 
 ## Rules
 

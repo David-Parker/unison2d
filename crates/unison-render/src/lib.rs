@@ -14,5 +14,5 @@ pub use color::Color;
 pub use texture::{TextureId, TextureFormat, TextureFilter, TextureWrap, TextureDescriptor};
 pub use sprite::{Sprite, SpriteSheet};
 pub use camera::Camera;
-pub use renderer::{Renderer, RenderCommand, DrawSprite, DrawMesh, RenderTargetId};
+pub use renderer::{Renderer, RenderCommand, DrawSprite, DrawMesh, RenderTargetId, BlendMode};
 pub use self::image::decode_image;

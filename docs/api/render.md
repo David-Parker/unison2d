@@ -32,6 +32,9 @@ pub trait Renderer {
     fn destroy_texture(&mut self, id: TextureId);
     fn screen_size(&self) -> (f32, f32);
 
+    // Blend mode
+    fn set_blend_mode(&mut self, mode: BlendMode);  // default: no-op
+
     // Render targets (default: unimplemented)
     fn create_render_target(&mut self, width: u32, height: u32) -> Result<(RenderTargetId, TextureId), Self::Error>;
     fn bind_render_target(&mut self, target: RenderTargetId);
@@ -55,6 +58,20 @@ renderer.bind_render_target(target);   // subsequent draws go to this target
 renderer.bind_render_target(RenderTargetId::SCREEN);  // back to screen
 renderer.destroy_render_target(target);  // FBO freed, texture kept
 ```
+
+## BlendMode
+
+Controls how drawn pixels combine with existing pixels in the framebuffer.
+
+```rust
+enum BlendMode {
+    Alpha,     // src * srcA + dst * (1 - srcA)  — standard transparency
+    Additive,  // src * srcA + dst               — glow, light accumulation
+    Multiply,  // src * dst                      — darkening, lightmap compositing
+}
+```
+
+Set via `renderer.set_blend_mode(mode)`. Default is `Alpha`. Implementations track state to avoid redundant GPU calls.
 
 ## RenderCommand
 

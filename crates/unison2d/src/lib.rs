@@ -65,3 +65,4 @@ pub use unison_render as render;
 pub use unison_profiler as profiler;
 pub use unison_input as input;
 pub use unison_assets as assets;
+pub use unison_lighting as lighting;

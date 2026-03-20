@@ -7,7 +7,7 @@ use web_sys::{
 };
 use unison_math::Color;
 use unison_render::{
-    Camera, RenderCommand, RenderTargetId, Renderer, TextureDescriptor, TextureFilter,
+    BlendMode, Camera, RenderCommand, RenderTargetId, Renderer, TextureDescriptor, TextureFilter,
     TextureFormat, TextureId, TextureWrap,
 };
 
@@ -37,6 +37,7 @@ pub struct WebGlRenderer {
     // State
     canvas_width: f32,
     canvas_height: f32,
+    current_blend_mode: BlendMode,
 }
 
 impl WebGlRenderer {
@@ -113,6 +114,7 @@ impl WebGlRenderer {
             next_render_target_id: 1, // 0 = SCREEN
             canvas_width: width,
             canvas_height: height,
+            current_blend_mode: BlendMode::Alpha,
         })
     }
 
@@ -472,6 +474,25 @@ impl Renderer for WebGlRenderer {
 
     fn screen_size(&self) -> (f32, f32) {
         (self.canvas_width, self.canvas_height)
+    }
+
+    fn set_blend_mode(&mut self, mode: BlendMode) {
+        if mode == self.current_blend_mode {
+            return;
+        }
+        let gl = &self.gl;
+        match mode {
+            BlendMode::Alpha => {
+                gl.blend_func(GL::SRC_ALPHA, GL::ONE_MINUS_SRC_ALPHA);
+            }
+            BlendMode::Additive => {
+                gl.blend_func(GL::SRC_ALPHA, GL::ONE);
+            }
+            BlendMode::Multiply => {
+                gl.blend_func(GL::DST_COLOR, GL::ZERO);
+            }
+        }
+        self.current_blend_mode = mode;
     }
 
     fn create_render_target(&mut self, width: u32, height: u32) -> Result<(RenderTargetId, TextureId), String> {

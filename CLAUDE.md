@@ -9,7 +9,8 @@ Game (your struct, implements Game trait)
 ├── Engine<A>        — input/actions, renderer access, compositing
 ├── World            — self-contained simulation
 │   ├── ObjectSystem   — physics world + object registry
-│   └── CameraSystem   — named cameras + follow targets
+│   ├── CameraSystem   — named cameras + follow targets
+│   └── LightingSystem — point lights + lightmap compositing
 └── Level (trait)    — optional scene abstraction
 ```
 
@@ -26,6 +27,7 @@ Each crate has a per-crate deep dive in `docs/api/`. Read the relevant doc befor
 | `unison2d` | [engine.md](docs/api/engine.md) | Core: World, Engine, Game trait, Level trait |
 | `unison-physics` | [physics.md](docs/api/physics.md) | XPBD soft body & rigid body physics |
 | `unison-render` | [render.md](docs/api/render.md) | Platform-agnostic rendering traits, textures, sprites |
+| `unison-lighting` | [lighting.md](docs/api/lighting.md) | 2D lighting with lightmap compositing |
 | `unison-input` | [input.md](docs/api/input.md) | Two-layer input (raw state + action mapping) |
 | `unison-math` | [math.md](docs/api/math.md) | Shared Vec2, Color, Rect types |
 | `unison-assets` | [assets.md](docs/api/assets.md) | Build-time asset embedding & runtime store |
@@ -33,7 +35,7 @@ Each crate has a per-crate deep dive in `docs/api/`. Read the relevant doc befor
 | `unison-profiler` | [profiler.md](docs/api/profiler.md) | Function-level profiling |
 | `unison-tests` | — | Headless e2e / simulation tests (physics, rendering, etc.) |
 
-All crates are re-exported from `unison2d::{math, physics, render, profiler, input, assets}`.
+All crates are re-exported from `unison2d::{math, physics, render, lighting, profiler, input, assets}`.
 
 ## Docs
 
