@@ -5,7 +5,7 @@
 //!
 //! - `objects` ([`ObjectSystem`]) — physics simulation + object registry
 //! - `cameras` ([`CameraSystem`]) — named cameras with optional follow targets
-//! - `lighting` ([`LightingSystem`]) — point lights with lightmap compositing
+//! - `lighting` ([`LightingSystem`]) — point lights, directional lights, and lightmap compositing
 
 use unison_math::{Color, Vec2};
 use unison_render::{Renderer, RenderTargetId};
@@ -141,7 +141,7 @@ impl World {
         renderer.end_frame();
 
         // Lighting pass
-        if self.lighting.is_enabled() && self.lighting.light_count() > 0 {
+        if self.lighting.is_enabled() && self.lighting.has_lights() {
             self.lighting.ensure_resources(renderer);
             self.lighting.render_lightmap(renderer, &camera);
             // Bind back to screen before compositing to avoid feedback loop
@@ -165,7 +165,7 @@ impl World {
         camera_targets: &[(&str, RenderTargetId)],
     ) {
         let commands = self.objects.render_commands();
-        let do_lighting = self.lighting.is_enabled() && self.lighting.light_count() > 0;
+        let do_lighting = self.lighting.is_enabled() && self.lighting.has_lights();
 
         if do_lighting {
             self.lighting.ensure_resources(renderer);

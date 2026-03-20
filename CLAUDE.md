@@ -10,7 +10,7 @@ Game (your struct, implements Game trait)
 ├── World            — self-contained simulation
 │   ├── ObjectSystem   — physics world + object registry
 │   ├── CameraSystem   — named cameras + follow targets
-│   └── LightingSystem — point lights + lightmap compositing
+│   └── LightingSystem — point lights, directional lights, + lightmap compositing
 └── Level (trait)    — optional scene abstraction
 ```
 

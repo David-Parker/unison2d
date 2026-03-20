@@ -157,27 +157,58 @@ let torch = world.lighting.add_point_light(PointLight {
 
 ---
 
-## Phase 2 — Directional Lights
+## Phase 2 — Directional Lights ✓ complete
 
 **Goal:** Add directional lights (sun/moon) that illuminate the entire
 scene from a given angle.
 
 ### Deliverables
 
-- [ ] `DirectionalLight` struct: direction (angle), color, intensity
-- [ ] Extend light shader to handle full-screen directional contribution
-- [ ] Integration tests for directional lights
-- [ ] donut-game: add a directional light (e.g., moonlight)
-- [ ] Update docs
+- [x] `DirectionalLight` struct: direction, color, intensity
+- [x] Render directional lights as full-camera-bounds solid-color quads (additive) on the lightmap
+- [x] Separate storage in `LightingSystem` with shared `LightId` counter
+- [x] `has_lights()` convenience method for World integration
+- [x] Integration tests for directional lights (5 tests)
+- [x] donut-game: moonlight directional light in MainLevel and RandomSpawnsLevel
+- [x] Update docs
 
 ### Design notes
 
-Directional lights are simpler than point lights in some ways — they
-don't have position or radius, just a direction and color. They render
-as a full-screen tinted quad added to the lightmap. Without normal maps,
-directional lights are effectively a uniform color wash — their real
-value comes in Phase 4 when normals let surfaces respond to light
-direction.
+Directional lights are simpler than point lights — they don't have
+position or radius, just a direction and color. They render as a
+full-camera-bounds solid-color quad (`TextureId::NONE`) added to the
+lightmap with additive blending. Without normal maps, directional lights
+are effectively a uniform color wash — their real value comes in Phase 4
+when normals let surfaces respond to light direction. The `direction`
+field is stored for forward compatibility.
+
+### API sketch
+
+```rust
+pub struct DirectionalLight {
+    pub direction: Vec2,   // Direction light shines FROM (for Phase 4)
+    pub color: Color,
+    pub intensity: f32,
+}
+
+// Management methods on LightingSystem:
+pub fn add_directional_light(&mut self, light: DirectionalLight) -> LightId;
+pub fn remove_directional_light(&mut self, id: LightId);
+pub fn get_directional_light(&self, id: LightId) -> Option<&DirectionalLight>;
+pub fn get_directional_light_mut(&mut self, id: LightId) -> Option<&mut DirectionalLight>;
+pub fn directional_light_count(&self) -> usize;
+pub fn clear_directional_lights(&mut self);
+pub fn has_lights(&self) -> bool;  // point or directional
+```
+
+```rust
+// Game usage
+world.lighting.add_directional_light(DirectionalLight::new(
+    Vec2::new(0.3, -1.0),               // moonlight angle
+    Color::new(0.15, 0.15, 0.25, 1.0),  // cool blue tint
+    1.0,
+));
+```
 
 ---
 

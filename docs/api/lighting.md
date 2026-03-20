@@ -2,12 +2,12 @@
 
 2D lighting with lightmap compositing.
 
-Renders point lights to an offscreen FBO (the "lightmap"), then composites it over the scene with multiply blending. Unlit areas are darkened to the ambient color; lit areas are tinted by the light's color and intensity.
+Renders point lights and directional lights to an offscreen FBO (the "lightmap"), then composites it over the scene with multiply blending. Unlit areas are darkened to the ambient color; lit areas are tinted by the light's color and intensity.
 
 ## How it works
 
 1. **Lightmap FBO** — cleared to the ambient color each frame
-2. **Additive light pass** — each point light is drawn as a radial gradient sprite with additive blending
+2. **Additive light pass** — each point light is drawn as a radial gradient sprite, each directional light as a full-viewport solid-color quad, both with additive blending
 3. **Multiply composite** — the lightmap is drawn over the scene with multiply blending, darkening unlit areas
 
 ## Types
@@ -29,9 +29,25 @@ impl PointLight {
 }
 ```
 
+### `DirectionalLight`
+
+A directional light that illuminates the entire scene uniformly. Without normal maps, the direction field has no visual effect — the light acts as a uniform color wash. The direction is stored for forward compatibility with Phase 4 (normal maps).
+
+```rust
+pub struct DirectionalLight {
+    pub direction: Vec2,  // Direction light shines FROM (stored for Phase 4)
+    pub color: Color,     // Light color
+    pub intensity: f32,   // Multiplier applied to color
+}
+
+impl DirectionalLight {
+    pub fn new(direction: Vec2, color: Color, intensity: f32) -> Self;
+}
+```
+
 ### `LightId`
 
-Opaque handle returned by `add_light`. Used to query, mutate, or remove a light.
+Opaque handle returned by `add_light` or `add_directional_light`. Used to query, mutate, or remove a light. IDs are globally unique across both light types.
 
 ### `LightingSystem`
 
@@ -49,13 +65,24 @@ impl LightingSystem {
     pub fn set_enabled(&mut self, enabled: bool);
     pub fn is_enabled(&self) -> bool;
 
-    // Light management
+    // Point light management
     pub fn add_light(&mut self, light: PointLight) -> LightId;
     pub fn remove_light(&mut self, id: LightId);
     pub fn get_light(&self, id: LightId) -> Option<&PointLight>;
     pub fn get_light_mut(&mut self, id: LightId) -> Option<&mut PointLight>;
     pub fn light_count(&self) -> usize;
     pub fn clear_lights(&mut self);
+
+    // Directional light management
+    pub fn add_directional_light(&mut self, light: DirectionalLight) -> LightId;
+    pub fn remove_directional_light(&mut self, id: LightId);
+    pub fn get_directional_light(&self, id: LightId) -> Option<&DirectionalLight>;
+    pub fn get_directional_light_mut(&mut self, id: LightId) -> Option<&mut DirectionalLight>;
+    pub fn directional_light_count(&self) -> usize;
+    pub fn clear_directional_lights(&mut self);
+
+    // Combined queries
+    pub fn has_lights(&self) -> bool;  // true if any point or directional lights exist
 
     // Rendering (called by World automatically)
     pub fn ensure_resources(&mut self, renderer: &mut dyn Renderer<Error = String>);
@@ -89,6 +116,19 @@ if let Some(l) = world.lighting.get_light_mut(light) {
 ```
 
 `World::auto_render` and `World::render_to_targets` handle the lightmap rendering and compositing automatically when lighting is enabled and at least one light exists.
+
+Directional lights illuminate the entire scene uniformly:
+
+```rust
+use unison2d::lighting::DirectionalLight;
+
+// Moonlight wash — subtle blue tint over everything
+world.lighting.add_directional_light(DirectionalLight::new(
+    Vec2::new(0.3, -1.0),               // direction (for future normal maps)
+    Color::new(0.15, 0.15, 0.25, 1.0),  // cool blue
+    1.0,
+));
+```
 
 ## Gradient texture
 

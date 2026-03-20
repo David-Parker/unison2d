@@ -1,6 +1,6 @@
 //! Integration tests for the lighting system.
 
-use unison_lighting::{LightingSystem, PointLight};
+use unison_lighting::{DirectionalLight, LightingSystem, PointLight};
 use unison_lighting::gradient::generate_radial_gradient;
 use unison_math::{Color, Vec2};
 use unison_render::TextureFormat;
@@ -168,6 +168,109 @@ fn gradient_center_bright_edge_dark() {
     // Corner pixel (0,0) should be dark (far from center)
     let corner_idx = 0usize;
     assert_eq!(desc.data[corner_idx + 3], 0, "corner alpha should be 0");
+}
+
+// ── Directional lights ──
+
+#[test]
+fn directional_light_add_get() {
+    let mut sys = LightingSystem::new();
+
+    let id = sys.add_directional_light(DirectionalLight::new(
+        Vec2::new(0.0, -1.0),
+        Color::WHITE,
+        1.0,
+    ));
+    assert_eq!(sys.directional_light_count(), 1);
+
+    let light = sys.get_directional_light(id).expect("should exist");
+    assert_eq!(light.direction.y, -1.0);
+    assert_eq!(light.intensity, 1.0);
+}
+
+#[test]
+fn directional_light_add_remove() {
+    let mut sys = LightingSystem::new();
+
+    let id1 = sys.add_directional_light(DirectionalLight::new(
+        Vec2::new(0.0, -1.0),
+        Color::WHITE,
+        1.0,
+    ));
+    let id2 = sys.add_directional_light(DirectionalLight::new(
+        Vec2::new(1.0, 0.0),
+        Color::RED,
+        0.5,
+    ));
+    assert_eq!(sys.directional_light_count(), 2);
+
+    sys.remove_directional_light(id1);
+    assert_eq!(sys.directional_light_count(), 1);
+    assert!(sys.get_directional_light(id1).is_none());
+    assert!(sys.get_directional_light(id2).is_some());
+
+    sys.remove_directional_light(id2);
+    assert_eq!(sys.directional_light_count(), 0);
+}
+
+#[test]
+fn directional_light_mutate() {
+    let mut sys = LightingSystem::new();
+    let id = sys.add_directional_light(DirectionalLight::new(
+        Vec2::new(0.0, -1.0),
+        Color::WHITE,
+        1.0,
+    ));
+
+    let light = sys.get_directional_light_mut(id).expect("should exist");
+    light.intensity = 2.0;
+    light.color = Color::new(0.5, 0.5, 1.0, 1.0);
+
+    let light = sys.get_directional_light(id).expect("should still exist");
+    assert_eq!(light.intensity, 2.0);
+    assert_eq!(light.color.b, 1.0);
+}
+
+#[test]
+fn directional_light_clear() {
+    let mut sys = LightingSystem::new();
+    for _ in 0..3 {
+        sys.add_directional_light(DirectionalLight::new(
+            Vec2::new(0.0, -1.0),
+            Color::WHITE,
+            1.0,
+        ));
+    }
+    assert_eq!(sys.directional_light_count(), 3);
+
+    sys.clear_directional_lights();
+    assert_eq!(sys.directional_light_count(), 0);
+}
+
+#[test]
+fn has_lights_mixed() {
+    let mut sys = LightingSystem::new();
+    assert!(!sys.has_lights());
+
+    // Add only a point light
+    let p = sys.add_light(PointLight::new(Vec2::ZERO, Color::WHITE, 1.0, 5.0));
+    assert!(sys.has_lights());
+
+    // Add a directional light
+    let d = sys.add_directional_light(DirectionalLight::new(
+        Vec2::new(0.0, -1.0),
+        Color::WHITE,
+        1.0,
+    ));
+    assert!(sys.has_lights());
+
+    // Remove point light — still has directional
+    sys.remove_light(p);
+    assert!(sys.has_lights());
+
+    // Remove directional — now empty
+    sys.remove_directional_light(d);
+    assert!(!sys.has_lights());
 }
 
 // ── World integration ──

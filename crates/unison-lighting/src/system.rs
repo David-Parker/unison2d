@@ -8,7 +8,7 @@ use unison_render::{
 };
 
 use crate::gradient::generate_radial_gradient;
-use crate::light::{LightId, PointLight};
+use crate::light::{DirectionalLight, LightId, PointLight};
 
 /// Manages point lights, ambient color, and the lightmap FBO.
 ///
@@ -23,6 +23,7 @@ use crate::light::{LightId, PointLight};
 /// 3. [`composite_lightmap`](Self::composite_lightmap) — multiply-blends the lightmap over the current target
 pub struct LightingSystem {
     lights: HashMap<u32, PointLight>,
+    directional_lights: HashMap<u32, DirectionalLight>,
     next_id: u32,
     ambient: Color,
     enabled: bool,
@@ -38,6 +39,7 @@ impl LightingSystem {
     pub fn new() -> Self {
         Self {
             lights: HashMap::new(),
+            directional_lights: HashMap::new(),
             next_id: 0,
             ambient: Color::BLACK,
             enabled: false,
@@ -114,6 +116,48 @@ impl LightingSystem {
         self.lights.clear();
     }
 
+    // ── Directional light management ──
+
+    /// Add a directional light and return its handle.
+    pub fn add_directional_light(&mut self, light: DirectionalLight) -> LightId {
+        let id = self.next_id;
+        self.next_id += 1;
+        self.directional_lights.insert(id, light);
+        LightId(id)
+    }
+
+    /// Remove a directional light by handle.
+    pub fn remove_directional_light(&mut self, id: LightId) {
+        self.directional_lights.remove(&id.0);
+    }
+
+    /// Get a directional light by handle.
+    pub fn get_directional_light(&self, id: LightId) -> Option<&DirectionalLight> {
+        self.directional_lights.get(&id.0)
+    }
+
+    /// Get a mutable reference to a directional light by handle.
+    pub fn get_directional_light_mut(&mut self, id: LightId) -> Option<&mut DirectionalLight> {
+        self.directional_lights.get_mut(&id.0)
+    }
+
+    /// Number of directional lights currently in the system.
+    pub fn directional_light_count(&self) -> usize {
+        self.directional_lights.len()
+    }
+
+    /// Remove all directional lights.
+    pub fn clear_directional_lights(&mut self) {
+        self.directional_lights.clear();
+    }
+
+    // ── Combined queries ──
+
+    /// Check if there are any lights (point or directional) in the system.
+    pub fn has_lights(&self) -> bool {
+        !self.lights.is_empty() || !self.directional_lights.is_empty()
+    }
+
     /// Get the lightmap texture ID (if resources have been created).
     pub fn lightmap_texture(&self) -> Option<TextureId> {
         self.lightmap_texture
@@ -181,6 +225,8 @@ impl LightingSystem {
 
         // Draw each light additively
         renderer.set_blend_mode(BlendMode::Additive);
+
+        // Point lights — radial gradient sprites
         for light in self.lights.values() {
             let size = light.radius * 2.0;
             let color = Color::new(
@@ -198,6 +244,33 @@ impl LightingSystem {
                 color,
             }));
         }
+
+        // Directional lights — full-camera-bounds solid color quads
+        if !self.directional_lights.is_empty() {
+            let (min_x, min_y, max_x, max_y) = camera.bounds();
+            let cx = (min_x + max_x) / 2.0;
+            let cy = (min_y + max_y) / 2.0;
+            let w = max_x - min_x;
+            let h = max_y - min_y;
+
+            for light in self.directional_lights.values() {
+                let color = Color::new(
+                    light.color.r * light.intensity,
+                    light.color.g * light.intensity,
+                    light.color.b * light.intensity,
+                    1.0,
+                );
+                renderer.draw(RenderCommand::Sprite(DrawSprite {
+                    texture: TextureId::NONE,
+                    position: [cx, cy],
+                    size: [w, h],
+                    rotation: 0.0,
+                    uv: [0.0, 0.0, 1.0, 1.0],
+                    color,
+                }));
+            }
+        }
+
         renderer.set_blend_mode(BlendMode::Alpha);
 
         renderer.end_frame();
