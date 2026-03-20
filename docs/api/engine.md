@@ -49,6 +49,8 @@ Thin shell for input, actions, renderer access, and compositing. Does NOT own a 
 | Method | Description |
 |--------|-------------|
 | `renderer_mut() -> Option<&mut dyn Renderer>` | Mutable renderer access |
+| `render_context() -> Option<RenderContext>` | Build a `RenderContext` for passing to levels |
+| `level_context(shared) -> LevelContext<S>` | Build a `LevelContext` for passing to levels |
 | `dt() -> f32` | Fixed timestep delta |
 | `input_state() -> &InputState` | Raw input state |
 | `actions_mut() -> &mut ActionMap<A>` | Direct action map access |
@@ -177,38 +179,48 @@ See [lighting.md](lighting.md).
 
 ## Level Trait
 
-Optional abstraction for self-contained game scenes.
+Optional abstraction for self-contained game scenes, generic over shared state `S`.
 
 ```rust
-pub trait Level {
+pub trait Level<S = ()> {
     fn world(&self) -> &World;
     fn world_mut(&mut self) -> &mut World;
-    fn update(&mut self, input: &InputState, dt: f32);
-    fn render(&mut self, renderer: &mut dyn Renderer<Error = String>);
+    fn update(&mut self, ctx: &mut LevelContext<S>);
+    fn render(&mut self, ctx: &mut RenderContext);
+
+    fn on_enter(&mut self) {}
+    fn on_exit(&mut self) {}
+    fn on_pause(&mut self) {}
+    fn on_resume(&mut self) {}
 }
 ```
 
-Levels receive `&InputState` (not the action map), so they are not generic over `A`. This allows `Vec<Box<dyn Level>>`.
+### LevelContext
 
 ```rust
-struct GameplayLevel {
-    world: World,
-    player: ObjectId,
+pub struct LevelContext<'a, S = ()> {
+    pub input: &'a InputState,
+    pub dt: f32,
+    pub shared: &'a mut S,
 }
+```
 
-impl Level for GameplayLevel {
-    fn world(&self) -> &World { &self.world }
-    fn world_mut(&mut self) -> &mut World { &mut self.world }
+### RenderContext
 
-    fn update(&mut self, input: &InputState, dt: f32) {
-        // game logic...
-        self.world.step(dt);
-    }
-
-    fn render(&mut self, renderer: &mut dyn Renderer<Error = String>) {
-        self.world.auto_render(renderer);
-    }
+```rust
+pub struct RenderContext<'a> {
+    pub renderer: &'a mut dyn Renderer<Error = String>,
 }
+```
+
+| Method | Description |
+|--------|-------------|
+| `create_render_target(w, h)` | Create offscreen render target |
+| `bind_render_target(id)` | Bind render target for draw calls |
+| `destroy_render_target(id)` | Destroy offscreen render target |
+| `screen_size()` | Get screen/canvas size in pixels |
+| `draw_overlay(texture, position, size)` | Draw render-target texture as screen-space overlay (0..1 NDC) |
+| `draw_overlay_bordered(texture, position, size, border_width, border_color)` | Same, with a colored border |
 ```
 
 ## Object Types

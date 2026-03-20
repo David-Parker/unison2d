@@ -1,16 +1,35 @@
-# Unison 2D Engine — Documentation Index
+# Unison 2D Engine — Documentation
 
-**Start here:** [API.md](API.md) — single-file API reference with examples.
+## User Guide
 
-Read the relevant doc before working with a crate. Update docs when changing public APIs.
+Start here to learn patterns and best practices for building games.
+
+| Guide | What you'll learn |
+|-------|-------------------|
+| [Getting Started](guide/getting-started.md) | Minimal game, project setup, first soft body on screen |
+| [Levels](guide/levels.md) | Level trait, shared state, events, transitions, lifecycle hooks |
+| [Prefabs & Shared Code](guide/prefabs.md) | Reusable spawn templates, shared helpers across levels |
+| [Patterns](guide/patterns.md) | Platformer movement, spawning, cameras, PiP, despawning |
+
+## API Reference
+
+- [**API.md**](API.md) — single-file reference for all engine types and methods
+
+Per-crate deep dives:
 
 | Crate | Description | Doc |
 |-------|-------------|-----|
-| `unison2d` | Core crate: World, Engine, Game trait, Level trait | [engine.md](engine.md) |
-| `unison-input` | Two-layer input (raw state + action mapping) | [input.md](input.md) |
-| `unison-web` | Web platform (WebGL2, DOM input, rAF loop) | [web.md](web.md) |
-| `unison-math` | Shared Vec2, Color, Rect types | [math.md](math.md) |
-| `unison-physics` | XPBD soft body & rigid body physics | [physics.md](physics.md) |
-| `unison-render` | Platform-agnostic rendering traits | [render.md](render.md) |
-| `unison-lighting` | 2D dynamic lighting & shadows | [lighting.md](lighting.md) |
-| `unison-profiler` | Function-level profiling | [profiler.md](profiler.md) |
+| `unison2d` | Core crate: World, Engine, Game trait, Level trait | [api/engine.md](api/engine.md) |
+| `unison-input` | Two-layer input (raw state + action mapping) | [api/input.md](api/input.md) |
+| `unison-web` | Web platform (WebGL2, DOM input, rAF loop) | [api/web.md](api/web.md) |
+| `unison-math` | Shared Vec2, Color, Rect types | [api/math.md](api/math.md) |
+| `unison-physics` | XPBD soft body & rigid body physics | [api/physics.md](api/physics.md) |
+| `unison-render` | Platform-agnostic rendering traits | [api/render.md](api/render.md) |
+| `unison-lighting` | 2D dynamic lighting & shadows | [api/lighting.md](api/lighting.md) |
+| `unison-profiler` | Function-level profiling | [api/profiler.md](api/profiler.md) |
+
+## Rules
+
+- **Read** the relevant doc before working with a crate
+- **Update** the doc whenever you change a crate's public API
+- **Update** the guide whenever you change a common pattern or best practice

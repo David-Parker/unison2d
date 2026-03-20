@@ -54,11 +54,33 @@ Game (your struct, implements Game trait)
 
 ## Documentation
 
-Engine docs live in `docs/`. Start with [API.md](docs/API.md) for the complete API reference, or [INDEX.md](docs/INDEX.md) to find per-crate docs.
+Engine docs live in `docs/`. Start with [INDEX.md](docs/INDEX.md) for the full table of contents.
+
+```
+docs/
+├── INDEX.md              # Table of contents — start here
+├── API.md                # Single-file API reference (types + methods)
+├── api/                  # Per-crate deep dives
+│   ├── engine.md         # Core: World, Engine, Game, Level
+│   ├── input.md          # Input system
+│   ├── physics.md        # XPBD physics
+│   ├── render.md         # Rendering traits
+│   ├── lighting.md       # Dynamic lighting
+│   ├── math.md           # Vec2, Color, Rect
+│   ├── web.md            # Web platform
+│   └── profiler.md       # Profiling
+└── guide/                # User guide — patterns and best practices
+    ├── README.md         # Guide overview
+    ├── getting-started.md
+    ├── levels.md
+    ├── prefabs.md
+    └── patterns.md
+```
 
 - **Read** the relevant doc before working with a crate
-- **Update** the doc whenever you change a crate's public API (add, remove, or modify types/methods/traits)
-- One doc per crate: `math.md`, `physics.md`, `render.md`, `lighting.md`, `profiler.md`, `input.md`, `web.md`, `engine.md`
+- **Update** `docs/api/*.md` when you change a crate's public API (add, remove, or modify types/methods/traits)
+- **Update** `docs/guide/*.md` when you change a common pattern or best practice
+- **Update** `docs/API.md` when you add or change top-level engine types
 
 ## Rules
 

@@ -1,77 +1,8 @@
 # Unison 2D — API Reference
 
-Single-file reference for building games with Unison 2D. Read this to learn the entire engine API.
+Complete type and method reference for the Unison 2D engine. For tutorials and patterns, see the [User Guide](guide/README.md).
 
-## Quick Start
-
-```rust
-use wasm_bindgen::prelude::*;
-use unison2d::*;
-use unison2d::math::{Color, Vec2};
-use unison2d::physics::{Material, mesh::create_ring_mesh};
-use unison2d::input::KeyCode;
-
-#[derive(Copy, Clone, Eq, PartialEq, Hash)]
-enum Action { MoveLeft, MoveRight, Jump }
-
-struct MyGame {
-    world: World,
-    player: ObjectId,
-}
-
-impl Game for MyGame {
-    type Action = Action;
-
-    fn init(&mut self, engine: &mut Engine<Action>) {
-        self.world.set_background(Color::from_hex(0x1a1a2e));
-        self.world.objects.set_gravity(Vec2::new(0.0, -9.8));
-        self.world.objects.set_ground(-5.0);
-
-        self.player = self.world.objects.spawn_soft_body(SoftBodyDesc {
-            mesh: create_ring_mesh(1.0, 0.4, 16, 6),
-            material: Material::RUBBER,
-            position: Vec2::new(0.0, 3.0),
-            color: Color::from_hex(0xd4943a),
-        });
-
-        self.world.objects.spawn_static_rect(
-            Vec2::new(0.0, -5.5), Vec2::new(30.0, 2.0), Color::from_hex(0x2d5016),
-        );
-        self.world.cameras.follow("main", self.player, 0.08);
-
-        engine.bind_key(KeyCode::ArrowLeft, Action::MoveLeft);
-        engine.bind_key(KeyCode::ArrowRight, Action::MoveRight);
-        engine.bind_key(KeyCode::Space, Action::Jump);
-    }
-
-    fn update(&mut self, engine: &mut Engine<Action>) {
-        let move_x = engine.action_axis(Action::MoveLeft, Action::MoveRight);
-        if move_x != 0.0 {
-            self.world.objects.apply_force(self.player, Vec2::new(move_x * 1200.0, 0.0));
-        }
-        if engine.action_just_started(Action::Jump) && self.world.objects.is_grounded(self.player) {
-            self.world.objects.apply_impulse(self.player, Vec2::new(0.0, 8.0));
-        }
-        self.world.step(engine.dt());
-    }
-
-    fn render(&mut self, engine: &mut Engine<Action>) {
-        if let Some(r) = engine.renderer_mut() {
-            self.world.auto_render(r);
-        }
-    }
-}
-
-#[wasm_bindgen(start)]
-pub fn main() {
-    unison_web::run(MyGame {
-        world: World::new(),
-        player: ObjectId::PLACEHOLDER,
-    });
-}
-```
-
-Run with `make dev`.
+For per-crate deep dives, see the [api/](api/) directory.
 
 ---
 
@@ -80,16 +11,19 @@ Run with `make dev`.
 ```
 Game (your struct)
 ├── Engine<A>        — input/actions, renderer, compositing
-├── World            — physics, objects, cameras, lighting
-│   ├── ObjectSystem
+├── World            — physics, objects, cameras, lighting, environment
+│   ├── ObjectSystem   — soft bodies, rigid bodies, sprites, lights
 │   ├── CameraSystem
-│   └── LightingSystem
-└── Level (trait)    — optional scene abstraction
+│   ├── LightingSystem
+│   └── Environment    — background color
+└── Level<S> (trait) — optional scene abstraction with shared state
+    ├── LevelContext<S>  — input + dt + shared state
+    └── RenderContext    — renderer + compositing helpers
 ```
 
 - **Engine** is a thin shell — only input mapping and renderer access
 - **World** is where all simulation lives — games own one or more Worlds
-- **Level** is an optional trait for organizing scenes
+- **Level** is an optional trait for organizing scenes with lifecycle hooks
 
 ## Game Trait
 
@@ -108,7 +42,7 @@ pub trait Game {
 
 ## World
 
-Self-contained simulation owning physics, objects, cameras, and lighting.
+Self-contained simulation owning physics, objects, cameras, lighting, and environment.
 
 ```rust
 let mut world = World::new();
@@ -119,22 +53,38 @@ world.objects.set_ground(-5.0);
 
 | Method | Description |
 |--------|-------------|
-| `new()` | Default world (main camera 20×15) |
-| `set_background(color)` | Set clear color |
+| `new()` | Default world (main camera 20x15) |
+| `set_background(color)` | Set clear color (convenience for `environment.background_color`) |
 | `background_color()` | Get clear color |
 | `step(dt)` | Advance physics + update camera follows |
 | `auto_render(renderer)` | Render through "main" camera |
 | `render_to_targets(renderer, &[(&str, RenderTargetId)])` | Multi-camera render |
+| `spawn_soft_body(SoftBodyDesc)` | Spawn a soft body |
+| `spawn_rigid_body(RigidBodyDesc)` | Spawn a rigid body |
+| `spawn_static_rect(position, size, color)` | Spawn a static rectangle |
+| `spawn_sprite(SpriteDesc)` | Spawn a sprite (no physics) |
+| `spawn_light(LightDesc)` | Spawn a light (adds to LightingSystem + ObjectSystem) |
+| `despawn(id)` | Despawn any object (handles light cleanup automatically) |
+
+### Environment
+
+Rendering configuration, accessible via `world.environment`:
+
+```rust
+world.environment.background_color = Color::from_hex(0x1a1a2e);
+// Or use the convenience method:
+world.set_background(Color::from_hex(0x1a1a2e));
+```
 
 ## Creating Objects
 
-All object operations go through `world.objects`.
+Spawn objects through `world.spawn_*()`. The World routes each object to the right subsystem(s).
 
 ### Soft Bodies
 
 ```rust
 let mesh = create_ring_mesh(outer_radius, inner_radius, segments, radial_divs);
-let id = world.objects.spawn_soft_body(SoftBodyDesc {
+let id = world.spawn_soft_body(SoftBodyDesc {
     mesh,
     material: Material::RUBBER,
     position: Vec2::new(x, y),
@@ -161,7 +111,7 @@ let id = world.objects.spawn_soft_body(SoftBodyDesc {
 ### Rigid Bodies
 
 ```rust
-let id = world.objects.spawn_rigid_body(RigidBodyDesc {
+let id = world.spawn_rigid_body(RigidBodyDesc {
     collider: Collider::aabb(half_width, half_height),
     position: Vec2::new(x, y),
     color: Color::from_hex(0x4a3728),
@@ -173,16 +123,77 @@ let id = world.objects.spawn_rigid_body(RigidBodyDesc {
 - `Collider::aabb(half_width, half_height)` — rectangle
 - `Collider::circle(radius)` — circle
 
+### Sprites (no physics)
+
+Purely visual objects — a textured or colored quad with a transform.
+
+```rust
+let id = world.spawn_sprite(SpriteDesc {
+    texture: TextureId::NONE,       // solid color (or a loaded texture)
+    position: Vec2::new(x, y),
+    size: Vec2::new(2.0, 2.0),
+    rotation: 0.0,
+    color: Color::from_hex(0xff9f43),
+});
+
+// Move/rotate sprites directly (through the ObjectSystem):
+world.objects.set_sprite_position(id, Vec2::new(3.0, 4.0));
+world.objects.set_sprite_rotation(id, 0.5);
+let pos = world.objects.get_sprite_position(id);  // -> Option<Vec2>
+```
+
+### Lights
+
+Lights are added to the World's `LightingSystem` and tracked as objects.
+
+```rust
+use unison2d::lighting::Light;
+
+let id = world.spawn_light(LightDesc {
+    light: Light::point(Vec2::new(0.0, 5.0), 10.0)
+        .with_color(Color::from_hex(0xffd700))
+        .with_intensity(1.5),
+});
+
+// Access the underlying light via its handle:
+let handle = world.objects.get_light_handle(id).unwrap();
+world.lighting.get_light_mut(handle).unwrap().intensity = 2.0;
+```
+
 ### Static Rectangles (convenience)
 
 ```rust
-let id = world.objects.spawn_static_rect(position, size, color);
+let id = world.spawn_static_rect(position, size, color);
 ```
 
 ### Despawn
 
 ```rust
-world.objects.despawn(id);
+world.despawn(id);
+```
+
+## Prefab Trait
+
+A lightweight trait for reusable object spawning templates.
+
+```rust
+use unison2d::Prefab;
+
+struct EnemyPrefab;
+
+impl Prefab for EnemyPrefab {
+    fn spawn(&self, world: &mut World, position: Vec2) -> ObjectId {
+        world.spawn_soft_body(SoftBodyDesc {
+            mesh: create_square_mesh(0.8, 3),
+            material: Material::RUBBER,
+            position,
+            color: Color::from_hex(0xe74c3c),
+        })
+    }
+}
+
+// Usage:
+let enemy = EnemyPrefab.spawn(&mut world, Vec2::new(5.0, 3.0));
 ```
 
 ## Physics & Movement
@@ -243,13 +254,22 @@ engine.action_just_ended(Action::Jump)      // released this frame?
 engine.action_axis(Action::MoveLeft, Action::MoveRight)  // -1.0, 0.0, or 1.0
 ```
 
+### Raw Input (for Levels)
+
+Inside a Level, use `ctx.input` directly:
+
+```rust
+ctx.input.is_key_pressed(KeyCode::ArrowLeft)       // held?
+ctx.input.is_key_just_pressed(KeyCode::Space)      // just pressed?
+```
+
 ### Available KeyCodes
 
 `ArrowUp`, `ArrowDown`, `ArrowLeft`, `ArrowRight`, `Space`, `Enter`, `Escape`, `Tab`, `Backspace`, `ShiftLeft`, `ShiftRight`, `ControlLeft`, `ControlRight`, `AltLeft`, `AltRight`, `A`-`Z`, `Digit0`-`Digit9`
 
 ## Cameras
 
-Cameras live on the world's `CameraSystem`. A default "main" camera (20×15) is created automatically.
+Cameras live on the world's `CameraSystem`. A default "main" camera (20x15) is created automatically.
 
 ```rust
 world.cameras.follow("main", player_id, 0.08);  // follow with smoothing
@@ -303,7 +323,6 @@ engine.end_composite();
 fn render(&mut self, engine: &mut Engine<Action>) {
     if let Some(r) = engine.renderer_mut() {
         self.world.auto_render(r);
-        // Draw additional stuff after auto_render:
         r.draw(RenderCommand::Line {
             start: [0.0, 0.0],
             end: [5.0, 5.0],
@@ -324,80 +343,66 @@ Color::WHITE, Color::BLACK, Color::RED, Color::GREEN, Color::BLUE
 
 ## Level Trait
 
-Optional scene abstraction. Each level owns a World.
+Optional scene abstraction with shared state and lifecycle hooks. Each level owns a World.
 
 ```rust
-pub trait Level {
+pub trait Level<S = ()> {
     fn world(&self) -> &World;
     fn world_mut(&mut self) -> &mut World;
-    fn update(&mut self, input: &InputState, dt: f32);
-    fn render(&mut self, renderer: &mut dyn Renderer<Error = String>);
+    fn update(&mut self, ctx: &mut LevelContext<S>);
+    fn render(&mut self, ctx: &mut RenderContext);
+
+    // Lifecycle hooks (default no-op):
+    fn on_enter(&mut self) {}
+    fn on_exit(&mut self) {}
+    fn on_pause(&mut self) {}
+    fn on_resume(&mut self) {}
 }
 ```
 
-Levels take `&InputState` (not generic over actions), enabling `Vec<Box<dyn Level>>`.
+### LevelContext
+
+Bundled context passed to `Level::update()`:
 
 ```rust
-struct GameplayLevel { world: World, player: ObjectId }
-
-impl Level for GameplayLevel {
-    fn world(&self) -> &World { &self.world }
-    fn world_mut(&mut self) -> &mut World { &mut self.world }
-    fn update(&mut self, input: &InputState, dt: f32) {
-        // game logic...
-        self.world.step(dt);
-    }
-    fn render(&mut self, renderer: &mut dyn Renderer<Error = String>) {
-        self.world.auto_render(renderer);
-    }
+pub struct LevelContext<'a, S = ()> {
+    pub input: &'a InputState,    // raw input for this frame
+    pub dt: f32,                  // fixed timestep delta
+    pub shared: &'a mut S,        // shared state from the Game
 }
 ```
 
-## Common Patterns
-
-### Platformer Movement
+Build it with the engine convenience method:
 
 ```rust
-fn update(&mut self, engine: &mut Engine<Action>) {
-    let move_x = engine.action_axis(Action::MoveLeft, Action::MoveRight);
-    if move_x != 0.0 {
-        self.world.objects.apply_force(self.player, Vec2::new(move_x * 1200.0, 0.0));
-    }
-    if engine.action_just_started(Action::Jump) && self.world.objects.is_grounded(self.player) {
-        self.world.objects.apply_impulse(self.player, Vec2::new(0.0, 8.0));
-    }
-    self.world.step(engine.dt());
+let mut ctx = engine.level_context(&mut self.shared);
+level.update(&mut ctx);
+```
+
+### RenderContext
+
+Bundled context passed to `Level::render()`:
+
+```rust
+pub struct RenderContext<'a> {
+    pub renderer: &'a mut dyn Renderer<Error = String>,
 }
 ```
 
-### Spawning Objects on Input
+| Method | Description |
+|--------|-------------|
+| `create_render_target(w, h)` | Create an offscreen render target, returns `(RenderTargetId, TextureId)` |
+| `bind_render_target(id)` | Bind a render target for subsequent draw calls |
+| `destroy_render_target(id)` | Destroy an offscreen render target |
+| `screen_size()` | Get screen/canvas size in pixels |
+| `draw_overlay(texture, position, size)` | Draw a render-target texture as a screen-space overlay (0..1 NDC) |
+| `draw_overlay_bordered(texture, position, size, border_width, border_color)` | Same, with a colored border |
+
+Build it with the engine convenience method:
 
 ```rust
-fn update(&mut self, engine: &mut Engine<Action>) {
-    if engine.action_just_started(Action::Spawn) {
-        let pos = self.world.objects.get_position(self.player) + Vec2::new(2.0, 0.0);
-        self.world.objects.spawn_soft_body(SoftBodyDesc {
-            mesh: create_square_mesh(0.5, 3),
-            material: Material::JELLO,
-            position: pos,
-            color: Color::from_hex(0x6c5ce7),
-        });
-    }
-    self.world.step(engine.dt());
-}
-```
-
-### Camera Zoom
-
-```rust
-fn update(&mut self, engine: &mut Engine<Action>) {
-    if engine.action_active(Action::ZoomIn) {
-        self.world.cameras.get_mut("main").unwrap().zoom *= 1.02;
-    }
-    if engine.action_active(Action::ZoomOut) {
-        self.world.cameras.get_mut("main").unwrap().zoom *= 0.98;
-    }
-    self.world.step(engine.dt());
+if let Some(mut ctx) = engine.render_context() {
+    level.render(&mut ctx);
 }
 ```
 

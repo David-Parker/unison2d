@@ -85,7 +85,9 @@ unison2d = { path = "unison2d/crates/unison2d", features = ["simd", "profiling"]
 
 ## Documentation
 
-See [docs/INDEX.md](docs/INDEX.md) for per-crate API documentation.
+- [**User Guide**](docs/guide/README.md) — patterns, best practices, getting started
+- [**API Reference**](docs/API.md) — single-file type and method reference
+- [**Per-Crate Docs**](docs/INDEX.md) — deep dives into each subsystem
 
 ## License
 
