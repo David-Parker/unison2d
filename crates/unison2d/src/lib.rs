@@ -15,7 +15,7 @@
 ///     type Action = MyAction;
 ///     fn init(&mut self, engine: &mut Engine<MyAction>) {
 ///         engine.bind_key(KeyCode::Space, MyAction::Jump);
-///         self.player = self.world.objects.spawn_soft_body(/* ... */);
+///         self.player = self.world.spawn_soft_body(/* ... */);
 ///     }
 ///     fn update(&mut self, engine: &mut Engine<MyAction>) {
 ///         self.world.step(engine.dt());
@@ -46,14 +46,16 @@ mod object_system;
 mod camera_system;
 mod world;
 mod level;
+mod prefab;
 mod game;
 
 pub use engine::Engine;
-pub use object::{ObjectId, SoftBodyDesc, RigidBodyDesc};
+pub use object::{ObjectId, SoftBodyDesc, RigidBodyDesc, SpriteDesc, LightDesc};
 pub use object_system::ObjectSystem;
 pub use camera_system::CameraSystem;
-pub use world::World;
-pub use level::Level;
+pub use world::{World, Environment};
+pub use level::{Level, LevelContext, RenderContext};
+pub use prefab::Prefab;
 pub use game::Game;
 
 // Subsystem re-exports

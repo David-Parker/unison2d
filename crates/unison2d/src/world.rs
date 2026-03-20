@@ -7,12 +7,26 @@
 //! - `cameras` ([`CameraSystem`]) — named cameras with optional follow targets
 //! - `lighting` ([`LightingSystem`]) — dynamic lights and shadows
 
-use unison_math::Color;
+use unison_math::{Color, Vec2};
 use unison_render::{Renderer, RenderTargetId};
 use unison_lighting::LightingSystem;
 
 use crate::object_system::ObjectSystem;
 use crate::camera_system::CameraSystem;
+
+/// Rendering environment configuration for a World.
+pub struct Environment {
+    /// Background clear color.
+    pub background_color: Color,
+}
+
+impl Default for Environment {
+    fn default() -> Self {
+        Self {
+            background_color: Color::BLACK,
+        }
+    }
+}
 
 /// A self-contained game world.
 ///
@@ -36,8 +50,8 @@ pub struct World {
     pub cameras: CameraSystem,
     /// Lighting subsystem.
     pub lighting: LightingSystem,
-    /// Background clear color.
-    background_color: Color,
+    /// Rendering environment (background color, etc.).
+    pub environment: Environment,
 }
 
 impl World {
@@ -50,18 +64,59 @@ impl World {
             objects: ObjectSystem::new(),
             cameras: CameraSystem::new(),
             lighting: LightingSystem::new(),
-            background_color: Color::BLACK,
+            environment: Environment::default(),
         }
     }
 
     /// Set the background clear color.
     pub fn set_background(&mut self, color: Color) {
-        self.background_color = color;
+        self.environment.background_color = color;
     }
 
     /// Get the background clear color.
     pub fn background_color(&self) -> Color {
-        self.background_color
+        self.environment.background_color
+    }
+
+    // ── Spawning ──
+
+    /// Spawn a soft body object.
+    pub fn spawn_soft_body(&mut self, desc: crate::object::SoftBodyDesc) -> crate::object::ObjectId {
+        self.objects.spawn_soft_body(desc)
+    }
+
+    /// Spawn a rigid body object.
+    pub fn spawn_rigid_body(&mut self, desc: crate::object::RigidBodyDesc) -> crate::object::ObjectId {
+        self.objects.spawn_rigid_body(desc)
+    }
+
+    /// Spawn a static rectangle (platform, wall, floor).
+    pub fn spawn_static_rect(&mut self, position: Vec2, size: Vec2, color: Color) -> crate::object::ObjectId {
+        self.objects.spawn_static_rect(position, size, color)
+    }
+
+    /// Spawn a sprite-only object (no physics).
+    pub fn spawn_sprite(&mut self, desc: crate::object::SpriteDesc) -> crate::object::ObjectId {
+        self.objects.spawn_sprite(desc)
+    }
+
+    /// Spawn a light object.
+    ///
+    /// Adds the light to the `LightingSystem` and registers it in the
+    /// `ObjectSystem` so it can be tracked by `ObjectId`.
+    pub fn spawn_light(&mut self, desc: crate::object::LightDesc) -> crate::object::ObjectId {
+        let light_handle = self.lighting.add_light(desc.light);
+        self.objects.spawn_light(light_handle)
+    }
+
+    /// Despawn any object.
+    ///
+    /// Handles cleanup across subsystems — if the object is a light,
+    /// it is also removed from the `LightingSystem`.
+    pub fn despawn(&mut self, id: crate::object::ObjectId) {
+        if let Some(light_handle) = self.objects.despawn(id) {
+            self.lighting.remove_light(light_handle);
+        }
     }
 
     /// Advance the world by one timestep.
@@ -88,7 +143,7 @@ impl World {
         };
 
         renderer.begin_frame(camera);
-        renderer.clear(self.background_color);
+        renderer.clear(self.environment.background_color);
 
         for cmd in self.objects.render_commands() {
             renderer.draw(cmd);
@@ -117,7 +172,7 @@ impl World {
 
             renderer.bind_render_target(target_id);
             renderer.begin_frame(camera);
-            renderer.clear(self.background_color);
+            renderer.clear(self.environment.background_color);
 
             for cmd in &commands {
                 renderer.draw(cmd.clone());

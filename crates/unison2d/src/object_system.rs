@@ -8,9 +8,10 @@ use std::collections::HashMap;
 
 use unison_math::{Color, Vec2};
 use unison_physics::{BodyHandle, PhysicsWorld};
-use unison_render::{DrawMesh, RenderCommand, TextureId};
+use unison_render::{DrawMesh, DrawSprite, RenderCommand, TextureId};
+use unison_lighting::LightHandle;
 
-use crate::object::{ObjectEntry, ObjectId, ObjectKind, RigidBodyDesc, SoftBodyDesc};
+use crate::object::{ObjectEntry, ObjectId, ObjectKind, RigidBodyDesc, SoftBodyDesc, SpriteDesc};
 
 /// Manages game objects and their physics simulation.
 ///
@@ -79,13 +80,53 @@ impl ObjectSystem {
         })
     }
 
+    /// Spawn a sprite-only object (no physics). Returns an ObjectId.
+    ///
+    /// Sprites are purely visual — a textured or colored quad with a transform.
+    /// Use the sprite query/set methods to move or rotate them.
+    pub fn spawn_sprite(&mut self, desc: SpriteDesc) -> ObjectId {
+        let id = self.next_object_id();
+        self.entries.insert(id, ObjectEntry {
+            kind: ObjectKind::Sprite {
+                texture: desc.texture,
+                position: desc.position,
+                size: desc.size,
+                rotation: desc.rotation,
+                color: desc.color,
+            },
+        });
+        id
+    }
+
+    /// Register a light as a tracked object.
+    ///
+    /// The `LightHandle` should have been obtained by adding the light to
+    /// the World's `LightingSystem` first. Prefer `World::spawn_light()` which
+    /// handles both steps.
+    pub fn spawn_light(&mut self, light_handle: LightHandle) -> ObjectId {
+        let id = self.next_object_id();
+        self.entries.insert(id, ObjectEntry {
+            kind: ObjectKind::Light { light_handle },
+        });
+        id
+    }
+
     /// Remove an object from the world.
-    pub fn despawn(&mut self, id: ObjectId) {
+    ///
+    /// Returns the `LightHandle` if the object was a light, so the caller
+    /// can also remove it from the `LightingSystem`. For non-light objects
+    /// the return value is `None`.
+    pub fn despawn(&mut self, id: ObjectId) -> Option<LightHandle> {
         if let Some(entry) = self.entries.remove(&id) {
-            let handle = entry.handle();
-            self.physics.remove_body(handle);
-            self.handle_map.remove(&handle);
+            if let Some(handle) = entry.physics_handle() {
+                self.physics.remove_body(handle);
+                self.handle_map.remove(&handle);
+            }
+            if let ObjectKind::Light { light_handle } = &entry.kind {
+                return Some(*light_handle);
+            }
         }
+        None
     }
 
     // ── Queries ──
@@ -159,6 +200,42 @@ impl ObjectSystem {
     pub fn set_velocity(&mut self, id: ObjectId, vel: Vec2) {
         if let Some(handle) = self.get_handle(id) {
             self.physics.set_velocity(handle, vel.x, vel.y);
+        }
+    }
+
+    // ── Sprite queries ──
+
+    /// Get the position of a sprite object.
+    pub fn get_sprite_position(&self, id: ObjectId) -> Option<Vec2> {
+        match &self.entries.get(&id)?.kind {
+            ObjectKind::Sprite { position, .. } => Some(*position),
+            _ => None,
+        }
+    }
+
+    /// Set the position of a sprite object.
+    pub fn set_sprite_position(&mut self, id: ObjectId, pos: Vec2) {
+        if let Some(entry) = self.entries.get_mut(&id) {
+            if let ObjectKind::Sprite { position, .. } = &mut entry.kind {
+                *position = pos;
+            }
+        }
+    }
+
+    /// Set the rotation of a sprite object (radians).
+    pub fn set_sprite_rotation(&mut self, id: ObjectId, rot: f32) {
+        if let Some(entry) = self.entries.get_mut(&id) {
+            if let ObjectKind::Sprite { rotation, .. } = &mut entry.kind {
+                *rotation = rot;
+            }
+        }
+    }
+
+    /// Get the `LightHandle` for a light object, for direct `LightingSystem` access.
+    pub fn get_light_handle(&self, id: ObjectId) -> Option<LightHandle> {
+        match &self.entries.get(&id)?.kind {
+            ObjectKind::Light { light_handle } => Some(*light_handle),
+            _ => None,
         }
     }
 
@@ -242,6 +319,20 @@ impl ObjectSystem {
                         });
                     }
                 }
+                ObjectKind::Sprite { texture, position, size, rotation, color } => {
+                    commands.push(RenderCommand::Sprite(DrawSprite {
+                        texture: *texture,
+                        position: [position.x, position.y],
+                        size: [size.x, size.y],
+                        rotation: *rotation,
+                        uv: [0.0, 0.0, 1.0, 1.0],
+                        color: *color,
+                    }));
+                }
+                ObjectKind::Light { .. } => {
+                    // Lights don't produce render commands directly;
+                    // they are handled by the LightingSystem.
+                }
             }
         }
 
@@ -264,7 +355,7 @@ impl ObjectSystem {
     }
 
     fn get_handle(&self, id: ObjectId) -> Option<BodyHandle> {
-        self.entries.get(&id).map(|entry| entry.handle())
+        self.entries.get(&id).and_then(|entry| entry.physics_handle())
     }
 
     fn with_handle<T, F: FnOnce(BodyHandle) -> T>(&self, id: ObjectId, f: F) -> Option<T> {

@@ -2,6 +2,8 @@
 
 use unison_math::{Color, Vec2};
 use unison_physics::{BodyConfig, BodyHandle, Collider, Material, Mesh, RigidBodyConfig};
+use unison_render::TextureId;
+use unison_lighting::LightHandle;
 
 /// Unique identifier for a game object managed by the Engine.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -61,6 +63,32 @@ pub struct RigidBodyDesc {
     pub is_static: bool,
 }
 
+/// Description for spawning a sprite-only object (no physics).
+///
+/// Sprites are purely visual — a textured or colored quad with a transform.
+/// They are not affected by gravity, collisions, or forces.
+pub struct SpriteDesc {
+    /// Texture to render (`TextureId::NONE` for a solid color rect).
+    pub texture: TextureId,
+    /// Initial position in world coordinates.
+    pub position: Vec2,
+    /// Size (width, height) in world units.
+    pub size: Vec2,
+    /// Rotation in radians.
+    pub rotation: f32,
+    /// Render color / tint.
+    pub color: Color,
+}
+
+/// Description for spawning a light object.
+///
+/// Wraps a [`unison_lighting::Light`]. The light is added to the World's
+/// `LightingSystem` and tracked as an object so it can be queried by `ObjectId`.
+pub struct LightDesc {
+    /// The light configuration.
+    pub light: unison_lighting::Light,
+}
+
 /// Internal representation of a game object in the Engine's registry.
 pub(crate) enum ObjectKind {
     SoftBody {
@@ -72,6 +100,16 @@ pub(crate) enum ObjectKind {
         handle: BodyHandle,
         color: Color,
     },
+    Sprite {
+        texture: TextureId,
+        position: Vec2,
+        size: Vec2,
+        rotation: f32,
+        color: Color,
+    },
+    Light {
+        light_handle: LightHandle,
+    },
 }
 
 pub(crate) struct ObjectEntry {
@@ -79,11 +117,14 @@ pub(crate) struct ObjectEntry {
 }
 
 impl ObjectEntry {
-    /// Get the physics BodyHandle for this object.
-    pub(crate) fn handle(&self) -> BodyHandle {
+    /// Get the physics BodyHandle for this object, if it has one.
+    ///
+    /// Returns `None` for Sprite and Light objects (no physics backing).
+    pub(crate) fn physics_handle(&self) -> Option<BodyHandle> {
         match &self.kind {
-            ObjectKind::SoftBody { handle, .. } => *handle,
-            ObjectKind::RigidBody { handle, .. } => *handle,
+            ObjectKind::SoftBody { handle, .. } => Some(*handle),
+            ObjectKind::RigidBody { handle, .. } => Some(*handle),
+            ObjectKind::Sprite { .. } | ObjectKind::Light { .. } => None,
         }
     }
 }
