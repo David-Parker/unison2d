@@ -188,6 +188,62 @@ fn render(&mut self, ctx: &mut RenderContext) {
 
 `draw_overlay_bordered` handles all the NDC math, camera setup, and draw calls. For an overlay without a border, use `draw_overlay(texture, position, size)`. Coordinates are in 0..1 normalized screen space — (0,0) is bottom-left, (1,1) is top-right.
 
+## Day/Night Cycle
+
+Use a single directional light with a time-driven `sun_amount` (1 = sun, 0 = moon). Each half of the cycle arcs the light across the sky; the `sun_amount` blend handles color and intensity transitions at the horizons.
+
+```rust
+const CYCLE_DURATION: f32 = 24.0;
+
+struct DayNightCycle {
+    light: LightId,
+    cycle_time: f32,
+}
+
+impl DayNightCycle {
+    fn new(world: &mut World) -> Self {
+        let light = world.lighting.add_directional_light(DirectionalLight {
+            direction: Vec2::new(1.0, 0.0),
+            color: Color::new(1.0, 0.5, 0.2, 1.0),
+            intensity: 0.6,
+            casts_shadows: true,
+            shadow: ShadowSettings { /* ... */ },
+        });
+        Self { light, cycle_time: 0.0 }
+    }
+
+    fn update(&mut self, world: &mut World, dt: f32) {
+        self.cycle_time = (self.cycle_time + dt) % CYCLE_DURATION;
+        let t = self.cycle_time / CYCLE_DURATION; // 0..1
+
+        // sun_amount: 1 = sun, 0 = moon, with smooth transitions at boundaries
+        let fade = 0.10;
+        let sun_amount = /* smoothstep blend at t=0.0 and t=0.5 */;
+
+        // Arc within each half-cycle
+        let phase_t = if t < 0.5 { t / 0.5 } else { (t - 0.5) / 0.5 };
+        let angle = smoothstep(phase_t) * PI;
+
+        // Direction: sun right→left, moon left→right
+        light.direction = if t < 0.5 {
+            Vec2::new(angle.cos(), -angle.sin())
+        } else {
+            Vec2::new(-angle.cos(), -angle.sin())
+        };
+
+        // Lerp color/intensity between sun and moon based on sun_amount
+        light.color = lerp_color(MOON_COLOR, sun_color, sun_amount);
+        light.intensity = lerp(moon_intensity, sun_intensity, sun_amount);
+    }
+}
+```
+
+Key points:
+- **One continuous blend variable** (`sun_amount`) avoids flip-flop artifacts at transitions
+- **`smoothstep` on `phase_t`** before computing the angle eases the light direction near the horizon, preventing shadow jitter from rapid direction changes
+- **Moon intensity stays flat** — only the angle changes during the moon phase, giving a calm nighttime feel
+- See `project/levels/day_night_cycle.rs` for the full implementation
+
 ## Level Transitions
 
 See [Levels — Shared State & Events](levels.md#shared-state--events) for the full pattern. The short version:
