@@ -326,23 +326,15 @@ impl ObjectSystem {
     // ── Rendering ──
 
     /// Collect render commands for all objects.
+    ///
+    /// Rigid bodies are drawn first, then soft bodies on top. This hides the
+    /// inflated soft-body edges that would otherwise peek out at contact points.
     pub fn render_commands(&self) -> Vec<RenderCommand> {
         let mut commands = Vec::new();
 
+        // Pass 1: rigid bodies and sprites (drawn first, behind)
         for entry in self.entries.values() {
             match &entry.kind {
-                ObjectKind::SoftBody { handle, color, texture, uvs, .. } => {
-                    if let Some((positions, indices)) = self.physics.get_body_render_data(*handle) {
-                        commands.push(RenderCommand::Mesh(DrawMesh {
-                            positions,
-                            uvs: uvs.clone(),
-                            indices: indices.to_vec(),
-                            texture: *texture,
-                            color: *color,
-                            vertex_colors: None,
-                        }));
-                    }
-                }
                 ObjectKind::RigidBody { handle, color } => {
                     if let Some(body) = self.physics.get_rigid_body(*handle) {
                         let he = body.collider.half_extents();
@@ -361,6 +353,23 @@ impl ObjectSystem {
                         rotation: *rotation,
                         uv: [0.0, 0.0, 1.0, 1.0],
                         color: *color,
+                    }));
+                }
+                _ => {}
+            }
+        }
+
+        // Pass 2: soft bodies (drawn on top, covering contact seams)
+        for entry in self.entries.values() {
+            if let ObjectKind::SoftBody { handle, color, texture, uvs, .. } = &entry.kind {
+                if let Some((positions, indices)) = self.physics.get_body_render_data(*handle) {
+                    commands.push(RenderCommand::Mesh(DrawMesh {
+                        positions,
+                        uvs: uvs.clone(),
+                        indices: indices.to_vec(),
+                        texture: *texture,
+                        color: *color,
+                        vertex_colors: None,
                     }));
                 }
             }
