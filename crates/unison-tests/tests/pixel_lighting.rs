@@ -102,6 +102,65 @@ fn rasterize_triangle(
     }
 }
 
+/// Rasterize a filled triangle with per-vertex colors (barycentric interpolation).
+/// The vertex color is multiplied component-wise with the solid color.
+fn rasterize_triangle_vc(
+    buf: &mut PixelBuffer,
+    v0: [f32; 2],
+    v1: [f32; 2],
+    v2: [f32; 2],
+    color: [f32; 4],
+    vc0: [f32; 4],
+    vc1: [f32; 4],
+    vc2: [f32; 4],
+    blend: BlendFn,
+) {
+    let min_x = v0[0].min(v1[0]).min(v2[0]).max(0.0) as u32;
+    let max_x = (v0[0].max(v1[0]).max(v2[0]).ceil() as u32).min(buf.width - 1);
+    let min_y = v0[1].min(v1[1]).min(v2[1]).max(0.0) as u32;
+    let max_y = (v0[1].max(v1[1]).max(v2[1]).ceil() as u32).min(buf.height - 1);
+
+    // Precompute denominator for barycentric coordinates
+    let denom = (v1[1] - v2[1]) * (v0[0] - v2[0]) + (v2[0] - v1[0]) * (v0[1] - v2[1]);
+    if denom.abs() < 1e-10 {
+        return; // degenerate triangle
+    }
+    let inv_denom = 1.0 / denom;
+
+    for py in min_y..=max_y {
+        for px in min_x..=max_x {
+            let p = [px as f32 + 0.5, py as f32 + 0.5];
+            if !point_in_triangle(p, v0, v1, v2) {
+                continue;
+            }
+
+            // Barycentric coordinates
+            let w0 = ((v1[1] - v2[1]) * (p[0] - v2[0]) + (v2[0] - v1[0]) * (p[1] - v2[1])) * inv_denom;
+            let w1 = ((v2[1] - v0[1]) * (p[0] - v2[0]) + (v0[0] - v2[0]) * (p[1] - v2[1])) * inv_denom;
+            let w2 = 1.0 - w0 - w1;
+
+            // Interpolate vertex color
+            let interp = [
+                vc0[0] * w0 + vc1[0] * w1 + vc2[0] * w2,
+                vc0[1] * w0 + vc1[1] * w1 + vc2[1] * w2,
+                vc0[2] * w0 + vc1[2] * w1 + vc2[2] * w2,
+                vc0[3] * w0 + vc1[3] * w1 + vc2[3] * w2,
+            ];
+
+            // Multiply vertex color with solid color
+            let src = [
+                color[0] * interp[0],
+                color[1] * interp[1],
+                color[2] * interp[2],
+                color[3] * interp[3],
+            ];
+
+            let dst = buf.get(px, py);
+            buf.set(px, py, blend(src, dst));
+        }
+    }
+}
+
 /// Rasterize a quad (two triangles) given 4 vertices in order.
 fn rasterize_quad(
     buf: &mut PixelBuffer,
@@ -268,6 +327,7 @@ fn render_shadow_mask_point(
         [light.position.x, light.position.y],
         light.radius,
         occluders,
+        light.shadow_attenuation,
     );
 
     for quad in &quads {
@@ -304,6 +364,7 @@ fn render_shadow_mask_directional(
         [light.direction.x, light.direction.y],
         cast_distance,
         occluders,
+        light.shadow_attenuation,
     );
 
     for quad in &quads {
@@ -386,7 +447,9 @@ fn render_lightmap(
                     // Map pixel to shadow mask UV (same as shader: gl_FragCoord.xy / u_screen_size)
                     let u = (px as f32 + 0.5) / buf_w as f32;
                     let v = (py as f32 + 0.5) / buf_h as f32;
-                    mask.sample_uv(u, v)[0] // .r channel
+                    let raw_shadow = mask.sample_uv(u, v)[0]; // .r channel
+                    // Apply shadow strength: mix(1.0, shadow, shadow_strength)
+                    1.0 - light.shadow_strength * (1.0 - raw_shadow)
                 } else {
                     1.0
                 };
@@ -430,7 +493,9 @@ fn render_lightmap(
                 let shadow = if let Some(ref mask) = shadow_mask {
                     let u = (px as f32 + 0.5) / buf_w as f32;
                     let v = (py as f32 + 0.5) / buf_h as f32;
-                    mask.sample_uv(u, v)[0]
+                    let raw_shadow = mask.sample_uv(u, v)[0];
+                    // Apply shadow strength: mix(1.0, shadow, shadow_strength)
+                    1.0 - light.shadow_strength * (1.0 - raw_shadow)
                 } else {
                     1.0
                 };
@@ -533,6 +598,8 @@ fn lightmap_point_light_bright_at_center() {
         radius: 5.0,
         casts_shadows: false,
         shadow_filter: ShadowFilter::None,
+        shadow_strength: 1.0,
+        shadow_attenuation: 0.0,
     };
 
     let lightmap = render_lightmap(&camera, 100, 75, ambient, &[light], &[], &[], None);
@@ -562,6 +629,8 @@ fn lightmap_point_light_gradual_falloff() {
         radius: 8.0,
         casts_shadows: false,
         shadow_filter: ShadowFilter::None,
+        shadow_strength: 1.0,
+        shadow_attenuation: 0.0,
     };
 
     let lightmap = render_lightmap(&camera, 200, 150, ambient, &[light], &[], &[], None);
@@ -594,6 +663,8 @@ fn lightmap_shadow_blocks_light_behind_box() {
         radius: 12.0,
         casts_shadows: true,
         shadow_filter: ShadowFilter::None,
+        shadow_strength: 1.0,
+        shadow_attenuation: 0.0,
     };
     let occluders = vec![Occluder::from_aabb(0.0, 0.0, 1.0, 1.0)];
 
@@ -628,6 +699,8 @@ fn lightmap_shadow_does_not_block_light_in_front_of_box() {
         radius: 15.0,
         casts_shadows: true,
         shadow_filter: ShadowFilter::None,
+        shadow_strength: 1.0,
+        shadow_attenuation: 0.0,
     };
     let occluders = vec![Occluder::from_aabb(0.0, 0.0, 1.0, 1.0)];
 
@@ -689,6 +762,8 @@ fn lightmap_directional_shadow_creates_stripe() {
         intensity: 1.0,
         casts_shadows: true,
         shadow_filter: ShadowFilter::None,
+        shadow_strength: 1.0,
+        shadow_attenuation: 0.0,
     };
 
     // Wide platform
@@ -749,6 +824,8 @@ fn composite_preserves_lit_areas() {
         radius: 5.0,
         casts_shadows: false,
         shadow_filter: ShadowFilter::None,
+        shadow_strength: 1.0,
+        shadow_attenuation: 0.0,
     };
 
     let result = render_lit_scene(
@@ -779,6 +856,8 @@ fn composite_shadow_creates_visible_dark_patch() {
         radius: 12.0,
         casts_shadows: true,
         shadow_filter: ShadowFilter::None,
+        shadow_strength: 1.0,
+        shadow_attenuation: 0.0,
     };
     let occluders = vec![Occluder::from_aabb(0.0, 0.0, 1.5, 1.5)];
 
@@ -819,6 +898,8 @@ fn game_scenario_donut_light_with_ground_shadow() {
         radius: 6.0,
         casts_shadows: true,
         shadow_filter: ShadowFilter::Pcf5,
+        shadow_strength: 1.0,
+        shadow_attenuation: 0.0,
     };
 
     // Moonlight
@@ -912,6 +993,8 @@ fn shadow_edge_is_sharp_without_pcf() {
         radius: 15.0,
         casts_shadows: true,
         shadow_filter: ShadowFilter::None, // hard shadows
+        shadow_strength: 1.0,
+        shadow_attenuation: 0.0,
     };
     let occluders = vec![Occluder::from_aabb(3.0, 0.0, 1.0, 1.0)];
 
@@ -953,6 +1036,8 @@ fn multiple_lights_accumulate_additively() {
         radius: 5.0,
         casts_shadows: false,
         shadow_filter: ShadowFilter::None,
+        shadow_strength: 1.0,
+        shadow_attenuation: 0.0,
     };
     let light2 = PointLight {
         position: Vec2::new(3.0, 0.0),
@@ -961,6 +1046,8 @@ fn multiple_lights_accumulate_additively() {
         radius: 5.0,
         casts_shadows: false,
         shadow_filter: ShadowFilter::None,
+        shadow_strength: 1.0,
+        shadow_attenuation: 0.0,
     };
 
     let lightmap = render_lightmap(
@@ -998,6 +1085,8 @@ fn ground_shadow_prevents_light_bleed_below() {
         radius: 12.0,
         casts_shadows: true,
         shadow_filter: ShadowFilter::None,
+        shadow_strength: 1.0,
+        shadow_attenuation: 0.0,
     };
 
     // Test WITH ground shadow
@@ -1035,6 +1124,8 @@ fn shadow_from_two_occluders_both_cast() {
         radius: 15.0,
         casts_shadows: true,
         shadow_filter: ShadowFilter::None,
+        shadow_strength: 1.0,
+        shadow_attenuation: 0.0,
     };
 
     // Two boxes side by side
@@ -1153,6 +1244,8 @@ fn lightmap_composite_uv_not_flipped() {
         radius: 3.0,
         casts_shadows: false,
         shadow_filter: ShadowFilter::None,
+        shadow_strength: 1.0,
+        shadow_attenuation: 0.0,
     };
 
     let result = render_lit_scene(
@@ -1273,6 +1366,7 @@ impl PixelRenderer {
         positions: &[f32],
         indices: &[u32],
         color: [f32; 4],
+        vertex_colors: Option<&[f32]>,
     ) {
         let cam = self.current_camera.as_ref().unwrap().clone();
         let buf_w = self.active_buf().width;
@@ -1282,16 +1376,31 @@ impl PixelRenderer {
             if tri.len() < 3 {
                 continue;
             }
-            let v0 = world_to_pixel(&cam, buf_w, buf_h,
-                positions[tri[0] as usize * 2], positions[tri[0] as usize * 2 + 1]);
-            let v1 = world_to_pixel(&cam, buf_w, buf_h,
-                positions[tri[1] as usize * 2], positions[tri[1] as usize * 2 + 1]);
-            let v2 = world_to_pixel(&cam, buf_w, buf_h,
-                positions[tri[2] as usize * 2], positions[tri[2] as usize * 2 + 1]);
+            let i0 = tri[0] as usize;
+            let i1 = tri[1] as usize;
+            let i2 = tri[2] as usize;
 
-            let blend = self.blend_fn();
-            let buf = self.active_buf_mut();
-            rasterize_triangle(buf, v0, v1, v2, color, blend);
+            let v0 = world_to_pixel(&cam, buf_w, buf_h,
+                positions[i0 * 2], positions[i0 * 2 + 1]);
+            let v1 = world_to_pixel(&cam, buf_w, buf_h,
+                positions[i1 * 2], positions[i1 * 2 + 1]);
+            let v2 = world_to_pixel(&cam, buf_w, buf_h,
+                positions[i2 * 2], positions[i2 * 2 + 1]);
+
+            if let Some(vc) = vertex_colors {
+                // Per-vertex colors: rasterize with barycentric interpolation
+                let vc0 = [vc[i0*4], vc[i0*4+1], vc[i0*4+2], vc[i0*4+3]];
+                let vc1 = [vc[i1*4], vc[i1*4+1], vc[i1*4+2], vc[i1*4+3]];
+                let vc2 = [vc[i2*4], vc[i2*4+1], vc[i2*4+2], vc[i2*4+3]];
+
+                let blend = self.blend_fn();
+                let buf = self.active_buf_mut();
+                rasterize_triangle_vc(buf, v0, v1, v2, color, vc0, vc1, vc2, blend);
+            } else {
+                let blend = self.blend_fn();
+                let buf = self.active_buf_mut();
+                rasterize_triangle(buf, v0, v1, v2, color, blend);
+            }
         }
     }
 
@@ -1390,6 +1499,7 @@ impl PixelRenderer {
         shadow_mask: TextureId,
         screen_size: (f32, f32),
         _shadow_filter: u32,
+        shadow_strength: f32,
     ) {
         let hw = size[0] / 2.0;
         let hh = size[1] / 2.0;
@@ -1454,7 +1564,9 @@ impl PixelRenderer {
                 let shadow = if has_shadow {
                     let su = (px as f32 + 0.5) / screen_size.0;
                     let sv = (py as f32 + 0.5) / screen_size.1;
-                    self.textures[&shadow_mask.0].sample_uv(su, sv)[0]
+                    let raw_shadow = self.textures[&shadow_mask.0].sample_uv(su, sv)[0];
+                    // Apply shadow strength: mix(1.0, shadow, shadow_strength)
+                    1.0 - shadow_strength * (1.0 - raw_shadow)
                 } else {
                     1.0
                 };
@@ -1506,7 +1618,7 @@ impl Renderer for PixelRenderer {
         match command {
             RenderCommand::Mesh(mesh) => {
                 let c = [mesh.color.r, mesh.color.g, mesh.color.b, mesh.color.a];
-                self.rasterize_mesh(&mesh.positions, &mesh.indices, c);
+                self.rasterize_mesh(&mesh.positions, &mesh.indices, c, mesh.vertex_colors.as_deref());
             }
             RenderCommand::Sprite(s) => {
                 self.rasterize_sprite(s.position, s.size, s.uv, s.color, s.texture);
@@ -1515,6 +1627,7 @@ impl Renderer for PixelRenderer {
                 self.rasterize_lit_sprite(
                     l.position, l.size, l.uv, l.color,
                     l.texture, l.shadow_mask, l.screen_size, l.shadow_filter,
+                    l.shadow_strength,
                 );
             }
             _ => {} // Ignore lines, rects, terrain for now
@@ -1620,6 +1733,8 @@ fn real_lightmap_point_light_no_shadow_is_radial() {
         radius: 5.0,
         casts_shadows: false,
         shadow_filter: ShadowFilter::None,
+        shadow_strength: 1.0,
+        shadow_attenuation: 0.0,
     });
 
     let mut renderer = PixelRenderer::new(200.0, 150.0);
@@ -1661,6 +1776,8 @@ fn real_lightmap_shadow_mask_coverage() {
         radius: 6.0,
         casts_shadows: true,
         shadow_filter: ShadowFilter::Pcf5,
+        shadow_strength: 1.0,
+        shadow_attenuation: 0.0,
     });
 
     // Game occluders: ground platform + trigger box
@@ -1764,6 +1881,8 @@ fn real_composite_game_scene() {
         radius: 6.0,
         casts_shadows: true,
         shadow_filter: ShadowFilter::Pcf5,
+        shadow_strength: 1.0,
+        shadow_attenuation: 0.0,
     });
 
     sys.add_directional_light(DirectionalLight::new(
@@ -1840,6 +1959,8 @@ fn real_shadow_mask_not_inverted_by_ground_platform() {
         radius: 6.0,
         casts_shadows: true,
         shadow_filter: ShadowFilter::None,
+        shadow_strength: 1.0,
+        shadow_attenuation: 0.0,
     });
 
     // ONLY the ground platform — no trigger box, no ground shadow plane
@@ -1918,6 +2039,8 @@ fn real_point_light_is_radial_not_cone() {
         radius: 6.0,
         casts_shadows: true,
         shadow_filter: ShadowFilter::None,
+        shadow_strength: 1.0,
+        shadow_attenuation: 0.0,
     });
 
     sys.set_occluders(vec![
@@ -2013,7 +2136,7 @@ fn shadow_quads_do_not_collapse_inward() {
         Occluder::from_aabb(0.0, -5.5, 15.0, 1.0),
     ];
 
-    let quads = project_point_shadows(light_pos, light_radius, &occluders);
+    let quads = project_point_shadows(light_pos, light_radius, &occluders, 0.0);
 
     for (i, quad) in quads.iter().enumerate() {
         // Original endpoints are positions[0..4], projected are positions[4..8]

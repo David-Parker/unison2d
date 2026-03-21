@@ -23,6 +23,10 @@ pub struct PointLight {
     pub casts_shadows: bool,
     /// PCF filter mode for shadow edges.
     pub shadow_filter: ShadowFilter,
+    /// How dark shadows are (0.0 = no shadow, 1.0 = full black). Default 1.0.
+    pub shadow_strength: f32,
+    /// Distance in world units over which shadows fade to invisible (0.0 = no fade). Default 0.0.
+    pub shadow_attenuation: f32,
 }
 
 impl PointLight {
@@ -35,6 +39,8 @@ impl PointLight {
             radius,
             casts_shadows: false,
             shadow_filter: ShadowFilter::None,
+            shadow_strength: 1.0,
+            shadow_attenuation: 0.0,
         }
     }
 }
@@ -56,6 +62,10 @@ pub struct DirectionalLight {
     pub casts_shadows: bool,
     /// PCF filter mode for shadow edges.
     pub shadow_filter: ShadowFilter,
+    /// How dark shadows are (0.0 = no shadow, 1.0 = full black). Default 1.0.
+    pub shadow_strength: f32,
+    /// Distance in world units over which shadows fade to invisible (0.0 = no fade). Default 0.0.
+    pub shadow_attenuation: f32,
 }
 
 impl DirectionalLight {
@@ -67,6 +77,8 @@ impl DirectionalLight {
             intensity,
             casts_shadows: false,
             shadow_filter: ShadowFilter::None,
+            shadow_strength: 1.0,
+            shadow_attenuation: 0.0,
         }
     }
 }

@@ -33,6 +33,7 @@ struct LitUniforms {
     u_shadow_mask: WebGlUniformLocation,
     u_screen_size: WebGlUniformLocation,
     u_shadow_filter: WebGlUniformLocation,
+    u_shadow_strength: WebGlUniformLocation,
 }
 
 /// Which shader program is currently active.
@@ -56,6 +57,7 @@ pub struct WebGlRenderer {
     vao: WebGlVertexArrayObject,
     position_buffer: WebGlBuffer,
     uv_buffer: WebGlBuffer,
+    vertex_color_buffer: WebGlBuffer,
     index_buffer: WebGlBuffer,
     // Texture storage
     textures: HashMap<u32, WebGlTexture>,
@@ -127,6 +129,9 @@ impl WebGlRenderer {
             u_shadow_filter: gl
                 .get_uniform_location(&lit.program, "u_shadow_filter")
                 .ok_or("lit: Failed to get u_shadow_filter")?,
+            u_shadow_strength: gl
+                .get_uniform_location(&lit.program, "u_shadow_strength")
+                .ok_or("lit: Failed to get u_shadow_strength")?,
         };
 
         // Create VAO and buffers
@@ -137,6 +142,9 @@ impl WebGlRenderer {
             .create_buffer()
             .ok_or("Failed to create position buffer")?;
         let uv_buffer = gl.create_buffer().ok_or("Failed to create UV buffer")?;
+        let vertex_color_buffer = gl
+            .create_buffer()
+            .ok_or("Failed to create vertex color buffer")?;
         let index_buffer = gl
             .create_buffer()
             .ok_or("Failed to create index buffer")?;
@@ -153,6 +161,12 @@ impl WebGlRenderer {
         gl.bind_buffer(GL::ARRAY_BUFFER, Some(&uv_buffer));
         gl.enable_vertex_attrib_array(1);
         gl.vertex_attrib_pointer_with_i32(1, 2, GL::FLOAT, false, 0, 0);
+
+        // Attribute 2: vertex color (vec4) — disabled by default, uses constant (1,1,1,1)
+        gl.bind_buffer(GL::ARRAY_BUFFER, Some(&vertex_color_buffer));
+        gl.vertex_attrib_pointer_with_i32(2, 4, GL::FLOAT, false, 0, 0);
+        gl.disable_vertex_attrib_array(2);
+        gl.vertex_attrib4f(2, 1.0, 1.0, 1.0, 1.0);
 
         // Index buffer
         gl.bind_buffer(GL::ELEMENT_ARRAY_BUFFER, Some(&index_buffer));
@@ -173,6 +187,7 @@ impl WebGlRenderer {
             vao,
             position_buffer,
             uv_buffer,
+            vertex_color_buffer,
             index_buffer,
             textures: HashMap::new(),
             next_texture_id: 1,
@@ -249,6 +264,7 @@ impl WebGlRenderer {
         indices: &[u32],
         color: Color,
         texture: TextureId,
+        vertex_colors: Option<&[f32]>,
     ) {
         self.use_base_program();
         let gl = &self.gl;
@@ -267,6 +283,19 @@ impl WebGlRenderer {
         unsafe {
             let view = js_sys::Float32Array::view(uvs);
             gl.buffer_data_with_array_buffer_view(GL::ARRAY_BUFFER, &view, GL::DYNAMIC_DRAW);
+        }
+
+        // Upload per-vertex colors if provided, otherwise use constant white
+        if let Some(colors) = vertex_colors {
+            gl.enable_vertex_attrib_array(2);
+            gl.bind_buffer(GL::ARRAY_BUFFER, Some(&self.vertex_color_buffer));
+            unsafe {
+                let view = js_sys::Float32Array::view(colors);
+                gl.buffer_data_with_array_buffer_view(GL::ARRAY_BUFFER, &view, GL::DYNAMIC_DRAW);
+            }
+        } else {
+            gl.disable_vertex_attrib_array(2);
+            gl.vertex_attrib4f(2, 1.0, 1.0, 1.0, 1.0);
         }
 
         // Upload indices
@@ -320,11 +349,16 @@ impl WebGlRenderer {
         shadow_mask: TextureId,
         screen_size: (f32, f32),
         shadow_filter: u32,
+        shadow_strength: f32,
     ) {
         self.use_lit_program();
         let gl = &self.gl;
 
         gl.bind_vertex_array(Some(&self.vao));
+
+        // Ensure per-vertex color attribute is at default (1,1,1,1) for lit sprites
+        gl.disable_vertex_attrib_array(2);
+        gl.vertex_attrib4f(2, 1.0, 1.0, 1.0, 1.0);
 
         // Upload geometry
         gl.bind_buffer(GL::ARRAY_BUFFER, Some(&self.position_buffer));
@@ -347,6 +381,7 @@ impl WebGlRenderer {
         gl.uniform4f(Some(&self.lit.u_color), color.r, color.g, color.b, color.a);
         gl.uniform2f(Some(&self.lit_uniforms.u_screen_size), screen_size.0, screen_size.1);
         gl.uniform1i(Some(&self.lit_uniforms.u_shadow_filter), shadow_filter as i32);
+        gl.uniform1f(Some(&self.lit_uniforms.u_shadow_strength), shadow_strength);
 
         // Bind light gradient texture to TEXTURE0 (point lights have a gradient;
         // directional lights use TextureId::NONE for solid color)
@@ -492,6 +527,7 @@ impl Renderer for WebGlRenderer {
                     lit.shadow_mask,
                     lit.screen_size,
                     lit.shadow_filter,
+                    lit.shadow_strength,
                 );
             }
             RenderCommand::Mesh(mesh) => {
@@ -506,6 +542,7 @@ impl Renderer for WebGlRenderer {
                     &mesh.indices,
                     mesh.color,
                     mesh.texture,
+                    mesh.vertex_colors.as_deref(),
                 );
             }
             RenderCommand::Sprite(sprite) => {
@@ -523,6 +560,7 @@ impl Renderer for WebGlRenderer {
                     &indices,
                     sprite.color,
                     sprite.texture,
+                    None,
                 );
             }
             RenderCommand::Rect {
@@ -534,7 +572,7 @@ impl Renderer for WebGlRenderer {
                 let cy = position[1] + size[1] / 2.0;
                 let (positions, uvs, indices) =
                     Self::make_quad(cx, cy, size[0], size[1], 0.0, [0.0, 0.0, 1.0, 1.0]);
-                self.draw_mesh_data(&positions, &uvs, &indices, color, TextureId::NONE);
+                self.draw_mesh_data(&positions, &uvs, &indices, color, TextureId::NONE, None);
             }
             RenderCommand::Line {
                 start,
@@ -564,7 +602,7 @@ impl Renderer for WebGlRenderer {
                 ];
                 let uvs = [0.0; 8];
                 let indices = [0u32, 1, 2, 0, 2, 3];
-                self.draw_mesh_data(&positions, &uvs, &indices, color, TextureId::NONE);
+                self.draw_mesh_data(&positions, &uvs, &indices, color, TextureId::NONE, None);
             }
             RenderCommand::Terrain {
                 points,
@@ -587,7 +625,7 @@ impl Renderer for WebGlRenderer {
                     indices.push(i + 1);
                 }
                 let uvs = vec![0.0; positions.len()];
-                self.draw_mesh_data(&positions, &uvs, &indices, fill_color, TextureId::NONE);
+                self.draw_mesh_data(&positions, &uvs, &indices, fill_color, TextureId::NONE, None);
             }
         }
     }

@@ -6,15 +6,18 @@ precision mediump float;
 
 layout(location = 0) in vec2 a_position;
 layout(location = 1) in vec2 a_uv;
+layout(location = 2) in vec4 a_vertex_color;
 
 uniform mat3 u_view_projection;
 
 out vec2 v_uv;
+out vec4 v_vertex_color;
 
 void main() {
     vec3 pos = u_view_projection * vec3(a_position, 1.0);
     gl_Position = vec4(pos.xy, 0.0, 1.0);
     v_uv = a_uv;
+    v_vertex_color = a_vertex_color;
 }
 "#;
 
@@ -23,6 +26,7 @@ pub const FRAGMENT_SHADER: &str = r#"#version 300 es
 precision mediump float;
 
 in vec2 v_uv;
+in vec4 v_vertex_color;
 
 uniform vec4 u_color;
 uniform bool u_use_texture;
@@ -33,9 +37,9 @@ out vec4 frag_color;
 void main() {
     if (u_use_texture) {
         vec4 tex = texture(u_texture, v_uv);
-        frag_color = tex * u_color;
+        frag_color = tex * u_color * v_vertex_color;
     } else {
-        frag_color = u_color;
+        frag_color = u_color * v_vertex_color;
     }
 }
 "#;
@@ -53,6 +57,7 @@ pub const LIT_FRAGMENT_SHADER: &str = r#"#version 300 es
 precision mediump float;
 
 in vec2 v_uv;
+in vec4 v_vertex_color;
 
 uniform vec4 u_color;
 uniform bool u_use_texture;
@@ -60,6 +65,7 @@ uniform sampler2D u_texture;
 uniform sampler2D u_shadow_mask;
 uniform vec2 u_screen_size;
 uniform int u_shadow_filter;
+uniform float u_shadow_strength;
 
 out vec4 frag_color;
 
@@ -112,6 +118,11 @@ void main() {
     } else {
         shadow = sample_shadow(shadow_uv);
     }
+
+    // Apply shadow strength: clamp how dark shadows can be.
+    // At shadow_strength=1.0, shadow passes through unchanged.
+    // At shadow_strength=0.0, shadow is always 1.0 (no darkening).
+    shadow = mix(1.0, shadow, u_shadow_strength);
 
     // Apply shadow to RGB only — not alpha. With additive blending (SRC_ALPHA, ONE),
     // alpha scales the contribution. If we multiplied shadow into alpha too,

@@ -102,11 +102,12 @@ DrawSprite {
 
 ```rust
 DrawMesh {
-    positions: Vec<f32>,  // flat [x0, y0, x1, y1, ...]
-    uvs: Vec<f32>,        // flat [u0, v0, u1, v1, ...]
-    indices: Vec<u32>,    // triangle indices
-    texture: TextureId,   // or TextureId::NONE for solid color
+    positions: Vec<f32>,              // flat [x0, y0, x1, y1, ...]
+    uvs: Vec<f32>,                    // flat [u0, v0, u1, v1, ...]
+    indices: Vec<u32>,                // triangle indices
+    texture: TextureId,               // or TextureId::NONE for solid color
     color: Color,
+    vertex_colors: Option<Vec<f32>>,  // per-vertex RGBA (4 per vertex), multiplied with color
 }
 ```
 

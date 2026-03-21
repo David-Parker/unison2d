@@ -47,6 +47,10 @@ pub struct DrawMesh {
     pub texture: TextureId,
     /// Color (used as tint if textured, solid color if not)
     pub color: Color,
+    /// Optional per-vertex colors (RGBA floats, 4 per vertex).
+    /// When present, each vertex's color is multiplied with `color`.
+    /// Length must be `positions.len() / 2 * 4`.
+    pub vertex_colors: Option<Vec<f32>>,
 }
 
 /// A sprite drawn with an additional shadow mask texture.
@@ -74,6 +78,8 @@ pub struct DrawLitSprite {
     pub screen_size: (f32, f32),
     /// PCF filter mode (0 = none, 5 = PCF5, 13 = PCF13).
     pub shadow_filter: u32,
+    /// Shadow strength (0.0 = no shadow, 1.0 = full shadow). Default 1.0.
+    pub shadow_strength: f32,
 }
 
 /// Render command enum

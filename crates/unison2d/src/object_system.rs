@@ -339,6 +339,7 @@ impl ObjectSystem {
                             indices: indices.to_vec(),
                             texture: *texture,
                             color: *color,
+                            vertex_colors: None,
                         }));
                     }
                 }

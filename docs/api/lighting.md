@@ -26,6 +26,8 @@ pub struct PointLight {
     pub radius: f32,               // Radius of influence in world units
     pub casts_shadows: bool,       // Whether this light casts shadows (default: false)
     pub shadow_filter: ShadowFilter, // PCF mode for shadow edges (default: None)
+    pub shadow_strength: f32,      // How dark shadows are: 0.0=invisible, 1.0=full black (default: 1.0)
+    pub shadow_attenuation: f32,   // Fade distance in world units: 0.0=no fade (default: 0.0)
 }
 
 impl PointLight {
@@ -44,6 +46,8 @@ pub struct DirectionalLight {
     pub intensity: f32,            // Multiplier applied to color
     pub casts_shadows: bool,       // Whether this light casts shadows (default: false)
     pub shadow_filter: ShadowFilter, // PCF mode for shadow edges (default: None)
+    pub shadow_strength: f32,      // How dark shadows are: 0.0=invisible, 1.0=full black (default: 1.0)
+    pub shadow_attenuation: f32,   // Fade distance in world units: 0.0=no fade (default: 0.0)
 }
 
 impl DirectionalLight {
@@ -166,6 +170,8 @@ let light = world.lighting.add_light(PointLight {
     radius: 6.0,
     casts_shadows: true,
     shadow_filter: ShadowFilter::Pcf5,
+    shadow_strength: 0.8,      // slightly transparent shadows
+    shadow_attenuation: 1.5,   // shadows fade over distance
 });
 
 // Ground shadow prevents light bleeding below ground

@@ -15,13 +15,26 @@ pub struct ShadowQuad {
     pub positions: [f32; 8],
     /// Triangle indices (always [0,1,2, 0,2,3]).
     pub indices: [u32; 6],
+    /// Per-vertex RGBA colors (4 verts × 4 components = 16 floats).
+    /// Near vertices (0, 1) are at full shadow; far vertices (2, 3) may fade.
+    pub vertex_colors: [f32; 16],
 }
 
 impl ShadowQuad {
-    fn new(a: [f32; 2], b: [f32; 2], b_proj: [f32; 2], a_proj: [f32; 2]) -> Self {
+    fn new(a: [f32; 2], b: [f32; 2], b_proj: [f32; 2], a_proj: [f32; 2], far_alpha: f32) -> Self {
         Self {
             positions: [a[0], a[1], b[0], b[1], b_proj[0], b_proj[1], a_proj[0], a_proj[1]],
             indices: [0, 1, 2, 0, 2, 3],
+            vertex_colors: [
+                // Near vertex a: full shadow
+                0.0, 0.0, 0.0, 1.0,
+                // Near vertex b: full shadow
+                0.0, 0.0, 0.0, 1.0,
+                // Far vertex b': attenuated shadow
+                0.0, 0.0, 0.0, far_alpha,
+                // Far vertex a': attenuated shadow
+                0.0, 0.0, 0.0, far_alpha,
+            ],
         }
     }
 }
@@ -60,10 +73,16 @@ pub fn is_back_facing_directional(edge: &OccluderEdge, light_direction: [f32; 2]
 ///
 /// For each back-facing edge of each occluder, projects the edge endpoints
 /// radially away from the light to form a shadow quad.
+///
+/// `shadow_attenuation` is the fade distance in world units. At 0.0, shadows
+/// don't fade (full strength to the end). At e.g. 3.0, shadows fade from full
+/// strength at the occluder to invisible over 3 world units. Beyond the fade
+/// distance, a second fully-transparent quad covers the remaining projection.
 pub fn project_point_shadows(
     light_pos: [f32; 2],
     light_radius: f32,
     occluders: &[Occluder],
+    shadow_attenuation: f32,
 ) -> Vec<ShadowQuad> {
     let mut quads = Vec::new();
 
@@ -76,7 +95,22 @@ pub fn project_point_shadows(
             let a_proj = project_from_point(light_pos, edge.a, light_radius);
             let b_proj = project_from_point(light_pos, edge.b, light_radius);
 
-            quads.push(ShadowQuad::new(edge.a, edge.b, b_proj, a_proj));
+            if shadow_attenuation > 0.0 {
+                // Compute projection distances
+                let da = ((a_proj[0] - edge.a[0]).powi(2) + (a_proj[1] - edge.a[1]).powi(2)).sqrt();
+                let db = ((b_proj[0] - edge.b[0]).powi(2) + (b_proj[1] - edge.b[1]).powi(2)).sqrt();
+
+                // Insert an intermediate edge at the fade distance
+                let ta = (shadow_attenuation / da).min(1.0);
+                let tb = (shadow_attenuation / db).min(1.0);
+                let a_mid = lerp2(edge.a, a_proj, ta);
+                let b_mid = lerp2(edge.b, b_proj, tb);
+
+                // Single quad: occluder edge → fade point (opaque → transparent)
+                quads.push(ShadowQuad::new(edge.a, edge.b, b_mid, a_mid, 0.0));
+            } else {
+                quads.push(ShadowQuad::new(edge.a, edge.b, b_proj, a_proj, 1.0));
+            }
         }
     }
 
@@ -87,10 +121,14 @@ pub fn project_point_shadows(
 ///
 /// For each back-facing edge of each occluder, projects the edge endpoints
 /// along the light direction to form a shadow quad.
+///
+/// `shadow_attenuation` is the fade distance in world units. At 0.0, shadows
+/// don't fade. At e.g. 3.0, shadows fade to invisible over 3 world units.
 pub fn project_directional_shadows(
     light_direction: [f32; 2],
     cast_distance: f32,
     occluders: &[Occluder],
+    shadow_attenuation: f32,
 ) -> Vec<ShadowQuad> {
     let mut quads = Vec::new();
 
@@ -104,6 +142,13 @@ pub fn project_directional_shadows(
     let dx = light_direction[0] / len * cast_distance;
     let dy = light_direction[1] / len * cast_distance;
 
+    // t = fraction along the projection where the fade ends
+    let fade_t = if shadow_attenuation > 0.0 {
+        (shadow_attenuation / cast_distance).min(1.0)
+    } else {
+        0.0
+    };
+
     for occluder in occluders {
         for edge in &occluder.edges {
             if !is_back_facing_directional(edge, light_direction) {
@@ -113,11 +158,24 @@ pub fn project_directional_shadows(
             let a_proj = [edge.a[0] + dx, edge.a[1] + dy];
             let b_proj = [edge.b[0] + dx, edge.b[1] + dy];
 
-            quads.push(ShadowQuad::new(edge.a, edge.b, b_proj, a_proj));
+            if shadow_attenuation > 0.0 {
+                let a_mid = lerp2(edge.a, a_proj, fade_t);
+                let b_mid = lerp2(edge.b, b_proj, fade_t);
+
+                // Single quad: occluder edge → fade point (opaque → transparent)
+                quads.push(ShadowQuad::new(edge.a, edge.b, b_mid, a_mid, 0.0));
+            } else {
+                quads.push(ShadowQuad::new(edge.a, edge.b, b_proj, a_proj, 1.0));
+            }
         }
     }
 
     quads
+}
+
+/// Linearly interpolate between two 2D points.
+fn lerp2(a: [f32; 2], b: [f32; 2], t: f32) -> [f32; 2] {
+    [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]
 }
 
 /// Project a point radially away from a light source.

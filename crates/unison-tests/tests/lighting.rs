@@ -27,8 +27,9 @@ enum RenderOp {
         shadow_mask: TextureId,
         screen_size: (f32, f32),
         shadow_filter: u32,
+        shadow_strength: f32,
     },
-    DrawMesh { vertex_count: usize, color: Color },
+    DrawMesh { vertex_count: usize, color: Color, vertex_colors: Option<Vec<f32>> },
     EndFrame,
 }
 
@@ -91,10 +92,12 @@ impl Renderer for MockRenderer {
                 shadow_mask: l.shadow_mask,
                 screen_size: l.screen_size,
                 shadow_filter: l.shadow_filter,
+                shadow_strength: l.shadow_strength,
             },
             RenderCommand::Mesh(m) => RenderOp::DrawMesh {
                 vertex_count: m.positions.len() / 2,
                 color: m.color,
+                vertex_colors: m.vertex_colors,
             },
             _ => return,
         };
@@ -516,7 +519,7 @@ fn project_point_shadows_basic() {
 
     // AABB at origin, light above → bottom edge is back-facing
     let occ = Occluder::from_aabb(0.0, 0.0, 1.0, 1.0);
-    let quads = project_point_shadows([0.0, 5.0], 10.0, &[occ]);
+    let quads = project_point_shadows([0.0, 5.0], 10.0, &[occ], 0.0);
 
     // Light above should shadow from bottom edge (and side edges partially)
     assert!(!quads.is_empty(), "should have shadow quads");
@@ -536,7 +539,7 @@ fn project_directional_shadows_basic() {
 
     let occ = Occluder::from_aabb(0.0, 0.0, 1.0, 1.0);
     // Light shining downward → top edge normal (up) aligns with direction → back-facing
-    let quads = project_directional_shadows([0.0, -1.0], 20.0, &[occ]);
+    let quads = project_directional_shadows([0.0, -1.0], 20.0, &[occ], 0.0);
 
     assert!(!quads.is_empty(), "should have shadow quads from directional light");
     for quad in &quads {
@@ -549,7 +552,7 @@ fn project_directional_shadows_basic() {
 #[test]
 fn project_point_shadows_no_occluders() {
     use unison_lighting::shadow::project_point_shadows;
-    let quads = project_point_shadows([0.0, 0.0], 10.0, &[]);
+    let quads = project_point_shadows([0.0, 0.0], 10.0, &[], 0.0);
     assert!(quads.is_empty());
 }
 
@@ -657,7 +660,7 @@ fn point_shadow_projects_away_from_light() {
     // because its normal points away from the light (which is above).
     let occ = Occluder::from_aabb(0.0, 0.0, 1.0, 1.0);
     let light_pos = [0.0, 5.0];
-    let quads = project_point_shadows(light_pos, 10.0, &[occ]);
+    let quads = project_point_shadows(light_pos, 10.0, &[occ], 0.0);
 
     // Find the shadow quad from the bottom edge (both original vertices have y = -1)
     let bottom_quads: Vec<_> = quads
@@ -726,7 +729,7 @@ fn point_shadow_correct_back_face_selection() {
     );
 
     // Verify shadow count matches back-facing count
-    let quads = project_point_shadows(light_above, 10.0, &[occ]);
+    let quads = project_point_shadows(light_above, 10.0, &[occ], 0.0);
     assert_eq!(
         quads.len(),
         back_normals.len(),
@@ -749,7 +752,7 @@ fn directional_shadow_projects_along_direction() {
     // extends downward below the object. This is correct: downward-traveling
     // light hits the top surface; shadow appears below.
     let occ = Occluder::from_aabb(0.0, 0.0, 1.0, 1.0);
-    let quads = project_directional_shadows([0.0, -1.0], 20.0, &[occ]);
+    let quads = project_directional_shadows([0.0, -1.0], 20.0, &[occ], 0.0);
 
     for quad in &quads {
         // Projected vertices should be below the original vertices (direction is downward)
@@ -787,7 +790,7 @@ fn ground_occluder_blocks_light_below() {
         );
     }
 
-    let quads = project_point_shadows(light_pos, 10.0, &[ground.clone()]);
+    let quads = project_point_shadows(light_pos, 10.0, &[ground.clone()], 0.0);
     assert!(
         !quads.is_empty(),
         "ground should cast shadow below for light above it"
@@ -802,7 +805,7 @@ fn ground_occluder_blocks_light_below() {
             "ground should be front-facing for light below it"
         );
     }
-    let quads_below = project_point_shadows(light_below, 10.0, &[ground]);
+    let quads_below = project_point_shadows(light_below, 10.0, &[ground], 0.0);
     assert!(
         quads_below.is_empty(),
         "ground should not cast shadow for light below it"
@@ -816,7 +819,7 @@ fn shadow_quad_vertex_winding() {
 
     // Verify that shadow quads form valid convex quadrilaterals
     let occ = Occluder::from_aabb(0.0, 0.0, 1.0, 1.0);
-    let quads = project_point_shadows([0.0, 5.0], 10.0, &[occ]);
+    let quads = project_point_shadows([0.0, 5.0], 10.0, &[occ], 0.0);
 
     for (i, quad) in quads.iter().enumerate() {
         // Quad has 4 vertices: A, B, B', A'
@@ -930,6 +933,8 @@ fn e2e_render_lightmap_shadow_point_light() {
         radius: 6.0,
         casts_shadows: true,
         shadow_filter: ShadowFilter::Pcf5,
+        shadow_strength: 1.0,
+        shadow_attenuation: 0.0,
     });
 
     // Add an occluder (a platform)
@@ -967,7 +972,7 @@ fn e2e_render_lightmap_shadow_point_light() {
     );
 
     // Verify the lit sprite has the correct size (radius * 2 = 12)
-    if let RenderOp::DrawLitSprite { position, size, screen_size, shadow_filter, texture, shadow_mask } = &lit_sprite_ops[0] {
+    if let RenderOp::DrawLitSprite { position, size, screen_size, shadow_filter, shadow_strength: _, texture, shadow_mask } = &lit_sprite_ops[0] {
         assert_eq!(*size, [12.0, 12.0], "lit sprite size should be radius*2 = 12");
         assert_eq!(*position, [0.0, 3.0], "lit sprite should be at light position");
         assert_eq!(*screen_size, (800.0, 600.0), "screen_size should match renderer");
@@ -978,7 +983,7 @@ fn e2e_render_lightmap_shadow_point_light() {
 
     // Verify shadow mask was rendered (should have DrawMesh ops with BLACK color)
     let shadow_mesh_ops: Vec<_> = ops.iter().filter(|op| {
-        matches!(op, RenderOp::DrawMesh { color, .. } if color.r == 0.0 && color.g == 0.0 && color.b == 0.0)
+        matches!(op, RenderOp::DrawMesh { color, vertex_colors: _, .. } if color.r == 0.0 && color.g == 0.0 && color.b == 0.0)
     }).collect();
     assert!(
         !shadow_mesh_ops.is_empty(),
@@ -1097,6 +1102,8 @@ fn e2e_exact_game_lighting_setup() {
         radius: 6.0,
         casts_shadows: true,
         shadow_filter: ShadowFilter::Pcf5,
+        shadow_strength: 1.0,
+        shadow_attenuation: 0.0,
     });
 
     // Occluders: ground platform + trigger box (like main_level)
@@ -1381,7 +1388,7 @@ fn is_in_point_shadow(
     use unison_lighting::shadow::{is_back_facing_point, project_point_shadows};
 
     // Project shadows and check if world_pos is inside any shadow quad
-    let quads = project_point_shadows(light_pos, 100.0, occluders); // large radius to get all shadows
+    let quads = project_point_shadows(light_pos, 100.0, occluders, 0.0); // large radius to get all shadows
 
     for quad in &quads {
         // Check point-in-quad using cross product winding test
@@ -1461,6 +1468,8 @@ fn point_light_emits_in_all_directions() {
         radius: 6.0,
         casts_shadows: false,
         shadow_filter: ShadowFilter::None,
+        shadow_strength: 1.0,
+        shadow_attenuation: 0.0,
     };
 
     let no_occluders: Vec<unison_lighting::Occluder> = vec![];
@@ -1502,6 +1511,8 @@ fn point_light_shadow_creates_dark_area_behind_box() {
         radius: 12.0,
         casts_shadows: true,
         shadow_filter: ShadowFilter::None,
+        shadow_strength: 1.0,
+        shadow_attenuation: 0.0,
     };
     let occluders = vec![Occluder::from_aabb(0.0, 0.0, 1.0, 1.0)];
 
@@ -1546,6 +1557,8 @@ fn point_light_shadow_matches_game_scenario() {
         radius: 6.0,
         casts_shadows: true,
         shadow_filter: ShadowFilter::Pcf5,
+        shadow_strength: 1.0,
+        shadow_attenuation: 0.0,
     };
 
     let occluders = vec![
@@ -1607,6 +1620,8 @@ fn shadow_creates_detectable_dark_edge() {
         radius: 15.0,
         casts_shadows: true,
         shadow_filter: ShadowFilter::None,
+        shadow_strength: 1.0,
+        shadow_attenuation: 0.0,
     };
     let occluders = vec![Occluder::from_aabb(3.0, 0.0, 1.0, 1.0)];
 
@@ -1679,6 +1694,8 @@ fn e2e_world_auto_render_with_shadows() {
         radius: 6.0,
         casts_shadows: true,
         shadow_filter: ShadowFilter::Pcf5,
+        shadow_strength: 1.0,
+        shadow_attenuation: 0.0,
     });
 
     // Add directional moonlight (no shadows for simplicity)
