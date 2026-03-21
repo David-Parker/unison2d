@@ -155,6 +155,15 @@ Owns the physics world + object registry.
 | `set_ground_friction(f32)` | Ground friction (0=ice, 1=sticky). Default: 0.8 |
 | `set_ground_restitution(f32)` | Ground bounciness (0=none, 1=perfect). Default: 0.3 |
 
+#### Rendering
+
+| Method | Description |
+|--------|-------------|
+| `set_z_order(id, i32)` | Set draw order — higher values draw later (on top). Default 0 |
+| `z_order(id) -> i32` | Get draw order |
+| `set_casts_shadow(id, bool)` | Set whether object casts shadows. Default: true for physics objects, false for sprites |
+| `casts_shadow(id) -> bool` | Check whether object casts shadows |
+
 #### Raw Physics Access
 
 | Method | Description |

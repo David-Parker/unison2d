@@ -57,6 +57,7 @@ impl ObjectSystem {
         self.entries.insert(id, ObjectEntry {
             kind: ObjectKind::SoftBody { handle, color, texture, uvs, boundary_edges },
             casts_shadow: true,
+            z_order: 0,
         });
         id
     }
@@ -72,6 +73,7 @@ impl ObjectSystem {
         self.entries.insert(id, ObjectEntry {
             kind: ObjectKind::RigidBody { handle, color },
             casts_shadow: true,
+            z_order: 0,
         });
         id
     }
@@ -101,6 +103,7 @@ impl ObjectSystem {
                 color: desc.color,
             },
             casts_shadow: false, // Sprites don't cast shadows by default
+            z_order: 0,
         });
         id
     }
@@ -231,6 +234,21 @@ impl ObjectSystem {
         self.entries.get(&id).map_or(false, |e| e.casts_shadow)
     }
 
+    // ── Draw order ──
+
+    /// Set the draw order for an object. Higher values draw later (on top).
+    /// Default is 0. Objects with the same z-order have no guaranteed ordering.
+    pub fn set_z_order(&mut self, id: ObjectId, z_order: i32) {
+        if let Some(entry) = self.entries.get_mut(&id) {
+            entry.z_order = z_order;
+        }
+    }
+
+    /// Get the draw order for an object.
+    pub fn z_order(&self, id: ObjectId) -> i32 {
+        self.entries.get(&id).map_or(0, |e| e.z_order)
+    }
+
     /// Collect occluder geometry from all shadow-casting objects.
     ///
     /// Returns one [`Occluder`] per shadow-casting rigid body or soft body.
@@ -325,16 +343,29 @@ impl ObjectSystem {
 
     // ── Rendering ──
 
-    /// Collect render commands for all objects.
+    /// Collect render commands for all objects, sorted by z-order.
     ///
-    /// Rigid bodies are drawn first, then soft bodies on top. This hides the
-    /// inflated soft-body edges that would otherwise peek out at contact points.
+    /// Higher z-order draws later (on top). Objects at the same z-order
+    /// have no guaranteed relative ordering.
     pub fn render_commands(&self) -> Vec<RenderCommand> {
-        let mut commands = Vec::new();
+        let mut sorted: Vec<_> = self.entries.values().collect();
+        sorted.sort_by_key(|e| e.z_order);
 
-        // Pass 1: rigid bodies and sprites (drawn first, behind)
-        for entry in self.entries.values() {
+        let mut commands = Vec::new();
+        for entry in sorted {
             match &entry.kind {
+                ObjectKind::SoftBody { handle, color, texture, uvs, .. } => {
+                    if let Some((positions, indices)) = self.physics.get_body_render_data(*handle) {
+                        commands.push(RenderCommand::Mesh(DrawMesh {
+                            positions,
+                            uvs: uvs.clone(),
+                            indices: indices.to_vec(),
+                            texture: *texture,
+                            color: *color,
+                            vertex_colors: None,
+                        }));
+                    }
+                }
                 ObjectKind::RigidBody { handle, color } => {
                     if let Some(body) = self.physics.get_rigid_body(*handle) {
                         let he = body.collider.half_extents();
@@ -353,23 +384,6 @@ impl ObjectSystem {
                         rotation: *rotation,
                         uv: [0.0, 0.0, 1.0, 1.0],
                         color: *color,
-                    }));
-                }
-                _ => {}
-            }
-        }
-
-        // Pass 2: soft bodies (drawn on top, covering contact seams)
-        for entry in self.entries.values() {
-            if let ObjectKind::SoftBody { handle, color, texture, uvs, .. } = &entry.kind {
-                if let Some((positions, indices)) = self.physics.get_body_render_data(*handle) {
-                    commands.push(RenderCommand::Mesh(DrawMesh {
-                        positions,
-                        uvs: uvs.clone(),
-                        indices: indices.to_vec(),
-                        texture: *texture,
-                        color: *color,
-                        vertex_colors: None,
                     }));
                 }
             }

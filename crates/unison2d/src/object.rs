@@ -108,6 +108,8 @@ pub(crate) struct ObjectEntry {
     pub(crate) kind: ObjectKind,
     /// Whether this object casts shadows (default: true for physics objects).
     pub(crate) casts_shadow: bool,
+    /// Draw order — higher values draw later (on top). Default 0.
+    pub(crate) z_order: i32,
 }
 
 impl ObjectEntry {
