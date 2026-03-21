@@ -261,6 +261,7 @@ name = "unison-lighting"
 version = "0.1.0"
 dependencies = [
  "unison-math",
+ "unison-profiler",
  "unison-render",
 ]
 

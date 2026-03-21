@@ -8,6 +8,8 @@ use unison_render::{
     Renderer, TextureId,
 };
 
+use unison_profiler::profile_scope;
+
 use crate::gradient::generate_radial_gradient;
 use crate::light::{DirectionalLight, LightId, PointLight};
 use crate::occluder::Occluder;
@@ -208,6 +210,7 @@ impl LightingSystem {
     /// Called automatically before rendering. Uses `renderer.screen_size()`
     /// to match FBO sizes to the current viewport.
     pub fn ensure_resources(&mut self, renderer: &mut dyn Renderer<Error = String>) {
+        profile_scope!("lighting.ensure_resources");
         let (w, h) = renderer.screen_size();
         let (w, h) = (w as u32, h as u32);
 
@@ -268,6 +271,7 @@ impl LightingSystem {
     ///
     /// The caller must call [`ensure_resources`](Self::ensure_resources) first.
     pub fn render_lightmap(&self, renderer: &mut dyn Renderer<Error = String>, camera: &Camera) {
+        profile_scope!("lighting.render_lightmap");
         let lightmap_target = match self.lightmap_target {
             Some(t) => t,
             None => return,
@@ -405,6 +409,7 @@ impl LightingSystem {
         light: &PointLight,
         occluders: &[Occluder],
     ) {
+        profile_scope!("lighting.shadow_mask_point");
         let shadow_target = match self.shadow_mask_target {
             Some(t) => t,
             None => return,
@@ -456,6 +461,7 @@ impl LightingSystem {
         cam_width: f32,
         cam_height: f32,
     ) {
+        profile_scope!("lighting.shadow_mask_directional");
         let shadow_target = match self.shadow_mask_target {
             Some(t) => t,
             None => return,
@@ -536,6 +542,7 @@ impl LightingSystem {
         renderer: &mut dyn Renderer<Error = String>,
         camera: &Camera,
     ) {
+        profile_scope!("lighting.composite_lightmap");
         let lightmap_tex = match self.lightmap_texture {
             Some(t) => t,
             None => return,

@@ -10,6 +10,7 @@
 use unison_math::{Color, Vec2};
 use unison_render::{Renderer, RenderTargetId};
 use unison_lighting::LightingSystem;
+use unison_profiler::profile_scope;
 
 use crate::object_system::ObjectSystem;
 use crate::camera_system::CameraSystem;
@@ -126,6 +127,7 @@ impl World {
     /// If lighting is enabled, renders the lightmap (with shadows if configured)
     /// and composites it over the scene with multiply blending.
     pub fn auto_render(&mut self, renderer: &mut dyn Renderer<Error = String>) {
+        profile_scope!("world.auto_render");
         let camera = match self.cameras.get("main") {
             Some(c) => c.clone(),
             None => return,
@@ -168,6 +170,7 @@ impl World {
         renderer: &mut dyn Renderer<Error = String>,
         camera_targets: &[(&str, RenderTargetId)],
     ) {
+        profile_scope!("world.render_to_targets");
         let commands = self.objects.render_commands();
         let do_lighting = self.lighting.is_enabled() && self.lighting.has_lights();
 

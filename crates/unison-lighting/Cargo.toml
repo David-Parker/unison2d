@@ -8,3 +8,8 @@ description = "Unison 2D Game Engine - 2D lighting with lightmap compositing"
 [dependencies]
 unison-math = { workspace = true }
 unison-render = { workspace = true }
+unison-profiler = { workspace = true }
+
+[features]
+default = []
+profiling = ["unison-profiler/enabled"]

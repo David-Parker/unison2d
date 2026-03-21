@@ -10,6 +10,7 @@ use unison_math::{Color, Vec2};
 use unison_physics::{BodyHandle, PhysicsWorld};
 use unison_render::{DrawMesh, DrawSprite, RenderCommand};
 use unison_lighting::Occluder;
+use unison_profiler::profile_scope;
 use crate::object::{ObjectEntry, ObjectId, ObjectKind, RigidBodyDesc, SoftBodyDesc, SpriteDesc};
 
 /// Manages game objects and their physics simulation.
@@ -255,6 +256,7 @@ impl ObjectSystem {
     /// The ground plane is handled separately by the lighting system via
     /// [`LightingSystem::set_ground_shadow`](unison_lighting::LightingSystem::set_ground_shadow).
     pub fn collect_occluders(&self) -> Vec<Occluder> {
+        profile_scope!("objects.collect_occluders");
         let mut occluders = Vec::new();
 
         for entry in self.entries.values() {
@@ -348,6 +350,7 @@ impl ObjectSystem {
     /// Higher z-order draws later (on top). Objects at the same z-order
     /// have no guaranteed relative ordering.
     pub fn render_commands(&self) -> Vec<RenderCommand> {
+        profile_scope!("objects.render_commands");
         let mut sorted: Vec<_> = self.entries.values().collect();
         sorted.sort_by_key(|e| e.z_order);
 
