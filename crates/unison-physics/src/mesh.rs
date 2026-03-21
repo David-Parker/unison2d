@@ -171,11 +171,14 @@ pub fn create_ring_wireframe(segments: u32, radial_divisions: u32) -> Vec<u32> {
 /// Boundary edges are edges that belong to exactly one triangle. These form
 /// the outer silhouette of the mesh and are used for shadow casting.
 ///
-/// Returns a list of vertex index pairs `(v0, v1)` where v0 < v1.
+/// Returns directed vertex index pairs `(v0, v1)` preserving the original
+/// triangle winding order, so that the right-hand perpendicular of each
+/// edge points outward (away from the mesh interior).
 pub fn compute_boundary_edges_from_triangles(triangles: &[u32]) -> Vec<(u32, u32)> {
     use std::collections::HashMap;
 
-    let mut edge_count: HashMap<(u32, u32), u32> = HashMap::new();
+    // For each canonical edge key, track count and the original directed edge.
+    let mut edge_info: HashMap<(u32, u32), (u32, (u32, u32))> = HashMap::new();
 
     for tri in triangles.chunks(3) {
         if tri.len() < 3 {
@@ -184,14 +187,17 @@ pub fn compute_boundary_edges_from_triangles(triangles: &[u32]) -> Vec<(u32, u32
         let edges = [(tri[0], tri[1]), (tri[1], tri[2]), (tri[2], tri[0])];
         for &(a, b) in &edges {
             let key = if a < b { (a, b) } else { (b, a) };
-            *edge_count.entry(key).or_insert(0) += 1;
+            edge_info
+                .entry(key)
+                .and_modify(|(count, _)| *count += 1)
+                .or_insert((1, (a, b)));
         }
     }
 
-    edge_count
+    edge_info
         .into_iter()
-        .filter(|&(_, count)| count == 1)
-        .map(|(edge, _)| edge)
+        .filter(|&(_, (count, _))| count == 1)
+        .map(|(_, (_, directed))| directed)
         .collect()
 }
 
