@@ -22,17 +22,18 @@ pub fn main() {
 
 ## WebGL2 Renderer
 
-Implements `Renderer` trait from `unison-render`. Supports all 5 `RenderCommand` variants:
+Implements `Renderer` trait from `unison-render`. Supports all 6 `RenderCommand` variants:
 
 | Command | Implementation |
 |---------|---------------|
 | `Mesh` | Dynamic buffer upload, draw triangles |
 | `Sprite` | Textured quad with rotation + UV |
+| `LitSprite` | Textured quad with shadow mask sampling + PCF filtering |
 | `Rect` | Two-triangle filled quad |
 | `Line` | Thin rectangle along line direction |
 | `Terrain` | Fan triangulation of polygon |
 
-Two shader programs: solid-color and textured (with tint). Camera transform applied as a 3x3 view-projection matrix uniform.
+Three shader programs: solid-color, textured (with tint), and lit sprite (samples both a gradient texture and a shadow mask with optional PCF filtering). Camera transform applied as a 3x3 view-projection matrix uniform.
 
 ### Render Targets (FBOs)
 

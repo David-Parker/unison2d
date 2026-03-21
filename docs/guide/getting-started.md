@@ -32,6 +32,7 @@ use wasm_bindgen::prelude::*;
 use unison2d::*;
 use unison2d::math::{Color, Vec2};
 use unison2d::physics::{Material, mesh::create_ring_mesh};
+use unison2d::render::TextureId;
 use unison2d::input::KeyCode;
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash)]
@@ -57,6 +58,7 @@ impl Game for MyGame {
             material: Material::RUBBER,
             position: Vec2::new(0.0, 3.0),
             color: Color::from_hex(0xd4943a),
+            texture: TextureId::NONE,
         });
 
         // Ground platform
@@ -111,6 +113,7 @@ Run with `make dev`.
 `World` is the central simulation container. It owns:
 - **ObjectSystem** (`world.objects`) — physics bodies, sprites
 - **CameraSystem** (`world.cameras`) — named cameras with follow targets
+- **LightingSystem** (`world.lighting`) — point lights, directional lights, shadow casting
 - **Environment** (`world.environment`) — rendering config like background color
 
 You create objects through `world.spawn_*()` methods and advance the simulation with `world.step(dt)`.

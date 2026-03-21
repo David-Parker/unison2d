@@ -79,6 +79,7 @@ Set via `renderer.set_blend_mode(mode)`. Default is `Alpha`. Implementations tra
 enum RenderCommand {
     Sprite(DrawSprite),
     Mesh(DrawMesh),
+    LitSprite(DrawLitSprite),
     Line { start: [f32; 2], end: [f32; 2], color: Color, width: f32 },
     Rect { position: [f32; 2], size: [f32; 2], color: Color },
     Terrain { points: Vec<(f32, f32)>, fill_color: Color, line_color: Color },
@@ -108,6 +109,27 @@ DrawMesh {
     texture: TextureId,               // or TextureId::NONE for solid color
     color: Color,
     vertex_colors: Option<Vec<f32>>,  // per-vertex RGBA (4 per vertex), multiplied with color
+}
+```
+
+### DrawLitSprite
+
+A sprite drawn with an additional shadow mask texture. Used by the lighting system to render lights with shadow casting. The shader samples both the light gradient texture and the shadow mask, with optional PCF filtering for soft shadow edges.
+
+Platform implementations must support a dedicated lit sprite shader program (a third shader, in addition to the solid-color and textured programs).
+
+```rust
+DrawLitSprite {
+    texture: TextureId,        // light shape texture (e.g., radial gradient)
+    shadow_mask: TextureId,    // shadow mask (white = lit, black = shadowed)
+    position: [f32; 2],        // position in world space
+    size: [f32; 2],            // size in world units
+    rotation: f32,             // rotation in radians
+    uv: [f32; 4],              // (min_u, min_v, max_u, max_v)
+    color: Color,              // light color (color * intensity)
+    screen_size: (f32, f32),   // viewport dimensions for shadow UV calculation
+    shadow_filter: u32,        // PCF mode (0 = none, 5 = PCF5, 13 = PCF13)
+    shadow_strength: f32,      // 0.0 = no shadow, 1.0 = full shadow
 }
 ```
 

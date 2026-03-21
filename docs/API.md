@@ -170,6 +170,7 @@ impl Prefab for EnemyPrefab {
             material: Material::RUBBER,
             position,
             color: Color::from_hex(0xe74c3c),
+            texture: TextureId::NONE,
         })
     }
 }

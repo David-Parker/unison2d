@@ -130,6 +130,7 @@ Owns the physics world + object registry.
 |--------|-------------|
 | `spawn_soft_body(desc) -> ObjectId` | Create soft body |
 | `spawn_rigid_body(desc) -> ObjectId` | Create rigid body |
+| `spawn_sprite(desc) -> ObjectId` | Create sprite (no physics) |
 | `spawn_static_rect(pos, size, color) -> ObjectId` | Convenience for static platforms |
 | `despawn(id)` | Remove object |
 
@@ -145,6 +146,11 @@ Owns the physics world + object registry.
 | `apply_torque(id, torque, dt)` | Continuous rotation |
 | `apply_impulse(id, impulse)` | Instantaneous velocity change |
 | `is_grounded(id) -> bool` | Touching ground or another body? |
+| `is_touching(a, b) -> bool` | Two objects in contact? |
+| `get_contact(id) -> Option<ObjectId>` | First object in contact with this one |
+| `get_sprite_position(id) -> Option<Vec2>` | Get sprite position |
+| `set_sprite_position(id, pos)` | Set sprite position |
+| `set_sprite_rotation(id, rot)` | Set sprite rotation |
 
 #### Physics Configuration
 
@@ -204,7 +210,15 @@ Default: "main" camera at 20×15.
 | `remove_directional_light(id)` | Remove a directional light |
 | `get_light(id) -> Option<&PointLight>` | Get point light |
 | `get_light_mut(id) -> Option<&mut PointLight>` | Mutate point light |
+| `get_directional_light(id) -> Option<&DirectionalLight>` | Get directional light |
 | `get_directional_light_mut(id) -> Option<&mut DirectionalLight>` | Mutate directional light |
+| `light_count() -> usize` | Number of point lights |
+| `clear_lights()` | Remove all point lights |
+| `directional_light_count() -> usize` | Number of directional lights |
+| `clear_directional_lights()` | Remove all directional lights |
+| `has_lights() -> bool` | Any lights (point or directional) exist? |
+| `ambient() -> Color` | Get current ambient color |
+| `is_enabled() -> bool` | Check if lighting is enabled |
 | `set_ground_shadow(Option<f32>)` | Clip shadows at ground Y |
 
 ## Level Trait
@@ -275,6 +289,18 @@ RigidBodyDesc {
     position: Vec2,       // initial world position
     color: Color,         // render color
     is_static: bool,      // true = not affected by physics
+}
+```
+
+### SpriteDesc
+
+```rust
+SpriteDesc {
+    texture: TextureId,   // texture or TextureId::NONE for solid color
+    position: Vec2,       // world position
+    size: Vec2,           // size in world units
+    rotation: f32,        // rotation in radians
+    color: Color,         // render color (tint when textured)
 }
 ```
 

@@ -74,6 +74,7 @@ fn spawn_object(&mut self) {
         material: Material::JELLO,
         position: Vec2::new(0.0, 10.0),
         color: Color::from_hex(0x6c5ce7),
+        texture: TextureId::NONE,
     });
     self.spawned.push(id);
 

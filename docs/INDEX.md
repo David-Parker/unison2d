@@ -42,7 +42,7 @@ cargo test --workspace              # Run everything
 
 | Plan | Status |
 |------|--------|
-| [2D Lighting System](plans/lighting.md) | Phase 1 complete — Phase 2 next (Directional Lights) |
+| [2D Lighting System](plans/lighting.md) | Phase 1–3 complete (Point Lights, Directional Lights, Shadow Casting) — Phase 4 future (Normal Maps) |
 
 ## Rules
 
