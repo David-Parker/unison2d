@@ -9,7 +9,8 @@ Game (your struct, implements Game trait)
 ├── Engine<A>        — input/actions, renderer access, assets, compositing
 ├── World            — self-contained simulation
 │   ├── ObjectSystem   — physics + object registry
-│   └── CameraSystem   — named cameras + follow targets
+│   ├── CameraSystem   — named cameras + follow targets
+│   └── LightingSystem — point lights, directional lights, shadows
 └── Level (trait)    — optional scene abstraction
 ```
 
@@ -188,6 +189,23 @@ Named cameras with optional follow targets.
 | `unfollow(name)` | Stop following |
 
 Default: "main" camera at 20×15.
+
+### LightingSystem (`world.lighting`)
+
+2D lighting with lightmap compositing and shadow casting. See [lighting.md](lighting.md) for the full deep dive.
+
+| Method | Description |
+|--------|-------------|
+| `set_enabled(bool)` | Enable/disable the lighting system |
+| `set_ambient(Color)` | Set ambient color (unlit areas) |
+| `add_light(PointLight) -> LightId` | Add a point light |
+| `add_directional_light(DirectionalLight) -> LightId` | Add a directional light |
+| `remove_light(id)` | Remove a point light |
+| `remove_directional_light(id)` | Remove a directional light |
+| `get_light(id) -> Option<&PointLight>` | Get point light |
+| `get_light_mut(id) -> Option<&mut PointLight>` | Mutate point light |
+| `get_directional_light_mut(id) -> Option<&mut DirectionalLight>` | Mutate directional light |
+| `set_ground_shadow(Option<f32>)` | Clip shadows at ground Y |
 
 ## Level Trait
 

@@ -40,6 +40,7 @@ unison2d/crates/
 ├── unison-math/     # Vec2, Color, Rect — zero dependencies
 ├── unison-physics/  # XPBD soft body & rigid body physics
 ├── unison-render/   # Platform-agnostic rendering traits
+├── unison-lighting/ # 2D lighting with lightmap compositing and shadows
 ├── unison-input/    # Two-layer input (raw → action mapping)
 ├── unison-profiler/ # Function-level profiling
 └── unison-web/      # Web platform (WebGL2, DOM input, rAF loop)
@@ -65,7 +66,7 @@ Then access subsystems:
 ```rust
 use unison2d::physics::{PhysicsWorld, BodyConfig, Material, Mesh};
 use unison2d::render::{Renderer, Camera, Color};
-use unison2d::lighting::{LightingManager, Light};
+use unison2d::lighting::{LightingSystem, PointLight, DirectionalLight, ShadowSettings};
 use unison2d::input::{InputState, KeyCode};
 use unison2d::profiler::{Profiler, profile_scope};
 use unison2d::math::Vec2;

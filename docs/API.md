@@ -11,9 +11,10 @@ For per-crate deep dives, see the [api/](api/) directory.
 ```
 Game (your struct)
 ├── Engine<A>        — input/actions, renderer, compositing, assets
-├── World            — physics, objects, cameras, environment
+├── World            — physics, objects, cameras, lighting, environment
 │   ├── ObjectSystem   — soft bodies, rigid bodies, sprites
 │   ├── CameraSystem
+│   ├── LightingSystem — point lights, directional lights, shadows
 │   └── Environment    — background color
 └── Level<S> (trait) — optional scene abstraction with shared state
     ├── LevelContext<S>  — input + dt + shared state
@@ -263,6 +264,78 @@ world.cameras.add("minimap", Camera::new(100.0, 75.0));
 
 // Iterate
 for (name, camera) in world.cameras.iter() { /* ... */ }
+```
+
+## Lighting
+
+Lighting lives on the world's `LightingSystem`, accessible via `world.lighting`. See [api/lighting.md](api/lighting.md) for the full deep dive.
+
+### Setup
+
+```rust
+world.lighting.set_enabled(true);
+world.lighting.set_ambient(Color::new(0.1, 0.1, 0.15, 1.0));
+```
+
+### Point Lights
+
+```rust
+use unison2d::lighting::{PointLight, ShadowSettings};
+
+let light = world.lighting.add_light(PointLight {
+    position: Vec2::new(5.0, 3.0),
+    color: Color::new(1.0, 0.9, 0.7, 1.0),
+    intensity: 1.0,
+    radius: 8.0,
+    casts_shadows: true,
+    shadow: ShadowSettings::soft(),
+});
+```
+
+### Directional Lights
+
+```rust
+use unison2d::lighting::{DirectionalLight, ShadowSettings, ShadowFilter};
+
+world.lighting.add_directional_light(DirectionalLight {
+    direction: Vec2::new(0.5, -1.0),
+    color: Color::new(1.0, 0.95, 0.8, 1.0),
+    intensity: 0.7,
+    casts_shadows: true,
+    shadow: ShadowSettings {
+        filter: ShadowFilter::Pcf13,
+        distance: 12.0,
+        attenuation: 4.0,
+        ..ShadowSettings::default()
+    },
+});
+```
+
+### Shadow Settings
+
+```rust
+ShadowSettings {
+    filter: ShadowFilter::None,  // None, Pcf5, Pcf13
+    strength: 1.0,               // 0.0=invisible, 1.0=full black
+    distance: 0.0,               // max shadow distance (0.0=full radius)
+    attenuation: 1.0,            // fade curve (0.0=solid, higher=faster fade)
+}
+
+ShadowSettings::hard()   // hard shadows with defaults
+ShadowSettings::soft()   // soft shadows with PCF5
+```
+
+### Per-Object Shadow Control
+
+```rust
+world.objects.set_casts_shadow(id, false);  // disable shadows for this object
+world.lighting.set_ground_shadow(Some(-4.5));  // clip shadows at ground Y
+```
+
+### Draw Order
+
+```rust
+world.objects.set_z_order(id, 1);  // higher values draw on top (default: 0)
 ```
 
 ## Rendering

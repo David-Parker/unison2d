@@ -191,7 +191,7 @@ let light = world.lighting.add_light(PointLight {
     },
 });
 
-// Ground shadow prevents light bleeding below ground
+// Clip shadows at ground surface so they don't bleed below
 world.lighting.set_ground_shadow(Some(-4.5));
 ```
 
