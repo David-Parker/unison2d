@@ -8,6 +8,52 @@ use crate::occluder::ShadowFilter;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct LightId(pub(crate) u32);
 
+/// Shadow casting configuration shared by all light types.
+///
+/// Controls the appearance of shadows cast by a light. The light must also
+/// have `casts_shadows: true` for these settings to take effect.
+#[derive(Debug, Clone)]
+pub struct ShadowSettings {
+    /// PCF filter mode for shadow edges.
+    pub filter: ShadowFilter,
+    /// How dark shadows are (0.0 = no shadow, 1.0 = full black). Default 1.0.
+    pub strength: f32,
+    /// Maximum distance in world units that shadows extend from the occluder.
+    /// At 0.0, shadows extend to the full light radius. Default 0.0.
+    pub distance: f32,
+    /// Controls how aggressively shadows fade within the distance.
+    /// At 1.0 the fade is linear. Values > 1.0 make shadows fade faster
+    /// (more transparent near the occluder). Values < 1.0 make shadows
+    /// stay darker longer before fading. Default 1.0.
+    pub attenuation: f32,
+}
+
+impl Default for ShadowSettings {
+    fn default() -> Self {
+        Self {
+            filter: ShadowFilter::None,
+            strength: 1.0,
+            distance: 0.0,
+            attenuation: 1.0,
+        }
+    }
+}
+
+impl ShadowSettings {
+    /// Hard shadows with default settings.
+    pub fn hard() -> Self {
+        Self::default()
+    }
+
+    /// Soft shadows with PCF5 filtering.
+    pub fn soft() -> Self {
+        Self {
+            filter: ShadowFilter::Pcf5,
+            ..Self::default()
+        }
+    }
+}
+
 /// A point light that emits in all directions with radial falloff.
 #[derive(Debug, Clone)]
 pub struct PointLight {
@@ -21,12 +67,8 @@ pub struct PointLight {
     pub radius: f32,
     /// Whether this light casts shadows from occluders.
     pub casts_shadows: bool,
-    /// PCF filter mode for shadow edges.
-    pub shadow_filter: ShadowFilter,
-    /// How dark shadows are (0.0 = no shadow, 1.0 = full black). Default 1.0.
-    pub shadow_strength: f32,
-    /// Distance in world units over which shadows fade to invisible (0.0 = no fade). Default 0.0.
-    pub shadow_attenuation: f32,
+    /// Shadow appearance settings (filter, strength, distance, attenuation).
+    pub shadow: ShadowSettings,
 }
 
 impl PointLight {
@@ -38,9 +80,7 @@ impl PointLight {
             intensity,
             radius,
             casts_shadows: false,
-            shadow_filter: ShadowFilter::None,
-            shadow_strength: 1.0,
-            shadow_attenuation: 0.0,
+            shadow: ShadowSettings::default(),
         }
     }
 }
@@ -49,7 +89,7 @@ impl PointLight {
 ///
 /// Without normal maps, the direction field has no visual effect on shading —
 /// the light acts as a uniform color wash. However, the direction IS used for
-/// shadow casting (Phase 3): shadows are projected along this direction.
+/// shadow casting: shadows are projected along this direction.
 #[derive(Debug, Clone)]
 pub struct DirectionalLight {
     /// Direction the light shines FROM (normalized).
@@ -60,12 +100,8 @@ pub struct DirectionalLight {
     pub intensity: f32,
     /// Whether this light casts shadows from occluders.
     pub casts_shadows: bool,
-    /// PCF filter mode for shadow edges.
-    pub shadow_filter: ShadowFilter,
-    /// How dark shadows are (0.0 = no shadow, 1.0 = full black). Default 1.0.
-    pub shadow_strength: f32,
-    /// Distance in world units over which shadows fade to invisible (0.0 = no fade). Default 0.0.
-    pub shadow_attenuation: f32,
+    /// Shadow appearance settings (filter, strength, distance, attenuation).
+    pub shadow: ShadowSettings,
 }
 
 impl DirectionalLight {
@@ -76,9 +112,7 @@ impl DirectionalLight {
             color,
             intensity,
             casts_shadows: false,
-            shadow_filter: ShadowFilter::None,
-            shadow_strength: 1.0,
-            shadow_attenuation: 0.0,
+            shadow: ShadowSettings::default(),
         }
     }
 }

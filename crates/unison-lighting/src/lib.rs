@@ -15,7 +15,7 @@ pub mod shadow;
 mod system;
 pub mod gradient;
 
-pub use light::{DirectionalLight, LightId, PointLight};
+pub use light::{DirectionalLight, LightId, PointLight, ShadowSettings};
 pub use occluder::{Occluder, OccluderEdge, ShadowFilter};
 pub use shadow::{ShadowQuad, compute_boundary_edges};
 pub use system::LightingSystem;

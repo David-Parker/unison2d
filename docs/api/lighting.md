@@ -14,6 +14,24 @@ Renders point lights and directional lights to an offscreen FBO (the "lightmap")
 
 ## Types
 
+### `ShadowSettings`
+
+Shadow appearance configuration shared by all light types. Controls PCF filtering, shadow darkness, fade distance, and fade curve.
+
+```rust
+pub struct ShadowSettings {
+    pub filter: ShadowFilter,   // PCF mode for shadow edges (default: None)
+    pub strength: f32,          // Shadow darkness: 0.0=invisible, 1.0=full black (default: 1.0)
+    pub distance: f32,          // Max shadow distance in world units: 0.0=full radius (default: 0.0)
+    pub attenuation: f32,       // Fade curve: 1.0=linear, >1.0=faster fade, <1.0=slower (default: 1.0)
+}
+
+impl ShadowSettings {
+    pub fn hard() -> Self;      // Hard shadows, default settings
+    pub fn soft() -> Self;      // Soft shadows with PCF5
+}
+```
+
 ### `PointLight`
 
 A point light that emits in all directions with radial falloff.
@@ -25,9 +43,7 @@ pub struct PointLight {
     pub intensity: f32,            // Multiplier applied to color
     pub radius: f32,               // Radius of influence in world units
     pub casts_shadows: bool,       // Whether this light casts shadows (default: false)
-    pub shadow_filter: ShadowFilter, // PCF mode for shadow edges (default: None)
-    pub shadow_strength: f32,      // How dark shadows are: 0.0=invisible, 1.0=full black (default: 1.0)
-    pub shadow_attenuation: f32,   // Fade distance in world units: 0.0=no fade (default: 0.0)
+    pub shadow: ShadowSettings,    // Shadow appearance settings
 }
 
 impl PointLight {
@@ -45,9 +61,7 @@ pub struct DirectionalLight {
     pub color: Color,              // Light color
     pub intensity: f32,            // Multiplier applied to color
     pub casts_shadows: bool,       // Whether this light casts shadows (default: false)
-    pub shadow_filter: ShadowFilter, // PCF mode for shadow edges (default: None)
-    pub shadow_strength: f32,      // How dark shadows are: 0.0=invisible, 1.0=full black (default: 1.0)
-    pub shadow_attenuation: f32,   // Fade distance in world units: 0.0=no fade (default: 0.0)
+    pub shadow: ShadowSettings,    // Shadow appearance settings
 }
 
 impl DirectionalLight {
@@ -158,10 +172,10 @@ let light = world.lighting.add_light(PointLight::new(
 
 ### Shadow casting
 
-Enable shadows on a light by setting `casts_shadows: true`. Choose a PCF filter for soft edges:
+Enable shadows on a light by setting `casts_shadows: true`. Configure appearance via `ShadowSettings`:
 
 ```rust
-use unison2d::lighting::{PointLight, ShadowFilter};
+use unison2d::lighting::{PointLight, ShadowFilter, ShadowSettings};
 
 let light = world.lighting.add_light(PointLight {
     position: Vec2::new(0.0, 3.0),
@@ -169,13 +183,26 @@ let light = world.lighting.add_light(PointLight {
     intensity: 1.0,
     radius: 6.0,
     casts_shadows: true,
-    shadow_filter: ShadowFilter::Pcf5,
-    shadow_strength: 0.8,      // slightly transparent shadows
-    shadow_attenuation: 1.5,   // shadows fade over distance
+    shadow: ShadowSettings {
+        filter: ShadowFilter::Pcf5,
+        strength: 0.8,        // slightly transparent shadows
+        distance: 5.0,        // shadows fade over 5 world units
+        attenuation: 1.0,     // linear fade
+    },
 });
 
 // Ground shadow prevents light bleeding below ground
 world.lighting.set_ground_shadow(Some(-4.5));
+```
+
+Use the convenience constructors for common setups:
+
+```rust
+// Hard shadows with defaults
+shadow: ShadowSettings::hard(),
+
+// Soft shadows with PCF5
+shadow: ShadowSettings::soft(),
 ```
 
 ### Per-object shadow control

@@ -19,7 +19,7 @@
 use std::collections::HashMap;
 use unison_lighting::gradient::generate_radial_gradient;
 use unison_lighting::shadow::{project_directional_shadows, project_point_shadows};
-use unison_lighting::{DirectionalLight, LightingSystem, Occluder, PointLight, ShadowFilter};
+use unison_lighting::{DirectionalLight, LightingSystem, Occluder, PointLight, ShadowFilter, ShadowSettings};
 use unison_math::{Color, Vec2};
 use unison_render::{
     BlendMode, Camera, RenderCommand, RenderTargetId, Renderer, TextureDescriptor, TextureId,
@@ -327,7 +327,8 @@ fn render_shadow_mask_point(
         [light.position.x, light.position.y],
         light.radius,
         occluders,
-        light.shadow_attenuation,
+        light.shadow.distance,
+        light.shadow.attenuation,
     );
 
     for quad in &quads {
@@ -364,7 +365,8 @@ fn render_shadow_mask_directional(
         [light.direction.x, light.direction.y],
         cast_distance,
         occluders,
-        light.shadow_attenuation,
+        light.shadow.distance,
+        light.shadow.attenuation,
     );
 
     for quad in &quads {
@@ -448,8 +450,8 @@ fn render_lightmap(
                     let u = (px as f32 + 0.5) / buf_w as f32;
                     let v = (py as f32 + 0.5) / buf_h as f32;
                     let raw_shadow = mask.sample_uv(u, v)[0]; // .r channel
-                    // Apply shadow strength: mix(1.0, shadow, shadow_strength)
-                    1.0 - light.shadow_strength * (1.0 - raw_shadow)
+                    // Apply shadow strength: mix(1.0, shadow, strength)
+                    1.0 - light.shadow.strength * (1.0 - raw_shadow)
                 } else {
                     1.0
                 };
@@ -494,8 +496,8 @@ fn render_lightmap(
                     let u = (px as f32 + 0.5) / buf_w as f32;
                     let v = (py as f32 + 0.5) / buf_h as f32;
                     let raw_shadow = mask.sample_uv(u, v)[0];
-                    // Apply shadow strength: mix(1.0, shadow, shadow_strength)
-                    1.0 - light.shadow_strength * (1.0 - raw_shadow)
+                    // Apply shadow strength: mix(1.0, shadow, strength)
+                    1.0 - light.shadow.strength * (1.0 - raw_shadow)
                 } else {
                     1.0
                 };
@@ -597,9 +599,7 @@ fn lightmap_point_light_bright_at_center() {
         intensity: 1.0,
         radius: 5.0,
         casts_shadows: false,
-        shadow_filter: ShadowFilter::None,
-        shadow_strength: 1.0,
-        shadow_attenuation: 0.0,
+        shadow: ShadowSettings::default(),
     };
 
     let lightmap = render_lightmap(&camera, 100, 75, ambient, &[light], &[], &[], None);
@@ -628,9 +628,7 @@ fn lightmap_point_light_gradual_falloff() {
         intensity: 1.0,
         radius: 8.0,
         casts_shadows: false,
-        shadow_filter: ShadowFilter::None,
-        shadow_strength: 1.0,
-        shadow_attenuation: 0.0,
+        shadow: ShadowSettings::default(),
     };
 
     let lightmap = render_lightmap(&camera, 200, 150, ambient, &[light], &[], &[], None);
@@ -662,9 +660,7 @@ fn lightmap_shadow_blocks_light_behind_box() {
         intensity: 1.0,
         radius: 12.0,
         casts_shadows: true,
-        shadow_filter: ShadowFilter::None,
-        shadow_strength: 1.0,
-        shadow_attenuation: 0.0,
+        shadow: ShadowSettings::default(),
     };
     let occluders = vec![Occluder::from_aabb(0.0, 0.0, 1.0, 1.0)];
 
@@ -698,9 +694,7 @@ fn lightmap_shadow_does_not_block_light_in_front_of_box() {
         intensity: 1.0,
         radius: 15.0,
         casts_shadows: true,
-        shadow_filter: ShadowFilter::None,
-        shadow_strength: 1.0,
-        shadow_attenuation: 0.0,
+        shadow: ShadowSettings::default(),
     };
     let occluders = vec![Occluder::from_aabb(0.0, 0.0, 1.0, 1.0)];
 
@@ -761,9 +755,7 @@ fn lightmap_directional_shadow_creates_stripe() {
         color: Color::WHITE,
         intensity: 1.0,
         casts_shadows: true,
-        shadow_filter: ShadowFilter::None,
-        shadow_strength: 1.0,
-        shadow_attenuation: 0.0,
+        shadow: ShadowSettings::default(),
     };
 
     // Wide platform
@@ -823,9 +815,7 @@ fn composite_preserves_lit_areas() {
         intensity: 1.0,
         radius: 5.0,
         casts_shadows: false,
-        shadow_filter: ShadowFilter::None,
-        shadow_strength: 1.0,
-        shadow_attenuation: 0.0,
+        shadow: ShadowSettings::default(),
     };
 
     let result = render_lit_scene(
@@ -855,9 +845,7 @@ fn composite_shadow_creates_visible_dark_patch() {
         intensity: 1.0,
         radius: 12.0,
         casts_shadows: true,
-        shadow_filter: ShadowFilter::None,
-        shadow_strength: 1.0,
-        shadow_attenuation: 0.0,
+        shadow: ShadowSettings::default(),
     };
     let occluders = vec![Occluder::from_aabb(0.0, 0.0, 1.5, 1.5)];
 
@@ -897,9 +885,7 @@ fn game_scenario_donut_light_with_ground_shadow() {
         intensity: 1.0,
         radius: 6.0,
         casts_shadows: true,
-        shadow_filter: ShadowFilter::Pcf5,
-        shadow_strength: 1.0,
-        shadow_attenuation: 0.0,
+        shadow: ShadowSettings::soft(),
     };
 
     // Moonlight
@@ -992,9 +978,7 @@ fn shadow_edge_is_sharp_without_pcf() {
         intensity: 1.0,
         radius: 15.0,
         casts_shadows: true,
-        shadow_filter: ShadowFilter::None, // hard shadows
-        shadow_strength: 1.0,
-        shadow_attenuation: 0.0,
+        shadow: ShadowSettings::hard(),
     };
     let occluders = vec![Occluder::from_aabb(3.0, 0.0, 1.0, 1.0)];
 
@@ -1035,9 +1019,7 @@ fn multiple_lights_accumulate_additively() {
         intensity: 1.0,
         radius: 5.0,
         casts_shadows: false,
-        shadow_filter: ShadowFilter::None,
-        shadow_strength: 1.0,
-        shadow_attenuation: 0.0,
+        shadow: ShadowSettings::default(),
     };
     let light2 = PointLight {
         position: Vec2::new(3.0, 0.0),
@@ -1045,9 +1027,7 @@ fn multiple_lights_accumulate_additively() {
         intensity: 1.0,
         radius: 5.0,
         casts_shadows: false,
-        shadow_filter: ShadowFilter::None,
-        shadow_strength: 1.0,
-        shadow_attenuation: 0.0,
+        shadow: ShadowSettings::default(),
     };
 
     let lightmap = render_lightmap(
@@ -1084,9 +1064,7 @@ fn ground_shadow_prevents_light_bleed_below() {
         intensity: 1.0,
         radius: 12.0,
         casts_shadows: true,
-        shadow_filter: ShadowFilter::None,
-        shadow_strength: 1.0,
-        shadow_attenuation: 0.0,
+        shadow: ShadowSettings::default(),
     };
 
     // Test WITH ground shadow
@@ -1123,9 +1101,7 @@ fn shadow_from_two_occluders_both_cast() {
         intensity: 1.0,
         radius: 15.0,
         casts_shadows: true,
-        shadow_filter: ShadowFilter::None,
-        shadow_strength: 1.0,
-        shadow_attenuation: 0.0,
+        shadow: ShadowSettings::default(),
     };
 
     // Two boxes side by side
@@ -1243,9 +1219,7 @@ fn lightmap_composite_uv_not_flipped() {
         intensity: 1.0,
         radius: 3.0,
         casts_shadows: false,
-        shadow_filter: ShadowFilter::None,
-        shadow_strength: 1.0,
-        shadow_attenuation: 0.0,
+        shadow: ShadowSettings::default(),
     };
 
     let result = render_lit_scene(
@@ -1732,9 +1706,7 @@ fn real_lightmap_point_light_no_shadow_is_radial() {
         intensity: 1.0,
         radius: 5.0,
         casts_shadows: false,
-        shadow_filter: ShadowFilter::None,
-        shadow_strength: 1.0,
-        shadow_attenuation: 0.0,
+        shadow: ShadowSettings::default(),
     });
 
     let mut renderer = PixelRenderer::new(200.0, 150.0);
@@ -1775,9 +1747,7 @@ fn real_lightmap_shadow_mask_coverage() {
         intensity: 1.0,
         radius: 6.0,
         casts_shadows: true,
-        shadow_filter: ShadowFilter::Pcf5,
-        shadow_strength: 1.0,
-        shadow_attenuation: 0.0,
+        shadow: ShadowSettings::soft(),
     });
 
     // Game occluders: ground platform + trigger box
@@ -1880,9 +1850,7 @@ fn real_composite_game_scene() {
         intensity: 1.0,
         radius: 6.0,
         casts_shadows: true,
-        shadow_filter: ShadowFilter::Pcf5,
-        shadow_strength: 1.0,
-        shadow_attenuation: 0.0,
+        shadow: ShadowSettings::soft(),
     });
 
     sys.add_directional_light(DirectionalLight::new(
@@ -1958,9 +1926,7 @@ fn real_shadow_mask_not_inverted_by_ground_platform() {
         intensity: 1.0,
         radius: 6.0,
         casts_shadows: true,
-        shadow_filter: ShadowFilter::None,
-        shadow_strength: 1.0,
-        shadow_attenuation: 0.0,
+        shadow: ShadowSettings::default(),
     });
 
     // ONLY the ground platform — no trigger box, no ground shadow plane
@@ -2038,9 +2004,7 @@ fn real_point_light_is_radial_not_cone() {
         intensity: 1.0,
         radius: 6.0,
         casts_shadows: true,
-        shadow_filter: ShadowFilter::None,
-        shadow_strength: 1.0,
-        shadow_attenuation: 0.0,
+        shadow: ShadowSettings::default(),
     });
 
     sys.set_occluders(vec![
@@ -2136,7 +2100,7 @@ fn shadow_quads_do_not_collapse_inward() {
         Occluder::from_aabb(0.0, -5.5, 15.0, 1.0),
     ];
 
-    let quads = project_point_shadows(light_pos, light_radius, &occluders, 0.0);
+    let quads = project_point_shadows(light_pos, light_radius, &occluders, 0.0, 1.0);
 
     for (i, quad) in quads.iter().enumerate() {
         // Original endpoints are positions[0..4], projected are positions[4..8]

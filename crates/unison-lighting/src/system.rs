@@ -317,8 +317,8 @@ impl LightingSystem {
                         uv: [0.0, 0.0, 1.0, 1.0],
                         color,
                         screen_size,
-                        shadow_filter: light.shadow_filter.as_uniform_value(),
-                        shadow_strength: light.shadow_strength,
+                        shadow_filter: light.shadow.filter.as_uniform_value(),
+                        shadow_strength: light.shadow.strength,
                     }));
                     continue;
                 }
@@ -370,8 +370,8 @@ impl LightingSystem {
                             uv: [0.0, 0.0, 1.0, 1.0],
                             color,
                             screen_size,
-                            shadow_filter: light.shadow_filter.as_uniform_value(),
-                            shadow_strength: light.shadow_strength,
+                            shadow_filter: light.shadow.filter.as_uniform_value(),
+                            shadow_strength: light.shadow.strength,
                         }));
                         continue;
                     }
@@ -424,7 +424,8 @@ impl LightingSystem {
             [light.position.x, light.position.y],
             light.radius,
             occluders,
-            light.shadow_attenuation,
+            light.shadow.distance,
+            light.shadow.attenuation,
         );
 
         renderer.bind_render_target(shadow_target);
@@ -432,8 +433,8 @@ impl LightingSystem {
         renderer.clear(Color::WHITE);
         renderer.set_blend_mode(BlendMode::Alpha);
 
-        // Draw shadow quads with per-vertex colors (gradient for attenuation)
-        let use_vertex_colors = light.shadow_attenuation > 0.0;
+        // Draw shadow quads with per-vertex colors (gradient for distance fade)
+        let use_vertex_colors = light.shadow.distance > 0.0;
         for quad in &quads {
             renderer.draw(RenderCommand::Mesh(DrawMesh {
                 positions: quad.positions.to_vec(),
@@ -474,7 +475,8 @@ impl LightingSystem {
             [light.direction.x, light.direction.y],
             cast_distance,
             occluders,
-            light.shadow_attenuation,
+            light.shadow.distance,
+            light.shadow.attenuation,
         );
 
         renderer.bind_render_target(shadow_target);
@@ -482,7 +484,7 @@ impl LightingSystem {
         renderer.clear(Color::WHITE);
         renderer.set_blend_mode(BlendMode::Alpha);
 
-        let use_vertex_colors = light.shadow_attenuation > 0.0;
+        let use_vertex_colors = light.shadow.distance > 0.0;
         for quad in &quads {
             renderer.draw(RenderCommand::Mesh(DrawMesh {
                 positions: quad.positions.to_vec(),
