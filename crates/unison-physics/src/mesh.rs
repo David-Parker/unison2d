@@ -50,12 +50,15 @@ impl Mesh {
     /// Compute and cache boundary edges for shadow casting.
     ///
     /// Boundary edges are edges that belong to exactly one triangle,
-    /// forming the outer silhouette of the mesh.
+    /// forming the outer silhouette of the mesh. For meshes with holes
+    /// (e.g. rings), only the outermost boundary loop is kept so that
+    /// inner holes don't cast incorrect shadows.
     pub fn ensure_boundary_edges(&mut self) {
         if self.boundary_edges.is_some() {
             return;
         }
-        self.boundary_edges = Some(compute_boundary_edges_from_triangles(&self.triangles));
+        let all_edges = compute_boundary_edges_from_triangles(&self.triangles);
+        self.boundary_edges = Some(extract_outer_boundary(&self.vertices, &all_edges));
     }
 
     /// Number of vertices
@@ -190,6 +193,106 @@ pub fn compute_boundary_edges_from_triangles(triangles: &[u32]) -> Vec<(u32, u32
         .filter(|&(_, count)| count == 1)
         .map(|(edge, _)| edge)
         .collect()
+}
+
+/// Extract only the outermost boundary loop from a set of boundary edges.
+///
+/// Traces connected loops through the edges, computes each loop's enclosed
+/// area via the shoelace formula, and returns only the edges belonging to
+/// the loop with the largest area. For simple meshes (single boundary),
+/// this returns all edges unchanged.
+fn extract_outer_boundary(vertices: &[f32], edges: &[(u32, u32)]) -> Vec<(u32, u32)> {
+    use std::collections::HashMap;
+
+    if edges.is_empty() {
+        return Vec::new();
+    }
+
+    // Build adjacency: vertex -> list of connected vertices
+    let mut adjacency: HashMap<u32, Vec<u32>> = HashMap::new();
+    for &(a, b) in edges {
+        adjacency.entry(a).or_default().push(b);
+        adjacency.entry(b).or_default().push(a);
+    }
+
+    // Trace connected loops
+    let mut visited = std::collections::HashSet::new();
+    let mut loops: Vec<Vec<u32>> = Vec::new();
+
+    for &(start, _) in edges {
+        if visited.contains(&start) {
+            continue;
+        }
+
+        // Walk the loop
+        let mut loop_verts = Vec::new();
+        let mut current = start;
+        let mut prev = u32::MAX;
+
+        loop {
+            visited.insert(current);
+            loop_verts.push(current);
+
+            let neighbors = match adjacency.get(&current) {
+                Some(n) => n,
+                None => break,
+            };
+
+            // Pick the neighbor we haven't come from
+            let next = neighbors.iter().copied().find(|&n| n != prev);
+            match next {
+                Some(n) if n == start => break, // completed the loop
+                Some(n) if visited.contains(&n) => break, // shouldn't happen but be safe
+                Some(n) => {
+                    prev = current;
+                    current = n;
+                }
+                None => break,
+            }
+        }
+
+        if loop_verts.len() >= 3 {
+            loops.push(loop_verts);
+        }
+    }
+
+    // Single loop — return all edges as-is
+    if loops.len() <= 1 {
+        return edges.to_vec();
+    }
+
+    // Find the loop with the largest enclosed area (shoelace formula)
+    let outer_loop = loops.iter().max_by(|a, b| {
+        let area_a = shoelace_area(vertices, a);
+        let area_b = shoelace_area(vertices, b);
+        area_a.partial_cmp(&area_b).unwrap_or(std::cmp::Ordering::Equal)
+    }).unwrap();
+
+    // Collect vertex indices in the outer loop into a set for filtering
+    let outer_set: std::collections::HashSet<u32> = outer_loop.iter().copied().collect();
+
+    // Return only edges where both vertices belong to the outer loop
+    edges.iter()
+        .copied()
+        .filter(|&(a, b)| outer_set.contains(&a) && outer_set.contains(&b))
+        .collect()
+}
+
+/// Compute the absolute area enclosed by a loop of vertices using the shoelace formula.
+fn shoelace_area(vertices: &[f32], loop_verts: &[u32]) -> f32 {
+    let mut area = 0.0f32;
+    let n = loop_verts.len();
+    for i in 0..n {
+        let j = (i + 1) % n;
+        let vi = loop_verts[i] as usize;
+        let vj = loop_verts[j] as usize;
+        let xi = vertices[vi * 2];
+        let yi = vertices[vi * 2 + 1];
+        let xj = vertices[vj * 2];
+        let yj = vertices[vj * 2 + 1];
+        area += xi * yj - xj * yi;
+    }
+    area.abs() * 0.5
 }
 
 /// Offset all vertices by a fixed amount
