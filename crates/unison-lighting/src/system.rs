@@ -280,7 +280,7 @@ impl LightingSystem {
         let screen_size = renderer.screen_size();
 
         // Build combined occluder list (object occluders + optional ground)
-        let occluders = self.build_occluders(camera);
+        let occluders = self.build_occluders();
         let has_occluders = !occluders.is_empty();
 
         renderer.bind_render_target(lightmap_target);
@@ -393,18 +393,8 @@ impl LightingSystem {
     }
 
     /// Build the combined occluder list for this frame.
-    fn build_occluders(&self, camera: &Camera) -> Vec<Occluder> {
-        let mut occluders = self.occluders.clone();
-
-        // Add ground plane occluder if configured
-        if let Some(ground_y) = self.ground_shadow_y {
-            let (min_x, _, max_x, _) = camera.bounds();
-            // Extend slightly beyond camera bounds so shadows don't clip at edges
-            let margin = (max_x - min_x) * 0.5;
-            occluders.push(Occluder::from_ground(ground_y, min_x - margin, max_x + margin));
-        }
-
-        occluders
+    fn build_occluders(&self) -> Vec<Occluder> {
+        self.occluders.clone()
     }
 
     /// Render shadow geometry for a point light to the shadow mask FBO.
@@ -449,6 +439,9 @@ impl LightingSystem {
                 },
             }));
         }
+
+        // Erase shadows below ground plane
+        self.clear_below_ground(renderer, camera);
 
         renderer.end_frame();
     }
@@ -500,7 +493,37 @@ impl LightingSystem {
             }));
         }
 
+        // Erase shadows below ground plane
+        self.clear_below_ground(renderer, camera);
+
         renderer.end_frame();
+    }
+
+    /// Draw a white rect over everything below the ground shadow Y.
+    ///
+    /// This erases any shadow geometry that bled below the ground surface,
+    /// effectively clipping shadows at the ground plane.
+    fn clear_below_ground(
+        &self,
+        renderer: &mut dyn Renderer<Error = String>,
+        camera: &Camera,
+    ) {
+        let ground_y = match self.ground_shadow_y {
+            Some(y) => y,
+            None => return,
+        };
+
+        let (min_x, min_y, max_x, _) = camera.bounds();
+        let margin = (max_x - min_x) * 0.5;
+        let x = min_x - margin;
+        let w = (max_x - min_x) + margin * 2.0;
+        let h = ground_y - min_y + margin;
+
+        renderer.draw(RenderCommand::Rect {
+            position: [x, min_y - margin],
+            size: [w, h],
+            color: Color::WHITE,
+        });
     }
 
     /// Composite the lightmap over the currently-bound render target.
