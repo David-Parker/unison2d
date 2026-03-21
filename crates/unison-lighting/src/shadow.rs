@@ -5,6 +5,10 @@
 
 use crate::occluder::{Occluder, OccluderEdge};
 
+/// Number of strips to subdivide the fade region into.
+/// More strips = smoother attenuation curve approximation.
+const FADE_STRIPS: u32 = 8;
+
 /// A projected shadow polygon (2 triangles, 4 vertices).
 ///
 /// Vertices are in world space and should be drawn as a solid black quad
@@ -21,18 +25,18 @@ pub struct ShadowQuad {
 }
 
 impl ShadowQuad {
-    fn new(a: [f32; 2], b: [f32; 2], b_proj: [f32; 2], a_proj: [f32; 2], far_alpha: f32) -> Self {
+    fn new(a: [f32; 2], b: [f32; 2], b_proj: [f32; 2], a_proj: [f32; 2], near_alpha: f32, far_alpha: f32) -> Self {
         Self {
             positions: [a[0], a[1], b[0], b[1], b_proj[0], b_proj[1], a_proj[0], a_proj[1]],
             indices: [0, 1, 2, 0, 2, 3],
             vertex_colors: [
-                // Near vertex a: full shadow
-                0.0, 0.0, 0.0, 1.0,
-                // Near vertex b: full shadow
-                0.0, 0.0, 0.0, 1.0,
-                // Far vertex b': attenuated shadow
+                // Near vertex a
+                0.0, 0.0, 0.0, near_alpha,
+                // Near vertex b
+                0.0, 0.0, 0.0, near_alpha,
+                // Far vertex b'
                 0.0, 0.0, 0.0, far_alpha,
-                // Far vertex a': attenuated shadow
+                // Far vertex a'
                 0.0, 0.0, 0.0, far_alpha,
             ],
         }
@@ -77,9 +81,10 @@ pub fn is_back_facing_directional(edge: &OccluderEdge, light_direction: [f32; 2]
 /// `shadow_distance` is the max distance in world units that shadows extend.
 /// At 0.0, shadows extend to the full light radius (no truncation).
 ///
-/// `shadow_attenuation` controls the fade curve within that distance.
-/// At 1.0 the fade is linear. Values > 1.0 fade faster (shadows become
-/// transparent sooner). Values < 1.0 keep shadows darker longer.
+/// `shadow_attenuation` controls how quickly shadows fade within the distance.
+/// At 0.0, the shadow is solid black (no fade). At higher values, the shadow
+/// fades faster. The fade follows `alpha = (1 - t)^attenuation` where t is
+/// the normalized distance from the occluder to the shadow distance.
 pub fn project_point_shadows(
     light_pos: [f32; 2],
     light_radius: f32,
@@ -103,18 +108,16 @@ pub fn project_point_shadows(
                 let da = ((a_proj[0] - edge.a[0]).powi(2) + (a_proj[1] - edge.a[1]).powi(2)).sqrt();
                 let db = ((b_proj[0] - edge.b[0]).powi(2) + (b_proj[1] - edge.b[1]).powi(2)).sqrt();
 
-                // Insert an intermediate edge at the fade distance
-                let ta = (shadow_distance / da).min(1.0);
-                let tb = (shadow_distance / db).min(1.0);
-                let a_mid = lerp2(edge.a, a_proj, ta);
-                let b_mid = lerp2(edge.b, b_proj, tb);
+                // t values at the fade distance
+                let ta_max = (shadow_distance / da).min(1.0);
+                let tb_max = (shadow_distance / db).min(1.0);
 
-                // Single quad: occluder edge → fade point (opaque → transparent)
-                // Attenuation controls the fade curve via far vertex alpha
-                let far_alpha = compute_far_alpha(shadow_attenuation);
-                quads.push(ShadowQuad::new(edge.a, edge.b, b_mid, a_mid, far_alpha));
+                emit_fade_strips(
+                    &mut quads, edge.a, edge.b, a_proj, b_proj,
+                    ta_max, tb_max, shadow_attenuation,
+                );
             } else {
-                quads.push(ShadowQuad::new(edge.a, edge.b, b_proj, a_proj, 1.0));
+                quads.push(ShadowQuad::new(edge.a, edge.b, b_proj, a_proj, 1.0, 1.0));
             }
         }
     }
@@ -167,14 +170,12 @@ pub fn project_directional_shadows(
             let b_proj = [edge.b[0] + dx, edge.b[1] + dy];
 
             if shadow_distance > 0.0 {
-                let a_mid = lerp2(edge.a, a_proj, fade_t);
-                let b_mid = lerp2(edge.b, b_proj, fade_t);
-
-                // Single quad: occluder edge → fade point (opaque → transparent)
-                let far_alpha = compute_far_alpha(shadow_attenuation);
-                quads.push(ShadowQuad::new(edge.a, edge.b, b_mid, a_mid, far_alpha));
+                emit_fade_strips(
+                    &mut quads, edge.a, edge.b, a_proj, b_proj,
+                    fade_t, fade_t, shadow_attenuation,
+                );
             } else {
-                quads.push(ShadowQuad::new(edge.a, edge.b, b_proj, a_proj, 1.0));
+                quads.push(ShadowQuad::new(edge.a, edge.b, b_proj, a_proj, 1.0, 1.0));
             }
         }
     }
@@ -182,28 +183,46 @@ pub fn project_directional_shadows(
     quads
 }
 
-/// Compute the far vertex alpha from the attenuation exponent.
+/// Emit subdivided shadow strips from the occluder edge to the fade distance.
 ///
-/// At attenuation=1.0, the far alpha is 0.0 (linear fade to transparent).
-/// At attenuation > 1.0, the far alpha stays at 0.0 but the GPU-interpolated
-/// middle of the quad is more transparent (the power curve is applied per-pixel
-/// conceptually, but we approximate by keeping far=0 and letting the vertex
-/// interpolation do the work — for stronger attenuation we'd need more
-/// geometry subdivisions, but the visual effect is already good enough).
-///
-/// At attenuation=0.0, the shadow is full strength throughout (no fade).
-fn compute_far_alpha(shadow_attenuation: f32) -> f32 {
-    if shadow_attenuation <= 0.0 {
-        // No fade — full shadow to the end
-        1.0
-    } else {
-        // With any positive attenuation, the far edge fades to transparent.
-        // The attenuation value shapes the gradient via the vertex shader
-        // (conceptually, alpha = (1-t)^attenuation along the quad).
-        // Since we only have 2 control points (near=1, far=alpha), we keep
-        // far=0 and rely on the linear interpolation. For attenuation != 1.0,
-        // we could subdivide the quad, but in practice the visual is fine.
-        0.0
+/// Subdivides the region between the occluder edge (t=0) and the fade point
+/// (t=ta_max/tb_max) into strips, with alpha at each boundary computed from
+/// the power curve: `alpha = (1 - t_norm)^attenuation` where `t_norm` goes
+/// from 0 at the occluder to 1 at the fade distance.
+fn emit_fade_strips(
+    quads: &mut Vec<ShadowQuad>,
+    a_start: [f32; 2],
+    b_start: [f32; 2],
+    a_proj: [f32; 2],
+    b_proj: [f32; 2],
+    ta_max: f32,
+    tb_max: f32,
+    attenuation: f32,
+) {
+    // attenuation=0 means solid shadow (no fade)
+    if attenuation <= 0.0 {
+        let a_end = lerp2(a_start, a_proj, ta_max);
+        let b_end = lerp2(b_start, b_proj, tb_max);
+        quads.push(ShadowQuad::new(a_start, b_start, b_end, a_end, 1.0, 1.0));
+        return;
+    }
+
+    let n = FADE_STRIPS;
+    for i in 0..n {
+        let t0 = i as f32 / n as f32;
+        let t1 = (i + 1) as f32 / n as f32;
+
+        // Alpha at each strip boundary: (1 - t)^attenuation
+        let alpha0 = (1.0 - t0).powf(attenuation);
+        let alpha1 = (1.0 - t1).powf(attenuation);
+
+        // Interpolate positions along the projection
+        let a0 = lerp2(a_start, a_proj, t0 * ta_max);
+        let b0 = lerp2(b_start, b_proj, t0 * tb_max);
+        let a1 = lerp2(a_start, a_proj, t1 * ta_max);
+        let b1 = lerp2(b_start, b_proj, t1 * tb_max);
+
+        quads.push(ShadowQuad::new(a0, b0, b1, a1, alpha0, alpha1));
     }
 }
 

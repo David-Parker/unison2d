@@ -21,10 +21,10 @@ pub struct ShadowSettings {
     /// Maximum distance in world units that shadows extend from the occluder.
     /// At 0.0, shadows extend to the full light radius. Default 0.0.
     pub distance: f32,
-    /// Controls how aggressively shadows fade within the distance.
-    /// At 1.0 the fade is linear. Values > 1.0 make shadows fade faster
-    /// (more transparent near the occluder). Values < 1.0 make shadows
-    /// stay darker longer before fading. Default 1.0.
+    /// Controls how quickly shadows fade within the distance.
+    /// At 0.0, the shadow is solid black (no fade). At higher values,
+    /// the shadow fades faster. The fade follows `(1-t)^attenuation`.
+    /// Try 0.5 for a gentle fade, 2.0+ for aggressive fade. Default 1.0.
     pub attenuation: f32,
 }
 
