@@ -269,6 +269,12 @@ impl LightingSystem {
     ///   `LitSprite` that samples both the gradient and shadow mask.
     /// - Otherwise, draws the light as a plain additive sprite.
     ///
+    /// **Optimization: frustum culling.** Point lights whose bounding circle
+    /// (position ± radius) doesn't overlap the camera bounds are skipped
+    /// entirely. This avoids the expensive shadow mask render pass (FBO bind,
+    /// clear, shadow projection, draw calls) for off-screen lights. With many
+    /// lights spread across a large level, most will be culled each frame.
+    ///
     /// The caller must call [`ensure_resources`](Self::ensure_resources) first.
     pub fn render_lightmap(&self, renderer: &mut dyn Renderer<Error = String>, camera: &Camera) {
         profile_scope!("lighting.render_lightmap");
@@ -282,6 +288,7 @@ impl LightingSystem {
         };
 
         let screen_size = renderer.screen_size();
+        let cam_bounds = camera.bounds(); // (min_x, min_y, max_x, max_y)
 
         // Build combined occluder list (object occluders + optional ground)
         let occluders = self.build_occluders();
@@ -294,6 +301,13 @@ impl LightingSystem {
 
         // ── Point lights ──
         for light in self.lights.values() {
+            // Frustum cull: skip lights whose bounding circle is entirely
+            // outside the camera viewport. A light at (px, py) with radius r
+            // is visible if its AABB overlaps the camera bounds.
+            if !Self::light_overlaps_camera(light, cam_bounds) {
+                continue;
+            }
+
             let size = light.radius * 2.0;
             let color = Color::new(
                 light.color.r * light.intensity,
@@ -340,8 +354,10 @@ impl LightingSystem {
         }
 
         // ── Directional lights ──
+        // Directional lights are not frustum-culled — they cover the entire
+        // viewport by definition (rendered as full-camera-bounds quads).
         if !self.directional_lights.is_empty() {
-            let (min_x, min_y, max_x, max_y) = camera.bounds();
+            let (min_x, min_y, max_x, max_y) = cam_bounds;
             let cx = (min_x + max_x) / 2.0;
             let cy = (min_y + max_y) / 2.0;
             let w = max_x - min_x;
@@ -396,6 +412,25 @@ impl LightingSystem {
         renderer.end_frame();
     }
 
+    /// Check if a point light's bounding circle overlaps the camera viewport.
+    ///
+    /// Uses AABB-vs-AABB overlap: the light's bounding box (position ± radius)
+    /// is tested against the camera bounds. This is a conservative test — it
+    /// may include lights whose circle doesn't actually touch the viewport
+    /// corners, but never excludes a visible light.
+    #[inline]
+    fn light_overlaps_camera(
+        light: &PointLight,
+        cam_bounds: (f32, f32, f32, f32),
+    ) -> bool {
+        let (cam_min_x, cam_min_y, cam_max_x, cam_max_y) = cam_bounds;
+        let r = light.radius;
+        light.position.x + r >= cam_min_x
+            && light.position.x - r <= cam_max_x
+            && light.position.y + r >= cam_min_y
+            && light.position.y - r <= cam_max_y
+    }
+
     /// Build the combined occluder list for this frame.
     fn build_occluders(&self) -> Vec<Occluder> {
         self.occluders.clone()
@@ -428,22 +463,8 @@ impl LightingSystem {
         renderer.clear(Color::WHITE);
         renderer.set_blend_mode(BlendMode::Alpha);
 
-        // Draw shadow quads with per-vertex colors (gradient for distance fade)
         let use_vertex_colors = light.shadow.distance > 0.0;
-        for quad in &quads {
-            renderer.draw(RenderCommand::Mesh(DrawMesh {
-                positions: quad.positions.to_vec(),
-                uvs: vec![0.0; quad.positions.len()],
-                indices: quad.indices.to_vec(),
-                texture: TextureId::NONE,
-                color: Color::BLACK,
-                vertex_colors: if use_vertex_colors {
-                    Some(quad.vertex_colors.to_vec())
-                } else {
-                    None
-                },
-            }));
-        }
+        Self::draw_batched_shadow_quads(renderer, &quads, use_vertex_colors);
 
         // Erase shadows below ground plane
         self.clear_below_ground(renderer, camera);
@@ -484,25 +505,74 @@ impl LightingSystem {
         renderer.set_blend_mode(BlendMode::Alpha);
 
         let use_vertex_colors = light.shadow.distance > 0.0;
-        for quad in &quads {
-            renderer.draw(RenderCommand::Mesh(DrawMesh {
-                positions: quad.positions.to_vec(),
-                uvs: vec![0.0; quad.positions.len()],
-                indices: quad.indices.to_vec(),
-                texture: TextureId::NONE,
-                color: Color::BLACK,
-                vertex_colors: if use_vertex_colors {
-                    Some(quad.vertex_colors.to_vec())
-                } else {
-                    None
-                },
-            }));
-        }
+        Self::draw_batched_shadow_quads(renderer, &quads, use_vertex_colors);
 
         // Erase shadows below ground plane
         self.clear_below_ground(renderer, camera);
 
         renderer.end_frame();
+    }
+
+    /// Batch all shadow quads into a single `DrawMesh` draw call.
+    ///
+    /// **Optimization: draw call batching.** Previously each shadow quad was
+    /// submitted as a separate `DrawMesh` command, causing one WebGL
+    /// `bufferData` + `drawElements` call per quad. With N occluder edges and
+    /// 8 fade strips each, that's 8N draw calls per light. Batching merges
+    /// all quads into a single vertex/index buffer upload, reducing the per-
+    /// light overhead to 1 draw call regardless of occluder count.
+    ///
+    /// All shadow quads share the same material (no texture, black color), so
+    /// they batch trivially — we concatenate positions, UVs, and vertex colors
+    /// into flat arrays and offset the indices by the running vertex count.
+    fn draw_batched_shadow_quads(
+        renderer: &mut dyn Renderer<Error = String>,
+        quads: &[crate::shadow::ShadowQuad],
+        use_vertex_colors: bool,
+    ) {
+        if quads.is_empty() {
+            return;
+        }
+
+        // Pre-allocate: each quad has 4 verts (8 pos floats, 6 indices, 16 color floats)
+        let num_quads = quads.len();
+        let mut positions = Vec::with_capacity(num_quads * 8);
+        let mut indices = Vec::with_capacity(num_quads * 6);
+        let mut vertex_colors = if use_vertex_colors {
+            Vec::with_capacity(num_quads * 16)
+        } else {
+            Vec::new()
+        };
+
+        let mut base_vertex: u32 = 0;
+        for quad in quads {
+            positions.extend_from_slice(&quad.positions);
+
+            // Offset indices by the running vertex count so they reference
+            // the correct vertices in the combined buffer.
+            for &idx in &quad.indices {
+                indices.push(idx + base_vertex);
+            }
+
+            if use_vertex_colors {
+                vertex_colors.extend_from_slice(&quad.vertex_colors);
+            }
+
+            base_vertex += 4; // 4 vertices per quad
+        }
+
+        renderer.draw(RenderCommand::Mesh(DrawMesh {
+            uvs: vec![0.0; positions.len()],
+            positions,
+            indices,
+            texture: TextureId::NONE,
+            color: Color::BLACK,
+            vertex_colors: if use_vertex_colors {
+                Some(vertex_colors)
+            } else {
+                None
+            },
+        }));
     }
 
     /// Draw a white rect over everything below the ground shadow Y.
