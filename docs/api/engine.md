@@ -117,8 +117,13 @@ world.step(dt);
 | `background_color() -> Color` | Get clear color |
 | `step(dt)` | Advance physics + update camera follows |
 | `snapshot_for_render()` | Snapshot for interpolated rendering |
+| `draw(command, z_order)` | Queue world-space render command (sorted with objects, affected by lighting) |
+| `draw_unlit(command, z_order)` | Queue world-space render command drawn after lighting (not darkened by lightmap) |
+| `draw_overlay(command, z_order)` | Queue screen-space overlay command (drawn after lighting, 0..1 coords) |
 | `auto_render(renderer)` | Render through "main" camera to current target |
 | `render_to_targets(renderer, &[(&str, RenderTargetId)])` | Multi-camera rendering to targets |
+
+Custom draw commands are merged with scene objects by z-order. Overlay commands use screen-space coordinates (0,0 = bottom-left, 1,1 = top-right) and are drawn after the lighting pass. Both are cleared automatically after rendering.
 
 ### ObjectSystem (`world.objects`)
 

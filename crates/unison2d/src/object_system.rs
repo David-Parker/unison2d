@@ -350,45 +350,59 @@ impl ObjectSystem {
     /// Higher z-order draws later (on top). Objects at the same z-order
     /// have no guaranteed relative ordering.
     pub fn render_commands(&self) -> Vec<RenderCommand> {
+        self.render_commands_with_z().into_iter().map(|(cmd, _)| cmd).collect()
+    }
+
+    /// Collect render commands paired with their z-order, sorted by z-order.
+    ///
+    /// Used internally by World to merge object commands with custom draw commands.
+    pub(crate) fn render_commands_with_z(&self) -> Vec<(RenderCommand, i32)> {
         profile_scope!("objects.render_commands");
         let mut sorted: Vec<_> = self.entries.values().collect();
         sorted.sort_by_key(|e| e.z_order);
 
         let mut commands = Vec::new();
         for entry in sorted {
-            match &entry.kind {
+            let cmd = match &entry.kind {
                 ObjectKind::SoftBody { handle, color, texture, uvs, .. } => {
                     if let Some((positions, indices)) = self.physics.get_body_render_data(*handle) {
-                        commands.push(RenderCommand::Mesh(DrawMesh {
+                        Some(RenderCommand::Mesh(DrawMesh {
                             positions,
                             uvs: uvs.clone(),
                             indices: indices.to_vec(),
                             texture: *texture,
                             color: *color,
                             vertex_colors: None,
-                        }));
+                        }))
+                    } else {
+                        None
                     }
                 }
                 ObjectKind::RigidBody { handle, color } => {
                     if let Some(body) = self.physics.get_rigid_body(*handle) {
                         let he = body.collider.half_extents();
-                        commands.push(RenderCommand::Rect {
+                        Some(RenderCommand::Rect {
                             position: [body.position.x - he.x, body.position.y - he.y],
                             size: [he.x * 2.0, he.y * 2.0],
                             color: *color,
-                        });
+                        })
+                    } else {
+                        None
                     }
                 }
                 ObjectKind::Sprite { texture, position, size, rotation, color } => {
-                    commands.push(RenderCommand::Sprite(DrawSprite {
+                    Some(RenderCommand::Sprite(DrawSprite {
                         texture: *texture,
                         position: [position.x, position.y],
                         size: [size.x, size.y],
                         rotation: *rotation,
                         uv: [0.0, 0.0, 1.0, 1.0],
                         color: *color,
-                    }));
+                    }))
                 }
+            };
+            if let Some(cmd) = cmd {
+                commands.push((cmd, entry.z_order));
             }
         }
 

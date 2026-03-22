@@ -57,6 +57,9 @@ world.objects.set_ground(-5.0);
 | `set_background(color)` | Set clear color (convenience for `environment.background_color`) |
 | `background_color()` | Get clear color |
 | `step(dt)` | Advance physics + update camera follows |
+| `draw(command, z_order)` | Queue a world-space render command (sorted with objects, affected by lighting) |
+| `draw_unlit(command, z_order)` | Queue a world-space render command drawn after lighting (not darkened) |
+| `draw_overlay(command, z_order)` | Queue a screen-space overlay command (after lighting) |
 | `auto_render(renderer)` | Render through "main" camera |
 | `render_to_targets(renderer, &[(&str, RenderTargetId)])` | Multi-camera render |
 | `spawn_soft_body(SoftBodyDesc)` | Spawn a soft body |
