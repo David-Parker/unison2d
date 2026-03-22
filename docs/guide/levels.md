@@ -212,9 +212,21 @@ Levels receive a `RenderContext` in `render()` instead of raw renderer access. I
 
 ```rust
 fn render(&mut self, ctx: &mut RenderContext) {
-    // Simple: render through the main camera
+    // Simple: render all layers through the main camera
     self.world.auto_render(ctx.renderer);
 }
+```
+
+Worlds support named render layers for separating lit and unlit content. For example, a sky layer can be created before the default scene layer so sky elements are never darkened by shadows:
+
+```rust
+let sky = world.create_render_layer_before(
+    "sky",
+    RenderLayerConfig { lit: false, clear_color: sky_color },
+    world.default_layer(),
+);
+world.draw_to(sky, sun_disc, 0);  // unlit sky layer
+world.draw(tree_mesh, 0);          // default lit scene layer
 ```
 
 For multi-camera setups, use render targets and overlay helpers:

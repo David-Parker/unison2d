@@ -7,14 +7,19 @@
 //! - `cameras` ([`CameraSystem`]) — named cameras with optional follow targets
 //! - `lighting` ([`LightingSystem`]) — point lights, directional lights, and lightmap compositing
 //!
-//! ## Custom draw commands
+//! ## Render layers
 //!
-//! Use [`World::draw`] to inject world-space render commands that sort alongside
-//! scene objects by z-order. Use [`World::draw_overlay`] for screen-space commands
-//! drawn after lighting (HUD, menus). Both are cleared automatically each frame.
+//! Use [`World::create_render_layer`] to define named render layers with per-layer
+//! lighting control. Layers render in creation order. Lit layers are affected by
+//! the lighting/shadow system; unlit layers are not. Use [`World::draw_to`] to
+//! queue commands to a specific layer, or [`World::draw`] to queue to the default
+//! scene layer. [`World::draw_overlay`] queues screen-space commands drawn after
+//! all layers. All commands are cleared automatically each frame.
 
 use unison_math::{Color, Vec2};
-use unison_render::{Camera, Renderer, RenderCommand, RenderTargetId};
+use unison_render::{
+    BlendMode, Camera, DrawSprite, Renderer, RenderCommand, RenderTargetId, TextureId,
+};
 use unison_lighting::LightingSystem;
 use unison_profiler::profile_scope;
 
@@ -33,6 +38,30 @@ impl Default for Environment {
             background_color: Color::BLACK,
         }
     }
+}
+
+/// Handle for a render layer, returned by [`World::create_render_layer`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct RenderLayerId(usize);
+
+/// Configuration for a render layer.
+pub struct RenderLayerConfig {
+    /// Whether this layer is affected by the lighting/shadow system.
+    /// Lit layers are rendered to an offscreen FBO with lighting composited;
+    /// unlit layers render directly to the output target.
+    pub lit: bool,
+    /// Clear color for this layer. The first layer typically uses an opaque
+    /// color (e.g. sky blue). Subsequent layers typically use
+    /// [`Color::TRANSPARENT`] so lower layers show through.
+    pub clear_color: Color,
+}
+
+/// Internal render layer state.
+struct RenderLayer {
+    #[allow(dead_code)]
+    name: String,
+    config: RenderLayerConfig,
+    commands: Vec<(RenderCommand, i32)>,
 }
 
 /// A self-contained game world.
@@ -60,34 +89,60 @@ pub struct World {
     /// Lighting subsystem (disabled by default).
     pub lighting: LightingSystem,
 
-    /// Custom world-space draw commands queued this frame (affected by lighting).
-    draw_commands: Vec<(RenderCommand, i32)>,
-    /// World-space draw commands drawn after lighting (not affected by lightmap).
+    /// Named render layers, rendered in creation order.
+    render_layers: Vec<RenderLayer>,
+    /// The default lit "scene" layer — `draw()` routes here.
+    default_layer: RenderLayerId,
+
+    /// World-space draw commands drawn after all layers (not affected by lightmap).
     unlit_commands: Vec<(RenderCommand, i32)>,
     /// Screen-space overlay commands queued this frame (drawn after lighting).
     overlay_commands: Vec<(RenderCommand, i32)>,
+
+    /// Offscreen FBO for lit layer groups (created lazily, resized on viewport change).
+    scene_target: Option<RenderTargetId>,
+    scene_texture: Option<TextureId>,
+    scene_fbo_size: (u32, u32),
 }
 
 impl World {
     /// Create a new World with default settings.
     ///
-    /// Comes with a default "main" camera (20x15 world units) and
-    /// standard gravity (-9.8).
+    /// Comes with a default "main" camera (20x15 world units),
+    /// standard gravity (-9.8), and a default lit "scene" render layer.
     pub fn new() -> Self {
+        let default_layer = RenderLayerId(0);
+        let scene_layer = RenderLayer {
+            name: "scene".to_string(),
+            config: RenderLayerConfig {
+                lit: true,
+                clear_color: Color::BLACK,
+            },
+            commands: Vec::new(),
+        };
+
         Self {
             objects: ObjectSystem::new(),
             cameras: CameraSystem::new(),
             environment: Environment::default(),
             lighting: LightingSystem::new(),
-            draw_commands: Vec::new(),
+            render_layers: vec![scene_layer],
+            default_layer,
             unlit_commands: Vec::new(),
             overlay_commands: Vec::new(),
+            scene_target: None,
+            scene_texture: None,
+            scene_fbo_size: (0, 0),
         }
     }
 
     /// Set the background clear color.
+    ///
+    /// Updates the default scene layer's clear color and the environment
+    /// background color. For custom layers, use [`set_layer_clear_color`](Self::set_layer_clear_color).
     pub fn set_background(&mut self, color: Color) {
         self.environment.background_color = color;
+        self.render_layers[self.default_layer.0].config.clear_color = color;
     }
 
     /// Get the background clear color.
@@ -95,33 +150,101 @@ impl World {
         self.environment.background_color
     }
 
-    // ── Custom draw commands ──
+    // ── Render layers ──
 
-    /// Queue a world-space render command at the given z-order.
+    /// Create a named render layer.
     ///
-    /// Commands are sorted alongside scene objects by z-order and drawn
-    /// in the same camera/lighting pass. Cleared automatically after rendering.
+    /// Layers render in the order they are created. Lit layers are affected
+    /// by the lighting/shadow system; unlit layers render directly to the
+    /// output. Returns a handle for use with [`draw_to`](Self::draw_to).
     ///
-    /// Use negative z-orders to draw behind scene objects (e.g. sky elements),
-    /// or high z-orders to draw in front.
-    pub fn draw(&mut self, command: RenderCommand, z_order: i32) {
-        self.draw_commands.push((command, z_order));
+    /// **Important:** Layers created *before* the default scene layer render
+    /// behind it. To insert a layer before the scene, create it before any
+    /// game objects are spawned — the default scene layer is always at index 0
+    /// unless you insert before it.
+    ///
+    /// To insert a layer before the default scene layer, use
+    /// [`create_render_layer_before`](Self::create_render_layer_before).
+    pub fn create_render_layer(&mut self, name: &str, config: RenderLayerConfig) -> RenderLayerId {
+        let id = RenderLayerId(self.render_layers.len());
+        self.render_layers.push(RenderLayer {
+            name: name.to_string(),
+            config,
+            commands: Vec::new(),
+        });
+        id
     }
 
-    /// Queue a world-space render command drawn after the lighting pass.
+    /// Create a named render layer inserted before `before`.
+    ///
+    /// All existing layer IDs at or after the insertion point (including
+    /// `before`) shift by one. The default layer ID is updated automatically.
+    pub fn create_render_layer_before(
+        &mut self,
+        name: &str,
+        config: RenderLayerConfig,
+        before: RenderLayerId,
+    ) -> RenderLayerId {
+        let idx = before.0;
+        self.render_layers.insert(idx, RenderLayer {
+            name: name.to_string(),
+            config,
+            commands: Vec::new(),
+        });
+        // Shift the default layer if it was at or after the insertion point
+        if self.default_layer.0 >= idx {
+            self.default_layer = RenderLayerId(self.default_layer.0 + 1);
+        }
+        RenderLayerId(idx)
+    }
+
+    /// Get the default scene layer ID.
+    pub fn default_layer(&self) -> RenderLayerId {
+        self.default_layer
+    }
+
+    /// Update a layer's clear color.
+    pub fn set_layer_clear_color(&mut self, layer: RenderLayerId, color: Color) {
+        self.render_layers[layer.0].config.clear_color = color;
+    }
+
+    // ── Custom draw commands ──
+
+    /// Queue a world-space render command to a specific layer.
+    ///
+    /// Commands within a layer are sorted by z-order. The layer determines
+    /// whether the command is affected by lighting. Cleared automatically
+    /// after rendering.
+    pub fn draw_to(&mut self, layer: RenderLayerId, command: RenderCommand, z_order: i32) {
+        self.render_layers[layer.0].commands.push((command, z_order));
+    }
+
+    /// Queue a world-space render command to the default scene layer.
+    ///
+    /// Equivalent to `draw_to(world.default_layer(), command, z_order)`.
+    /// Commands are sorted alongside scene objects by z-order and drawn
+    /// in the scene layer's camera/lighting pass. Cleared automatically
+    /// after rendering.
+    pub fn draw(&mut self, command: RenderCommand, z_order: i32) {
+        let layer = self.default_layer;
+        self.draw_to(layer, command, z_order);
+    }
+
+    /// Queue a world-space render command drawn after all layers.
     ///
     /// Like [`draw`](Self::draw) but not affected by the lightmap multiply.
-    /// Use for sky elements (sun/moon discs) that should appear at full
-    /// brightness regardless of scene lighting.
+    /// Use for effects that should appear at full brightness in front of the
+    /// lit scene. For sky/background elements, consider using an unlit render
+    /// layer via [`create_render_layer`](Self::create_render_layer) instead.
     pub fn draw_unlit(&mut self, command: RenderCommand, z_order: i32) {
         self.unlit_commands.push((command, z_order));
     }
 
     /// Queue a screen-space overlay command at the given z-order.
     ///
-    /// Overlays are drawn after the lighting pass in screen-space coordinates
-    /// (0,0 = bottom-left, 1,1 = top-right). Not affected by camera position
-    /// or lighting. Cleared automatically after rendering.
+    /// Overlays are drawn after all layers and the unlit pass, in screen-space
+    /// coordinates (0,0 = bottom-left, 1,1 = top-right). Not affected by
+    /// camera position or lighting. Cleared automatically after rendering.
     pub fn draw_overlay(&mut self, command: RenderCommand, z_order: i32) {
         self.overlay_commands.push((command, z_order));
     }
@@ -168,12 +291,191 @@ impl World {
 
     // ── Rendering (internal) ──
 
-    /// Collect all world-space commands (objects + custom), sorted by z-order.
-    fn merged_commands(&self) -> Vec<RenderCommand> {
-        let mut all = self.objects.render_commands_with_z();
-        all.extend(self.draw_commands.iter().cloned());
-        all.sort_by_key(|(_, z)| *z);
-        all.into_iter().map(|(cmd, _)| cmd).collect()
+    /// Merge object render commands into the default layer's command list.
+    fn merge_objects_into_default_layer(&mut self) {
+        let object_cmds = self.objects.render_commands_with_z();
+        let layer = &mut self.render_layers[self.default_layer.0];
+        layer.commands.extend(object_cmds);
+    }
+
+    /// Draw a single layer's commands sorted by z-order to the currently-bound target.
+    fn render_layer_commands(
+        renderer: &mut dyn Renderer<Error = String>,
+        camera: &Camera,
+        commands: &[(RenderCommand, i32)],
+        clear_color: Option<Color>,
+    ) {
+        renderer.begin_frame(camera);
+        if let Some(color) = clear_color {
+            renderer.clear(color);
+        }
+        let mut sorted: Vec<_> = commands.to_vec();
+        sorted.sort_by_key(|(_, z)| *z);
+        for (cmd, _) in sorted {
+            renderer.draw(cmd);
+        }
+        renderer.end_frame();
+    }
+
+    /// Create or resize the scene FBO to match the current screen size.
+    fn ensure_scene_fbo(&mut self, renderer: &mut dyn Renderer<Error = String>) {
+        let (w, h) = renderer.screen_size();
+        let (w, h) = (w as u32, h as u32);
+
+        if self.scene_target.is_some() && self.scene_fbo_size == (w, h) {
+            return;
+        }
+
+        // Destroy old FBO if size changed
+        if let Some(target) = self.scene_target.take() {
+            renderer.destroy_render_target(target);
+        }
+        if let Some(tex) = self.scene_texture.take() {
+            renderer.destroy_texture(tex);
+        }
+
+        let (target, texture) = renderer
+            .create_render_target(w, h)
+            .expect("Failed to create scene render target");
+        self.scene_target = Some(target);
+        self.scene_texture = Some(texture);
+        self.scene_fbo_size = (w, h);
+    }
+
+    /// Composite the scene FBO texture onto the currently-bound target with alpha blending.
+    fn composite_scene_fbo(
+        renderer: &mut dyn Renderer<Error = String>,
+        camera: &Camera,
+        scene_texture: TextureId,
+    ) {
+        let (min_x, min_y, max_x, max_y) = camera.bounds();
+        let cx = (min_x + max_x) / 2.0;
+        let cy = (min_y + max_y) / 2.0;
+
+        renderer.begin_frame(camera);
+        renderer.set_blend_mode(BlendMode::Alpha);
+        renderer.draw(RenderCommand::Sprite(DrawSprite {
+            texture: scene_texture,
+            position: [cx, cy],
+            size: [max_x - min_x, max_y - min_y],
+            rotation: 0.0,
+            // V-flip UVs for FBO texture orientation
+            uv: [0.0, 1.0, 1.0, 0.0],
+            color: Color::WHITE,
+        }));
+        renderer.end_frame();
+    }
+
+    /// Returns true if any lit layer has commands queued.
+    fn has_lit_content(&self) -> bool {
+        self.render_layers.iter().any(|l| l.config.lit && !l.commands.is_empty())
+    }
+
+    /// Render all layers, grouping consecutive lit layers for shared FBO + lighting.
+    ///
+    /// - Unlit layers render directly to `output_target`.
+    /// - Consecutive lit layers share the scene FBO; lighting is applied once
+    ///   per group, then the result is composited onto `output_target`.
+    fn render_layers(
+        &mut self,
+        renderer: &mut dyn Renderer<Error = String>,
+        camera: &Camera,
+        output_target: RenderTargetId,
+    ) {
+        let do_lighting = self.lighting.is_enabled() && self.lighting.has_lights();
+
+        if do_lighting {
+            let occluders = self.objects.collect_occluders();
+            self.lighting.set_occluders(occluders);
+            self.lighting.ensure_resources(renderer);
+        }
+
+        // Ensure scene FBO exists if any lit layers have content
+        let need_fbo = self.has_lit_content();
+        if need_fbo {
+            self.ensure_scene_fbo(renderer);
+        }
+
+        let scene_target = self.scene_target;
+        let scene_texture = self.scene_texture;
+
+        let layer_count = self.render_layers.len();
+        let mut i = 0;
+        while i < layer_count {
+            let layer = &self.render_layers[i];
+
+            if !layer.config.lit {
+                // ── Unlit layer: render directly to output ──
+                if !layer.commands.is_empty() {
+                    renderer.bind_render_target(output_target);
+                    Self::render_layer_commands(
+                        renderer,
+                        camera,
+                        &layer.commands,
+                        Some(layer.config.clear_color),
+                    );
+                } else {
+                    // Empty unlit layer — still clear with its color
+                    renderer.bind_render_target(output_target);
+                    renderer.begin_frame(camera);
+                    renderer.clear(layer.config.clear_color);
+                    renderer.end_frame();
+                }
+                i += 1;
+            } else {
+                // ── Lit group: collect consecutive lit layers ──
+                let fbo = scene_target.expect("scene FBO should exist for lit layers");
+                let tex = scene_texture.expect("scene texture should exist for lit layers");
+                let group_start = i;
+
+                // First lit layer in group — clear the FBO
+                renderer.bind_render_target(fbo);
+                Self::render_layer_commands(
+                    renderer,
+                    camera,
+                    &self.render_layers[i].commands,
+                    Some(Color::TRANSPARENT),
+                );
+                i += 1;
+
+                // Continue with consecutive lit layers (no clear)
+                while i < layer_count && self.render_layers[i].config.lit {
+                    if !self.render_layers[i].commands.is_empty() {
+                        renderer.bind_render_target(fbo);
+                        Self::render_layer_commands(
+                            renderer,
+                            camera,
+                            &self.render_layers[i].commands,
+                            None, // no clear — accumulate onto existing content
+                        );
+                    }
+                    i += 1;
+                }
+
+                // Apply lighting to the scene FBO
+                if do_lighting {
+                    self.lighting.render_lightmap(renderer, camera);
+                    renderer.bind_render_target(fbo);
+                    self.lighting.composite_lightmap(renderer, camera);
+                }
+
+                // Composite lit scene FBO onto output
+                renderer.bind_render_target(output_target);
+                // Only composite if group had content (avoid blank overlay)
+                let group_has_content = (group_start..i)
+                    .any(|j| !self.render_layers[j].commands.is_empty());
+                if group_has_content {
+                    Self::composite_scene_fbo(renderer, camera, tex);
+                }
+            }
+        }
+    }
+
+    /// Clear all layer command lists.
+    fn clear_layer_commands(&mut self) {
+        for layer in &mut self.render_layers {
+            layer.commands.clear();
+        }
     }
 
     /// Draw unlit commands in world space (if any). Called after the lighting pass.
@@ -221,17 +523,14 @@ impl World {
 
     // ── Rendering (public) ──
 
-    /// Render all objects through the "main" camera to the currently-bound target.
+    /// Render all layers through the "main" camera to the currently-bound target.
     ///
     /// This is a convenience method for simple single-camera setups.
     /// For multi-camera rendering, use `render_to_targets()` instead.
     ///
-    /// If lighting is enabled, renders the lightmap (with shadows if configured)
-    /// and composites it over the scene with multiply blending.
-    ///
-    /// Custom draw commands ([`World::draw`]) are merged with scene objects by
-    /// z-order. Overlay commands ([`World::draw_overlay`]) are drawn after
-    /// lighting in screen space. Both are cleared after this call.
+    /// Layers are rendered in creation order. Consecutive lit layers share a
+    /// single offscreen FBO with lighting composited; unlit layers render
+    /// directly. After all layers: unlit commands, then overlay commands.
     pub fn auto_render(&mut self, renderer: &mut dyn Renderer<Error = String>) {
         profile_scope!("world.auto_render");
         let camera = match self.cameras.get("main") {
@@ -239,66 +538,41 @@ impl World {
             None => return,
         };
 
-        let commands = self.merged_commands();
+        // Merge object commands into the default layer
+        self.merge_objects_into_default_layer();
 
-        renderer.begin_frame(&camera);
-        renderer.clear(self.environment.background_color);
+        // Render all layers (handles lit/unlit grouping, FBO, lighting)
+        self.render_layers(renderer, &camera, RenderTargetId::SCREEN);
 
-        for cmd in &commands {
-            renderer.draw(cmd.clone());
-        }
-
-        renderer.end_frame();
-
-        // Lighting pass
-        if self.lighting.is_enabled() && self.lighting.has_lights() {
-            // Collect occluder geometry for shadow casting
-            let occluders = self.objects.collect_occluders();
-            self.lighting.set_occluders(occluders);
-
-            self.lighting.ensure_resources(renderer);
-            self.lighting.render_lightmap(renderer, &camera);
-            // Bind back to screen before compositing to avoid feedback loop
-            // (render_lightmap leaves the lightmap FBO bound)
-            renderer.bind_render_target(RenderTargetId::SCREEN);
-            self.lighting.composite_lightmap(renderer, &camera);
-        }
-
-        // Unlit pass (world-space, after lighting — not darkened by lightmap)
+        // Unlit pass (world-space, after all layers — not darkened by lightmap)
         self.render_unlit(renderer, &camera);
 
-        // Overlay pass (screen-space, after lighting)
+        // Overlay pass (screen-space, after all layers)
         self.render_overlays(renderer);
 
-        // Clear queued commands for next frame
-        self.draw_commands.clear();
+        // Clear all queued commands for next frame
+        self.clear_layer_commands();
         self.unlit_commands.clear();
         self.overlay_commands.clear();
     }
 
-    /// Render all objects through each named camera into its assigned render target.
+    /// Render all layers through each named camera into its assigned render target.
     ///
-    /// For each `(camera_name, target_id)` pair: binds the target, renders the scene
-    /// through that camera, and ends the frame. Use with `Engine::composite_layer()`
+    /// For each `(camera_name, target_id)` pair: renders all layers through
+    /// that camera into the target. Use with `Engine::composite_layer()`
     /// to arrange outputs on screen.
     ///
-    /// If lighting is enabled, renders and composites the lightmap for each
-    /// camera/target pair. Custom draw commands and overlays are included in
-    /// each target and cleared after this call.
+    /// Layers, lighting, unlit commands, and overlays are included in each
+    /// target and cleared after this call.
     pub fn render_to_targets(
         &mut self,
         renderer: &mut dyn Renderer<Error = String>,
         camera_targets: &[(&str, RenderTargetId)],
     ) {
         profile_scope!("world.render_to_targets");
-        let commands = self.merged_commands();
-        let do_lighting = self.lighting.is_enabled() && self.lighting.has_lights();
 
-        if do_lighting {
-            let occluders = self.objects.collect_occluders();
-            self.lighting.set_occluders(occluders);
-            self.lighting.ensure_resources(renderer);
-        }
+        // Merge object commands into the default layer
+        self.merge_objects_into_default_layer();
 
         for &(cam_name, target_id) in camera_targets {
             let camera = match self.cameras.get(cam_name) {
@@ -306,22 +580,8 @@ impl World {
                 None => continue,
             };
 
-            renderer.bind_render_target(target_id);
-            renderer.begin_frame(&camera);
-            renderer.clear(self.environment.background_color);
-
-            for cmd in &commands {
-                renderer.draw(cmd.clone());
-            }
-
-            renderer.end_frame();
-
-            // Lighting pass for this camera/target
-            if do_lighting {
-                self.lighting.render_lightmap(renderer, &camera);
-                renderer.bind_render_target(target_id);
-                self.lighting.composite_lightmap(renderer, &camera);
-            }
+            // Render all layers to this target
+            self.render_layers(renderer, &camera, target_id);
 
             // Unlit pass for this target
             renderer.bind_render_target(target_id);
@@ -332,8 +592,8 @@ impl World {
             self.render_overlays(renderer);
         }
 
-        // Clear queued commands for next frame
-        self.draw_commands.clear();
+        // Clear all queued commands for next frame
+        self.clear_layer_commands();
         self.unlit_commands.clear();
         self.overlay_commands.clear();
     }
@@ -393,7 +653,7 @@ mod tests {
     }
 
     #[test]
-    fn draw_queues_commands() {
+    fn draw_queues_to_default_layer() {
         let mut world = World::new();
         world.draw(RenderCommand::Rect {
             position: [0.0, 0.0],
@@ -406,9 +666,59 @@ mod tests {
             color: Color::BLUE,
         }, 100);
 
-        let merged = world.merged_commands();
-        // Should contain at least the two custom commands
-        assert!(merged.len() >= 2);
+        let layer = &world.render_layers[world.default_layer.0];
+        assert_eq!(layer.commands.len(), 2);
+    }
+
+    #[test]
+    fn draw_to_queues_to_specific_layer() {
+        let mut world = World::new();
+        let sky = world.create_render_layer("sky", RenderLayerConfig {
+            lit: false,
+            clear_color: Color::BLUE,
+        });
+
+        world.draw_to(sky, RenderCommand::Rect {
+            position: [0.0, 0.0],
+            size: [1.0, 1.0],
+            color: Color::WHITE,
+        }, 0);
+
+        assert_eq!(world.render_layers[sky.0].commands.len(), 1);
+        assert_eq!(world.render_layers[world.default_layer.0].commands.len(), 0);
+    }
+
+    #[test]
+    fn create_render_layer_before() {
+        let mut world = World::new();
+        // Default layer is at index 0
+        assert_eq!(world.default_layer.0, 0);
+        assert_eq!(world.render_layers.len(), 1);
+
+        // Insert sky layer before the default scene layer
+        let sky = world.create_render_layer_before(
+            "sky",
+            RenderLayerConfig { lit: false, clear_color: Color::BLUE },
+            world.default_layer(),
+        );
+
+        assert_eq!(sky.0, 0); // sky is now at index 0
+        assert_eq!(world.default_layer.0, 1); // scene shifted to index 1
+        assert_eq!(world.render_layers.len(), 2);
+        assert!(!world.render_layers[0].config.lit); // sky = unlit
+        assert!(world.render_layers[1].config.lit); // scene = lit
+    }
+
+    #[test]
+    fn set_layer_clear_color() {
+        let mut world = World::new();
+        let sky = world.create_render_layer("sky", RenderLayerConfig {
+            lit: false,
+            clear_color: Color::BLACK,
+        });
+
+        world.set_layer_clear_color(sky, Color::BLUE);
+        assert_eq!(world.render_layers[sky.0].config.clear_color.b, Color::BLUE.b);
     }
 
     #[test]

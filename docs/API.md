@@ -57,11 +57,16 @@ world.objects.set_ground(-5.0);
 | `set_background(color)` | Set clear color (convenience for `environment.background_color`) |
 | `background_color()` | Get clear color |
 | `step(dt)` | Advance physics + update camera follows |
-| `draw(command, z_order)` | Queue a world-space render command (sorted with objects, affected by lighting) |
-| `draw_unlit(command, z_order)` | Queue a world-space render command drawn after lighting (not darkened) |
-| `draw_overlay(command, z_order)` | Queue a screen-space overlay command (after lighting) |
-| `auto_render(renderer)` | Render through "main" camera |
-| `render_to_targets(renderer, &[(&str, RenderTargetId)])` | Multi-camera render |
+| `create_render_layer(name, config)` | Create a named render layer, returns `RenderLayerId` |
+| `create_render_layer_before(name, config, before)` | Create a layer inserted before another layer |
+| `default_layer()` | Get the default scene layer ID |
+| `set_layer_clear_color(layer, color)` | Update a layer's clear color |
+| `draw_to(layer, command, z_order)` | Queue a render command to a specific layer |
+| `draw(command, z_order)` | Queue to the default scene layer (sorted with objects, affected by lighting) |
+| `draw_unlit(command, z_order)` | Queue a world-space render command drawn after all layers (not darkened) |
+| `draw_overlay(command, z_order)` | Queue a screen-space overlay command (after all layers) |
+| `auto_render(renderer)` | Render all layers through "main" camera |
+| `render_to_targets(renderer, &[(&str, RenderTargetId)])` | Multi-camera render with layers |
 | `spawn_soft_body(SoftBodyDesc)` | Spawn a soft body |
 | `spawn_rigid_body(RigidBodyDesc)` | Spawn a rigid body |
 | `spawn_static_rect(position, size, color)` | Spawn a static rectangle |
@@ -392,6 +397,27 @@ fn render(&mut self, engine: &mut Engine<Action>) {
     }
 }
 ```
+
+### Render Layers
+
+Layers render in creation order. Lit layers are affected by lighting; unlit layers bypass it. Use `create_render_layer_before` to insert layers before the default scene layer.
+
+```rust
+// Create an unlit sky layer behind the scene
+let sky = world.create_render_layer_before(
+    "sky",
+    RenderLayerConfig { lit: false, clear_color: sky_color },
+    world.default_layer(),
+);
+
+world.draw_to(sky, sun_disc, 0);   // sky layer — no shadows
+world.draw(tree_mesh, 0);           // default scene layer — lit
+```
+
+| Type | Description |
+|------|-------------|
+| `RenderLayerId` | Handle returned by `create_render_layer` / `create_render_layer_before` |
+| `RenderLayerConfig { lit, clear_color }` | Layer configuration: `lit: bool`, `clear_color: Color` |
 
 ### Colors
 

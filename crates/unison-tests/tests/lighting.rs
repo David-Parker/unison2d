@@ -1699,20 +1699,21 @@ fn e2e_world_auto_render_with_shadows() {
     let ops = renderer.ops();
 
     // Verify the full pipeline executed:
-    // 1. Scene render (BeginFrame, Clear, draws, EndFrame)
-    // 2. Lighting (render_lightmap with shadows, then composite)
+    // 1. Scene layer render to FBO (BeginFrame, Clear, draws, EndFrame)
+    // 2. Lighting (render_lightmap with shadows, composite onto scene FBO)
+    // 3. Scene FBO composite onto screen
     let begin_count = ops.iter().filter(|op| matches!(op, RenderOp::BeginFrame { .. })).count();
     let end_count = ops.iter().filter(|op| matches!(op, RenderOp::EndFrame)).count();
 
-    // At minimum: scene begin/end + lightmap begin/end + shadow mask begin/end + composite begin/end
+    // At minimum: scene-to-FBO + lightmap + shadow mask + lightmap composite + scene FBO composite
     assert!(
-        begin_count >= 4,
-        "should have at least 4 begin_frame calls (scene, lightmap, shadow, composite), got {}",
+        begin_count >= 5,
+        "should have at least 5 begin_frame calls (scene FBO, lightmap, shadow, light composite, scene composite), got {}",
         begin_count
     );
     assert!(
-        end_count >= 4,
-        "should have at least 4 end_frame calls, got {}",
+        end_count >= 5,
+        "should have at least 5 end_frame calls, got {}",
         end_count
     );
 
@@ -1725,10 +1726,10 @@ fn e2e_world_auto_render_with_shadows() {
         "should have at least 1 LitSprite for shadow-casting point light, got {}",
         lit_count
     );
-    // Directional light (no shadow) + composite overlay = at least 2 sprites
+    // Directional light (no shadow) + lightmap composite + scene FBO composite = at least 3 sprites
     assert!(
-        sprite_count >= 2,
-        "should have at least 2 sprites (directional light + composite), got {}",
+        sprite_count >= 3,
+        "should have at least 3 sprites (directional light + lightmap composite + scene composite), got {}",
         sprite_count
     );
 }

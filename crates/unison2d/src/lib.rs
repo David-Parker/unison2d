@@ -53,7 +53,7 @@ pub use engine::Engine;
 pub use object::{ObjectId, SoftBodyDesc, RigidBodyDesc, SpriteDesc};
 pub use object_system::ObjectSystem;
 pub use camera_system::CameraSystem;
-pub use world::{World, Environment};
+pub use world::{World, Environment, RenderLayerId, RenderLayerConfig};
 pub use level::{Level, LevelContext, RenderContext};
 pub use prefab::Prefab;
 pub use game::Game;

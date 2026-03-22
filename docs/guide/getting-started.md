@@ -134,7 +134,7 @@ The engine runs a fixed-timestep loop:
 2. `update()` — called at 60Hz (use `engine.dt()` for the timestep)
 3. `render()` — called once per frame
 
-You call `world.step(dt)` inside `update()` to advance physics. You call `world.auto_render(renderer)` inside `render()` to draw.
+You call `world.step(dt)` inside `update()` to advance physics. You call `world.auto_render(renderer)` inside `render()` to draw all render layers, lighting, and overlays.
 
 ## Next Steps
 

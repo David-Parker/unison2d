@@ -2,7 +2,7 @@
 
 2D lighting with lightmap compositing and shadow casting.
 
-Renders point lights and directional lights to an offscreen FBO (the "lightmap"), then composites it over the scene with multiply blending. Unlit areas are darkened to the ambient color; lit areas are tinted by the light's color and intensity. Shadow-casting lights use a per-light shadow mask with optional PCF filtering for soft edges.
+Renders point lights and directional lights to an offscreen FBO (the "lightmap"), then composites it over lit render layers with multiply blending. Unlit areas are darkened to the ambient color; lit areas are tinted by the light's color and intensity. Shadow-casting lights use a per-light shadow mask with optional PCF filtering for soft edges. Unlit render layers (e.g. sky) are not affected by the lightmap.
 
 ## How it works
 
@@ -10,7 +10,7 @@ Renders point lights and directional lights to an offscreen FBO (the "lightmap")
 2. **Additive light pass** — each light is drawn additively to the lightmap:
    - **Without shadows:** point lights as radial gradient sprites, directional lights as full-viewport quads
    - **With shadows:** occluder geometry is projected into shadow quads, rendered to a shadow mask FBO (white=lit, black=shadow), then the light is drawn as a `LitSprite` that samples both the gradient and shadow mask with optional PCF
-3. **Multiply composite** — the lightmap is drawn over the scene with multiply blending
+3. **Multiply composite** — the lightmap is drawn over lit render layers with multiply blending (unlit layers are not affected)
 
 ## Types
 
@@ -213,7 +213,7 @@ All rigid bodies and soft bodies cast shadows by default. Disable on specific ob
 world.objects.set_casts_shadow(particle_id, false);
 ```
 
-`World::auto_render` and `World::render_to_targets` collect occluders and render shadows automatically.
+`World::auto_render` and `World::render_to_targets` collect occluders and render shadows automatically for lit render layers. Unlit layers bypass the lighting system entirely.
 
 ## Shadow architecture
 

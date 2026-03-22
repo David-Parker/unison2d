@@ -117,13 +117,37 @@ world.step(dt);
 | `background_color() -> Color` | Get clear color |
 | `step(dt)` | Advance physics + update camera follows |
 | `snapshot_for_render()` | Snapshot for interpolated rendering |
-| `draw(command, z_order)` | Queue world-space render command (sorted with objects, affected by lighting) |
-| `draw_unlit(command, z_order)` | Queue world-space render command drawn after lighting (not darkened by lightmap) |
-| `draw_overlay(command, z_order)` | Queue screen-space overlay command (drawn after lighting, 0..1 coords) |
-| `auto_render(renderer)` | Render through "main" camera to current target |
-| `render_to_targets(renderer, &[(&str, RenderTargetId)])` | Multi-camera rendering to targets |
+| `create_render_layer(name, config)` | Create a named render layer, returns `RenderLayerId` |
+| `create_render_layer_before(name, config, before)` | Create a layer inserted before another layer |
+| `default_layer()` | Get the default scene layer ID |
+| `set_layer_clear_color(layer, color)` | Update a layer's clear color |
+| `draw_to(layer, command, z_order)` | Queue a render command to a specific layer |
+| `draw(command, z_order)` | Queue to the default scene layer (sorted with objects, affected by lighting) |
+| `draw_unlit(command, z_order)` | Queue world-space render command drawn after all layers (not darkened) |
+| `draw_overlay(command, z_order)` | Queue screen-space overlay command (drawn after all layers, 0..1 coords) |
+| `auto_render(renderer)` | Render all layers through "main" camera to current target |
+| `render_to_targets(renderer, &[(&str, RenderTargetId)])` | Multi-camera rendering with layers to targets |
 
-Custom draw commands are merged with scene objects by z-order. Overlay commands use screen-space coordinates (0,0 = bottom-left, 1,1 = top-right) and are drawn after the lighting pass. Both are cleared automatically after rendering.
+#### Render Layers
+
+Layers render in creation order. Each layer can be **lit** (affected by the lighting/shadow system) or **unlit** (rendered directly). Consecutive lit layers share a single offscreen FBO with one lighting pass. Use `draw_to(layer, cmd, z)` to queue commands to a specific layer.
+
+```rust
+// Create an unlit sky layer before the default scene layer
+let sky = world.create_render_layer_before(
+    "sky",
+    RenderLayerConfig { lit: false, clear_color: sky_color },
+    world.default_layer(),
+);
+
+// Queue sky elements to the sky layer
+world.draw_to(sky, sun_mesh, 0);
+
+// Scene objects use world.draw() as usual (routes to default lit layer)
+world.draw(tree_mesh, 0);
+```
+
+The default scene layer is a lit layer created automatically. `world.draw()` routes to it. Overlay commands use screen-space coordinates (0,0 = bottom-left, 1,1 = top-right) and are drawn after all layers. All commands are cleared automatically after rendering.
 
 ### ObjectSystem (`world.objects`)
 
