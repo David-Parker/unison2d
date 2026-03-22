@@ -256,6 +256,8 @@ Cameras live on the world's `CameraSystem`. A default "main" camera (20x15) is c
 
 ```rust
 world.cameras.follow("main", player_id, 0.08);  // follow with smoothing
+world.cameras.follow_with_offset("main", player_id, 0.08, Vec2::new(0.0, 3.0));  // follow with offset
+world.cameras.set_follow_offset("main", Vec2::new(0.0, 3.0));  // change offset while following
 world.cameras.unfollow("main");                  // stop following
 world.cameras.get_mut("main").unwrap().zoom = 2.0;  // zoom in
 world.cameras.get_mut("main").unwrap().set_position(x, y);  // manual position

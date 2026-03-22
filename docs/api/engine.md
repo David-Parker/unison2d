@@ -192,6 +192,8 @@ Named cameras with optional follow targets.
 | `iter() -> impl Iterator` | Iterate all cameras |
 | `count() -> usize` | Number of cameras |
 | `follow(name, object_id, smoothing)` | Camera follows an object |
+| `follow_with_offset(name, object_id, smoothing, offset)` | Follow with a fixed Vec2 offset |
+| `set_follow_offset(name, offset)` | Change offset on an already-following camera |
 | `unfollow(name)` | Stop following |
 
 Default: "main" camera at 20×15.

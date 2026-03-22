@@ -15,10 +15,17 @@ use crate::object_system::ObjectSystem;
 /// The default camera name, created automatically.
 const DEFAULT_CAMERA: &str = "main";
 
+/// Follow-target entry: object to track, smoothing factor, and fixed offset.
+struct FollowTarget {
+    object: ObjectId,
+    smoothing: f32,
+    offset: Vec2,
+}
+
 /// Manages named cameras and their follow targets.
 pub struct CameraSystem {
     cameras: HashMap<String, Camera>,
-    follow_targets: HashMap<String, (ObjectId, f32)>,
+    follow_targets: HashMap<String, FollowTarget>,
 }
 
 impl CameraSystem {
@@ -67,7 +74,28 @@ impl CameraSystem {
     /// Make a named camera follow an object with the given smoothing factor.
     /// Smoothing: 0.0 = no movement, 1.0 = instant snap. Typical: 0.05-0.2.
     pub fn follow(&mut self, camera_name: &str, target: ObjectId, smoothing: f32) {
-        self.follow_targets.insert(camera_name.to_string(), (target, smoothing));
+        self.follow_targets.insert(camera_name.to_string(), FollowTarget {
+            object: target,
+            smoothing,
+            offset: Vec2::ZERO,
+        });
+    }
+
+    /// Like `follow`, but applies a fixed offset to the camera position.
+    /// Useful for shifting the view (e.g. `Vec2::new(0.0, 3.0)` looks 3 units above the target).
+    pub fn follow_with_offset(&mut self, camera_name: &str, target: ObjectId, smoothing: f32, offset: Vec2) {
+        self.follow_targets.insert(camera_name.to_string(), FollowTarget {
+            object: target,
+            smoothing,
+            offset,
+        });
+    }
+
+    /// Set the follow offset for an already-following camera. No-op if not following.
+    pub fn set_follow_offset(&mut self, camera_name: &str, offset: Vec2) {
+        if let Some(ft) = self.follow_targets.get_mut(camera_name) {
+            ft.offset = offset;
+        }
     }
 
     /// Stop a named camera from following any object.
@@ -80,11 +108,9 @@ impl CameraSystem {
     pub fn update_follows(&mut self, objects: &ObjectSystem) {
         // Collect follow data to avoid borrow conflicts
         let updates: Vec<(String, Vec2, f32)> = self.follow_targets.iter()
-            .filter_map(|(cam_name, (target, smoothing))| {
-                let pos = objects.get_position(*target);
-                // Skip if the object returned the default zero position
-                // and we can't verify it exists
-                Some((cam_name.clone(), pos, *smoothing))
+            .filter_map(|(cam_name, ft)| {
+                let pos = objects.get_position(ft.object);
+                Some((cam_name.clone(), pos + ft.offset, ft.smoothing))
             })
             .collect();
 

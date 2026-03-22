@@ -112,6 +112,12 @@ if !self.triggered && self.world.objects.is_touching(self.player, self.trigger) 
 // Follow the player with smoothing (0.08 = smooth, 1.0 = instant):
 world.cameras.follow("main", player_id, 0.08);
 
+// Follow with a fixed offset (e.g. shift view up to show more sky):
+world.cameras.follow_with_offset("main", player_id, 0.08, Vec2::new(0.0, 3.0));
+
+// Change offset on an already-following camera:
+world.cameras.set_follow_offset("main", Vec2::new(0.0, 5.0));
+
 // Stop following:
 world.cameras.unfollow("main");
 
