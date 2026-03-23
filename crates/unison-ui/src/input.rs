@@ -4,7 +4,7 @@ use unison_input::{InputState, MouseButton};
 use unison_math::Vec2;
 
 use crate::diff::NodeKey;
-use crate::layout::{Layout, LayoutRect};
+use crate::layout::Layout;
 use crate::node::{UiNode, UiTree, WidgetKind};
 use crate::state::UiState;
 
@@ -58,7 +58,7 @@ pub fn process_input<E: Clone>(
     }
 
     // The last hit in the list has the highest z-order (drawn on top)
-    if let Some((ref hit_key, hit_rect_idx)) = hits.last() {
+    if let Some((ref hit_key, _hit_rect_idx)) = hits.last() {
         result.consumed_hover = true;
 
         // Set hover on the hit widget

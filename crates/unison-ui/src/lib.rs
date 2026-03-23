@@ -8,6 +8,7 @@ pub mod diff;
 pub mod input;
 pub mod layout;
 pub mod node;
+pub mod render;
 pub mod state;
 pub mod style;
 pub mod text;

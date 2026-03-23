@@ -91,8 +91,10 @@ macro_rules! ui_node {
     // ── Container with children ──
 
     (column ( $($props:tt)* ) [ $($children:tt)* ]) => {{
+        #[allow(unused_mut)]
         let mut node = $crate::node::UiNode::column();
         $crate::ui_props!(node; $($props)*);
+        #[allow(unused_mut)]
         let mut kids: Vec<$crate::node::UiNode<_>> = Vec::new();
         $crate::ui_items!(kids; $($children)*);
         node.children = kids;
@@ -100,8 +102,10 @@ macro_rules! ui_node {
     }};
 
     (row ( $($props:tt)* ) [ $($children:tt)* ]) => {{
+        #[allow(unused_mut)]
         let mut node = $crate::node::UiNode::row();
         $crate::ui_props!(node; $($props)*);
+        #[allow(unused_mut)]
         let mut kids: Vec<$crate::node::UiNode<_>> = Vec::new();
         $crate::ui_items!(kids; $($children)*);
         node.children = kids;
@@ -109,8 +113,10 @@ macro_rules! ui_node {
     }};
 
     (panel ( $($props:tt)* ) [ $($children:tt)* ]) => {{
+        #[allow(unused_mut)]
         let mut node = $crate::node::UiNode::panel();
         $crate::ui_props!(node; $($props)*);
+        #[allow(unused_mut)]
         let mut kids: Vec<$crate::node::UiNode<_>> = Vec::new();
         $crate::ui_items!(kids; $($children)*);
         node.children = kids;
@@ -121,36 +127,41 @@ macro_rules! ui_node {
 
     // label("format", args...)
     (label ( $fmt:literal $(, $arg:expr)* )) => {{
-        let mut node = $crate::node::UiNode::label(format!($fmt $(, $arg)*));
-        node
+        $crate::node::UiNode::label(format!($fmt $(, $arg)*))
     }};
 
     // label("format", args..., prop = val, ...)
     // We need to separate format args from props. Use a sentinel: style = ...
     (label ( $fmt:literal $(, $arg:expr)* , style = $style:expr )) => {{
-        let mut node = $crate::node::UiNode::label(format!($fmt $(, $arg)*));
-        node.text_style = Some($style);
-        node
+        let node = $crate::node::UiNode::label(format!($fmt $(, $arg)*));
+        $crate::node::UiNode {
+            text_style: Some($style),
+            ..node
+        }
     }};
 
     // button("text", on_click = expr) with optional style
     (button ( $text:literal , on_click = $event:expr )) => {{
-        let mut node = $crate::node::UiNode::button($text);
-        node.kind = $crate::node::WidgetKind::Button {
-            text: $text.to_string(),
-            on_click: Some($event),
-        };
-        node
+        let node = $crate::node::UiNode::button($text);
+        $crate::node::UiNode {
+            kind: $crate::node::WidgetKind::Button {
+                text: $text.to_string(),
+                on_click: Some($event),
+            },
+            ..node
+        }
     }};
 
     (button ( $text:literal , on_click = $event:expr , style = $style:expr )) => {{
-        let mut node = $crate::node::UiNode::button($text);
-        node.kind = $crate::node::WidgetKind::Button {
-            text: $text.to_string(),
-            on_click: Some($event),
-        };
-        node.text_style = Some($style);
-        node
+        let node = $crate::node::UiNode::button($text);
+        $crate::node::UiNode {
+            kind: $crate::node::WidgetKind::Button {
+                text: $text.to_string(),
+                on_click: Some($event),
+            },
+            text_style: Some($style),
+            ..node
+        }
     }};
 
     (button ( $text:literal )) => {{
