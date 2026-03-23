@@ -132,6 +132,11 @@ impl UiState {
         self.states.is_empty()
     }
 
+    /// Get all currently tracked node keys.
+    pub fn all_keys(&self) -> Vec<NodeKey> {
+        self.states.keys().cloned().collect()
+    }
+
     /// Reset hover and press state for all widgets (called at start of frame).
     pub fn clear_input_state(&mut self) {
         for state in self.states.values_mut() {
