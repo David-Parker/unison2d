@@ -20,7 +20,7 @@ impl Default for Camera {
         Self {
             x: 0.0,
             y: 0.0,
-            width: 20.0,
+            width: 26.67,
             height: 15.0,
             zoom: 1.0,
             rotation: 0.0,

@@ -29,10 +29,10 @@ pub struct CameraSystem {
 }
 
 impl CameraSystem {
-    /// Create a new CameraSystem with a default "main" camera (20x15 world units).
+    /// Create a new CameraSystem with a default "main" camera (26.67x15 world units, 16:9).
     pub fn new() -> Self {
         let mut cameras = HashMap::new();
-        cameras.insert(DEFAULT_CAMERA.to_string(), Camera::new(20.0, 15.0));
+        cameras.insert(DEFAULT_CAMERA.to_string(), Camera::new(26.67, 15.0));
 
         Self {
             cameras,
