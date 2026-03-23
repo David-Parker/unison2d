@@ -424,8 +424,17 @@ impl World {
                 i += 1;
             } else {
                 // ── Lit group: collect consecutive lit layers ──
-                let fbo = scene_target.expect("scene FBO should exist for lit layers");
-                let tex = scene_texture.expect("scene texture should exist for lit layers");
+                // If no scene FBO exists (no lit content this frame), skip the entire lit group
+                let (fbo, tex) = match (scene_target, scene_texture) {
+                    (Some(f), Some(t)) => (f, t),
+                    _ => {
+                        // Skip all consecutive lit layers
+                        while i < layer_count && self.render_layers[i].config.lit {
+                            i += 1;
+                        }
+                        continue;
+                    }
+                };
                 let group_start = i;
 
                 // First lit layer in group — clear the FBO
