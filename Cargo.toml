@@ -10,6 +10,7 @@ members = [
     "crates/unison-input",
     "crates/unison-assets",
     "crates/unison-lighting",
+    "crates/unison-ui",
     "crates/unison-web",
     "crates/unison-tests",
 ]
@@ -27,6 +28,7 @@ unison-math = { path = "crates/unison-math" }
 unison-physics = { path = "crates/unison-physics" }
 unison-render = { path = "crates/unison-render" }
 unison-lighting = { path = "crates/unison-lighting" }
+unison-ui = { path = "crates/unison-ui" }
 
 unison-profiler = { path = "crates/unison-profiler", default-features = false }
 unison-input = { path = "crates/unison-input" }
@@ -36,6 +38,7 @@ unison-web = { path = "crates/unison-web" }
 # External dependencies
 flate2 = "1.0"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "bmp", "webp"] }
+ab_glyph = "0.2"
 
 # Web platform dependencies
 wasm-bindgen = "0.2"

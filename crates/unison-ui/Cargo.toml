@@ -1,0 +1,12 @@
+[package]
+name = "unison-ui"
+description = "Unison 2D Game Engine - Declarative UI system"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+unison-math = { workspace = true }
+unison-render = { workspace = true }
+unison-input = { workspace = true }
+ab_glyph = { workspace = true }

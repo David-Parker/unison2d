@@ -15,6 +15,7 @@ unison-lighting = { workspace = true }
 unison-profiler = { workspace = true }
 unison-input = { workspace = true }
 unison-assets = { workspace = true }
+unison-ui = { workspace = true }
 
 [features]
 default = []
