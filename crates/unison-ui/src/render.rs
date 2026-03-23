@@ -9,6 +9,7 @@
 use unison_math::{Color, Vec2};
 use unison_render::{DrawSprite, RenderCommand, Renderer, TextureId};
 
+use crate::animation::compute_animation;
 use crate::diff::NodeKey;
 use crate::layout::{Layout, LayoutRect};
 use crate::node::{UiNode, UiTree, WidgetKind};
@@ -95,23 +96,24 @@ fn render_node<E>(
     };
 
     let widget_state = ui_state.get(key);
+    let anim = compute_animation(widget_state);
 
-    // Emit commands for this widget
+    // Emit commands for this widget (with animation alpha applied)
     match &node.kind {
         WidgetKind::Panel => {
-            render_panel(node, rect, screen_size, z, commands);
+            render_panel(node, rect, screen_size, anim.alpha, z, commands);
         }
         WidgetKind::Label { text } => {
-            render_label(text, node, rect, screen_size, text_renderer, renderer, z, commands);
+            render_label(text, node, rect, screen_size, anim.alpha, text_renderer, renderer, z, commands);
         }
         WidgetKind::Button { text, .. } => {
-            render_button(text, node, rect, widget_state, screen_size, text_renderer, renderer, z, commands);
+            render_button(text, node, rect, widget_state, screen_size, anim.alpha, text_renderer, renderer, z, commands);
         }
         WidgetKind::ProgressBar { value } => {
-            render_progress_bar(*value, node, rect, screen_size, z, commands);
+            render_progress_bar(*value, node, rect, screen_size, anim.alpha, z, commands);
         }
         WidgetKind::Icon { texture } => {
-            render_icon(*texture, rect, screen_size, z, commands);
+            render_icon(*texture, rect, screen_size, anim.alpha, z, commands);
         }
         // Column, Row, Spacer — no visual output (children rendered below)
         WidgetKind::Column | WidgetKind::Row | WidgetKind::Spacer { .. } => {}
@@ -139,6 +141,7 @@ fn render_panel<E>(
     node: &UiNode<E>,
     rect: &LayoutRect,
     screen_size: Vec2,
+    alpha: f32,
     z: &mut i32,
     commands: &mut Vec<OverlayCommand>,
 ) {
@@ -147,6 +150,7 @@ fn render_panel<E>(
         let tint = node.panel_style.as_ref()
             .map(|s| s.background)
             .unwrap_or(Color::WHITE);
+        let tint = with_alpha(tint, alpha);
         let sprites = crate::nine_slice::render_nine_slice(
             nine, rect.x, rect.y, rect.width, rect.height, tint,
         );
@@ -172,7 +176,7 @@ fn render_panel<E>(
             screen_size,
         );
         commands.push(OverlayCommand {
-            command: RenderCommand::Rect { position: pos, size, color: style.border_color },
+            command: RenderCommand::Rect { position: pos, size, color: with_alpha(style.border_color, alpha) },
             z_order: *z,
         });
         *z += 1;
@@ -181,7 +185,7 @@ fn render_panel<E>(
     // Background
     let (pos, size) = pixel_rect_to_overlay(rect.x, rect.y, rect.width, rect.height, screen_size);
     commands.push(OverlayCommand {
-        command: RenderCommand::Rect { position: pos, size, color: style.background },
+        command: RenderCommand::Rect { position: pos, size, color: with_alpha(style.background, alpha) },
         z_order: *z,
     });
     *z += 1;
@@ -193,17 +197,18 @@ fn render_label<E>(
     node: &UiNode<E>,
     rect: &LayoutRect,
     screen_size: Vec2,
+    alpha: f32,
     text_renderer: &mut TextRenderer,
     renderer: &mut dyn Renderer<Error = String>,
     z: &mut i32,
     commands: &mut Vec<OverlayCommand>,
 ) {
     let style = node.text_style.as_ref().cloned().unwrap_or_default();
-    let glyph_cmds = text_renderer.render_text(text, Vec2::new(rect.x, rect.y), style.font_size, style.color, renderer);
+    let color = with_alpha(style.color, alpha);
+    let glyph_cmds = text_renderer.render_text(text, Vec2::new(rect.x, rect.y), style.font_size, color, renderer);
 
     for cmd in glyph_cmds {
         if let RenderCommand::Sprite(sprite) = cmd {
-            // Convert glyph sprite from pixel coords to overlay coords
             let overlay_sprite = pixel_sprite_to_overlay(&sprite, screen_size);
             commands.push(OverlayCommand {
                 command: RenderCommand::Sprite(overlay_sprite),
@@ -221,6 +226,7 @@ fn render_button<E>(
     rect: &LayoutRect,
     widget_state: Option<&WidgetState>,
     screen_size: Vec2,
+    alpha: f32,
     text_renderer: &mut TextRenderer,
     renderer: &mut dyn Renderer<Error = String>,
     z: &mut i32,
@@ -230,16 +236,15 @@ fn render_button<E>(
     let bg_color = match widget_state {
         Some(ws) if ws.pressed => BUTTON_PRESS,
         Some(ws) if ws.hovered => {
-            // Interpolate between normal and hover using hover_time
             lerp_color(BUTTON_NORMAL, BUTTON_HOVER, ws.hover_time)
         }
         _ => BUTTON_NORMAL,
     };
 
-    // Button background
+    // Button background (with animation alpha)
     let (pos, size) = pixel_rect_to_overlay(rect.x, rect.y, rect.width, rect.height, screen_size);
     commands.push(OverlayCommand {
-        command: RenderCommand::Rect { position: pos, size, color: bg_color },
+        command: RenderCommand::Rect { position: pos, size, color: with_alpha(bg_color, alpha) },
         z_order: *z,
     });
     *z += 1;
@@ -252,7 +257,8 @@ fn render_button<E>(
     let text_x = rect.x + (rect.width - text_size.x) / 2.0;
     let text_y = rect.y + (rect.height - text_size.y) / 2.0;
 
-    let glyph_cmds = text_renderer.render_text(text, Vec2::new(text_x, text_y), style.font_size, style.color, renderer);
+    let color = with_alpha(style.color, alpha);
+    let glyph_cmds = text_renderer.render_text(text, Vec2::new(text_x, text_y), style.font_size, color, renderer);
 
     for cmd in glyph_cmds {
         if let RenderCommand::Sprite(sprite) = cmd {
@@ -272,13 +278,14 @@ fn render_progress_bar<E>(
     _node: &UiNode<E>,
     rect: &LayoutRect,
     screen_size: Vec2,
+    alpha: f32,
     z: &mut i32,
     commands: &mut Vec<OverlayCommand>,
 ) {
     // Background
     let (pos, size) = pixel_rect_to_overlay(rect.x, rect.y, rect.width, rect.height, screen_size);
     commands.push(OverlayCommand {
-        command: RenderCommand::Rect { position: pos, size, color: PROGRESS_BG },
+        command: RenderCommand::Rect { position: pos, size, color: with_alpha(PROGRESS_BG, alpha) },
         z_order: *z,
     });
     *z += 1;
@@ -288,7 +295,7 @@ fn render_progress_bar<E>(
         let fill_width = rect.width * value;
         let (fpos, fsize) = pixel_rect_to_overlay(rect.x, rect.y, fill_width, rect.height, screen_size);
         commands.push(OverlayCommand {
-            command: RenderCommand::Rect { position: fpos, size: fsize, color: PROGRESS_FG },
+            command: RenderCommand::Rect { position: fpos, size: fsize, color: with_alpha(PROGRESS_FG, alpha) },
             z_order: *z,
         });
     }
@@ -300,6 +307,7 @@ fn render_icon(
     texture: TextureId,
     rect: &LayoutRect,
     screen_size: Vec2,
+    alpha: f32,
     z: &mut i32,
     commands: &mut Vec<OverlayCommand>,
 ) {
@@ -309,7 +317,7 @@ fn render_icon(
         size: [rect.width, rect.height],
         rotation: 0.0,
         uv: [0.0, 0.0, 1.0, 1.0],
-        color: Color::WHITE,
+        color: with_alpha(Color::WHITE, alpha),
     };
     let overlay_sprite = pixel_sprite_to_overlay(&sprite, screen_size);
     commands.push(OverlayCommand {
@@ -366,6 +374,11 @@ fn lerp_color(a: Color, b: Color, t: f32) -> Color {
         a.b + (b.b - a.b) * t,
         a.a + (b.a - a.a) * t,
     )
+}
+
+/// Apply an alpha multiplier to a color.
+fn with_alpha(c: Color, alpha: f32) -> Color {
+    Color::new(c.r, c.g, c.b, c.a * alpha)
 }
 
 /// Skip index counting for a hidden subtree.
@@ -686,10 +699,11 @@ mod tests {
         };
 
         let widget_state = ui_state.get(key);
+        let anim = compute_animation(widget_state);
 
         match &node.kind {
             WidgetKind::Panel => {
-                render_panel(node, rect, screen_size, z, commands);
+                render_panel(node, rect, screen_size, anim.alpha, z, commands);
             }
             WidgetKind::Button { .. } => {
                 // Button background only (no text without TextRenderer)
@@ -700,16 +714,16 @@ mod tests {
                 };
                 let (pos, size) = pixel_rect_to_overlay(rect.x, rect.y, rect.width, rect.height, screen_size);
                 commands.push(OverlayCommand {
-                    command: RenderCommand::Rect { position: pos, size, color: bg_color },
+                    command: RenderCommand::Rect { position: pos, size, color: with_alpha(bg_color, anim.alpha) },
                     z_order: *z,
                 });
                 *z += 1;
             }
             WidgetKind::ProgressBar { value } => {
-                render_progress_bar(*value, node, rect, screen_size, z, commands);
+                render_progress_bar(*value, node, rect, screen_size, anim.alpha, z, commands);
             }
             WidgetKind::Icon { texture } => {
-                render_icon(*texture, rect, screen_size, z, commands);
+                render_icon(*texture, rect, screen_size, anim.alpha, z, commands);
             }
             // Label, Column, Row, Spacer — no visual in this test mode
             _ => {}

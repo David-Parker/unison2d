@@ -4,6 +4,7 @@
 //! the previous frame, manages widget state (hover, focus, animations),
 //! and emits [`RenderCommand`]s through the engine's overlay system.
 
+pub mod animation;
 pub mod diff;
 pub mod facade;
 pub mod input;
