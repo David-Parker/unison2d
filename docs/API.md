@@ -543,6 +543,8 @@ pub struct RenderContext<'a> {
 | `create_render_target(w, h)` | Create an offscreen render target, returns `(RenderTargetId, TextureId)` |
 | `bind_render_target(id)` | Bind a render target for subsequent draw calls |
 | `destroy_render_target(id)` | Destroy an offscreen render target |
+| `set_anti_aliasing(mode)` | Set MSAA mode: `None`, `MSAAx2`, `MSAAx4`, `MSAAx8` |
+| `anti_aliasing()` | Get current AA mode |
 | `screen_size()` | Get screen/canvas size in pixels |
 | `draw_overlay(texture, position, size)` | Draw a render-target texture as a screen-space overlay (0..1 NDC) |
 | `draw_overlay_bordered(texture, position, size, border_width, border_color)` | Same, with a colored border |

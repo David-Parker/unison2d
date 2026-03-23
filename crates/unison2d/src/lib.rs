@@ -50,6 +50,7 @@ mod prefab;
 mod game;
 
 pub use engine::Engine;
+pub use unison_render::AntiAliasing;
 pub use object::{ObjectId, SoftBodyDesc, RigidBodyDesc, SpriteDesc};
 pub use object_system::ObjectSystem;
 pub use camera_system::CameraSystem;

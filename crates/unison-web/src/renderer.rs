@@ -2,13 +2,14 @@
 
 use std::collections::HashMap;
 use web_sys::{
-    WebGl2RenderingContext as GL, WebGlBuffer, WebGlFramebuffer, WebGlProgram, WebGlShader,
-    WebGlTexture, WebGlUniformLocation, WebGlVertexArrayObject,
+    WebGl2RenderingContext as GL, WebGlBuffer, WebGlFramebuffer, WebGlProgram,
+    WebGlRenderbuffer, WebGlShader, WebGlTexture, WebGlUniformLocation,
+    WebGlVertexArrayObject,
 };
 use unison_math::Color;
 use unison_render::{
-    BlendMode, Camera, RenderCommand, RenderTargetId, Renderer, TextureDescriptor, TextureFilter,
-    TextureFormat, TextureId, TextureWrap,
+    AntiAliasing, BlendMode, Camera, RenderCommand, RenderTargetId, Renderer,
+    TextureDescriptor, TextureFilter, TextureFormat, TextureId, TextureWrap,
 };
 
 use crate::shaders;
@@ -62,10 +63,16 @@ pub struct WebGlRenderer {
     // Texture storage
     textures: HashMap<u32, WebGlTexture>,
     next_texture_id: u32,
-    // Render targets (offscreen FBOs)
+    // Render targets (offscreen FBOs with MSAA)
+    // msaa_fbos: MSAA draw target (renderbuffer attachment)
+    // render_targets: resolve target (texture attachment, for sampling)
+    msaa_fbos: HashMap<u32, WebGlFramebuffer>,
+    msaa_renderbuffers: HashMap<u32, WebGlRenderbuffer>,
     render_targets: HashMap<u32, WebGlFramebuffer>,
     render_target_sizes: HashMap<u32, (u32, u32)>,
     next_render_target_id: u32,
+    current_render_target: RenderTargetId,
+    msaa_samples: i32,
     // State
     canvas_width: f32,
     canvas_height: f32,
@@ -177,6 +184,14 @@ impl WebGlRenderer {
         gl.enable(GL::BLEND);
         gl.blend_func(GL::SRC_ALPHA, GL::ONE_MINUS_SRC_ALPHA);
 
+        // Query max MSAA samples supported, cap at 4
+        let max_samples = gl
+            .get_parameter(GL::MAX_SAMPLES)
+            .ok()
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0) as i32;
+        let msaa_samples = max_samples.min(4);
+
         Ok(Self {
             gl,
             base,
@@ -191,9 +206,13 @@ impl WebGlRenderer {
             index_buffer,
             textures: HashMap::new(),
             next_texture_id: 1,
+            msaa_fbos: HashMap::new(),
+            msaa_renderbuffers: HashMap::new(),
             render_targets: HashMap::new(),
             render_target_sizes: HashMap::new(),
             next_render_target_id: 1, // 0 = SCREEN
+            current_render_target: RenderTargetId::SCREEN,
+            msaa_samples,
             canvas_width: width,
             canvas_height: height,
             current_blend_mode: BlendMode::Alpha,
@@ -724,11 +743,10 @@ impl Renderer for WebGlRenderer {
     fn create_render_target(&mut self, width: u32, height: u32) -> Result<(RenderTargetId, TextureId), String> {
         let gl = &self.gl;
 
-        // Create framebuffer
-        let fbo = gl.create_framebuffer()
-            .ok_or("Failed to create framebuffer")?;
+        // ── Resolve FBO (texture attachment, for sampling) ──
+        let resolve_fbo = gl.create_framebuffer()
+            .ok_or("Failed to create resolve framebuffer")?;
 
-        // Create color texture
         let texture = gl.create_texture()
             .ok_or("Failed to create render target texture")?;
         gl.bind_texture(GL::TEXTURE_2D, Some(&texture));
@@ -744,14 +762,12 @@ impl Renderer for WebGlRenderer {
             None,
         ).map_err(|e| format!("Failed to allocate render target texture: {:?}", e))?;
 
-        // Linear filtering, clamp to edge
         gl.tex_parameteri(GL::TEXTURE_2D, GL::TEXTURE_MIN_FILTER, GL::LINEAR as i32);
         gl.tex_parameteri(GL::TEXTURE_2D, GL::TEXTURE_MAG_FILTER, GL::LINEAR as i32);
         gl.tex_parameteri(GL::TEXTURE_2D, GL::TEXTURE_WRAP_S, GL::CLAMP_TO_EDGE as i32);
         gl.tex_parameteri(GL::TEXTURE_2D, GL::TEXTURE_WRAP_T, GL::CLAMP_TO_EDGE as i32);
 
-        // Attach texture to framebuffer
-        gl.bind_framebuffer(GL::FRAMEBUFFER, Some(&fbo));
+        gl.bind_framebuffer(GL::FRAMEBUFFER, Some(&resolve_fbo));
         gl.framebuffer_texture_2d(
             GL::FRAMEBUFFER,
             GL::COLOR_ATTACHMENT0,
@@ -760,20 +776,53 @@ impl Renderer for WebGlRenderer {
             0,
         );
 
-        // Check completeness
         let status = gl.check_framebuffer_status(GL::FRAMEBUFFER);
         if status != GL::FRAMEBUFFER_COMPLETE {
             gl.bind_framebuffer(GL::FRAMEBUFFER, None);
-            gl.delete_framebuffer(Some(&fbo));
+            gl.delete_framebuffer(Some(&resolve_fbo));
             gl.delete_texture(Some(&texture));
-            return Err(format!("Framebuffer not complete: status {}", status));
+            return Err(format!("Resolve framebuffer not complete: status {}", status));
+        }
+
+        // ── MSAA FBO (renderbuffer attachment, for drawing) ──
+        let msaa_fbo = gl.create_framebuffer()
+            .ok_or("Failed to create MSAA framebuffer")?;
+        let rbo = gl.create_renderbuffer()
+            .ok_or("Failed to create MSAA renderbuffer")?;
+
+        gl.bind_renderbuffer(GL::RENDERBUFFER, Some(&rbo));
+        gl.renderbuffer_storage_multisample(
+            GL::RENDERBUFFER,
+            self.msaa_samples,
+            GL::RGBA8,
+            width as i32,
+            height as i32,
+        );
+
+        gl.bind_framebuffer(GL::FRAMEBUFFER, Some(&msaa_fbo));
+        gl.framebuffer_renderbuffer(
+            GL::FRAMEBUFFER,
+            GL::COLOR_ATTACHMENT0,
+            GL::RENDERBUFFER,
+            Some(&rbo),
+        );
+
+        let status = gl.check_framebuffer_status(GL::FRAMEBUFFER);
+        if status != GL::FRAMEBUFFER_COMPLETE {
+            gl.bind_framebuffer(GL::FRAMEBUFFER, None);
+            gl.delete_framebuffer(Some(&msaa_fbo));
+            gl.delete_framebuffer(Some(&resolve_fbo));
+            gl.delete_renderbuffer(Some(&rbo));
+            gl.delete_texture(Some(&texture));
+            return Err(format!("MSAA framebuffer not complete: status {}", status));
         }
 
         // Unbind
         gl.bind_framebuffer(GL::FRAMEBUFFER, None);
+        gl.bind_renderbuffer(GL::RENDERBUFFER, None);
         gl.bind_texture(GL::TEXTURE_2D, None);
 
-        // Register texture so it can be used in draw commands
+        // Register texture
         let tex_id = self.next_texture_id;
         self.next_texture_id += 1;
         self.textures.insert(tex_id, texture);
@@ -781,7 +830,9 @@ impl Renderer for WebGlRenderer {
         // Register render target
         let rt_id = self.next_render_target_id;
         self.next_render_target_id += 1;
-        self.render_targets.insert(rt_id, fbo);
+        self.msaa_fbos.insert(rt_id, msaa_fbo);
+        self.msaa_renderbuffers.insert(rt_id, rbo);
+        self.render_targets.insert(rt_id, resolve_fbo);
         self.render_target_sizes.insert(rt_id, (width, height));
 
         Ok((RenderTargetId(rt_id), TextureId(tex_id)))
@@ -791,28 +842,73 @@ impl Renderer for WebGlRenderer {
         let gl = &self.gl;
 
         // Unbind any texture from TEXTURE0 to prevent feedback loops.
-        // A stale texture binding from a prior draw call can conflict with
-        // the FBO's color attachment if they reference the same texture.
         gl.active_texture(GL::TEXTURE0);
         gl.bind_texture(GL::TEXTURE_2D, None);
 
+        // Resolve the current MSAA FBO → resolve FBO before switching away
+        let prev = self.current_render_target;
+        if prev != target && prev != RenderTargetId::SCREEN {
+            if let (Some(msaa_fbo), Some(resolve_fbo)) =
+                (self.msaa_fbos.get(&prev.0), self.render_targets.get(&prev.0))
+            {
+                if let Some(&(w, h)) = self.render_target_sizes.get(&prev.0) {
+                    gl.bind_framebuffer(GL::READ_FRAMEBUFFER, Some(msaa_fbo));
+                    gl.bind_framebuffer(GL::DRAW_FRAMEBUFFER, Some(resolve_fbo));
+                    gl.blit_framebuffer(
+                        0, 0, w as i32, h as i32,
+                        0, 0, w as i32, h as i32,
+                        GL::COLOR_BUFFER_BIT,
+                        GL::NEAREST,
+                    );
+                }
+            }
+        }
+
+        // Bind the new target
         if target == RenderTargetId::SCREEN {
             gl.bind_framebuffer(GL::FRAMEBUFFER, None);
             gl.viewport(0, 0, self.canvas_width as i32, self.canvas_height as i32);
-        } else if let Some(fbo) = self.render_targets.get(&target.0) {
-            gl.bind_framebuffer(GL::FRAMEBUFFER, Some(fbo));
+        } else if let Some(msaa_fbo) = self.msaa_fbos.get(&target.0) {
+            // Draw into the MSAA FBO
+            gl.bind_framebuffer(GL::FRAMEBUFFER, Some(msaa_fbo));
             if let Some(&(w, h)) = self.render_target_sizes.get(&target.0) {
                 gl.viewport(0, 0, w as i32, h as i32);
             }
         }
+
+        self.current_render_target = target;
     }
 
     fn destroy_render_target(&mut self, target: RenderTargetId) {
+        if let Some(fbo) = self.msaa_fbos.remove(&target.0) {
+            self.gl.delete_framebuffer(Some(&fbo));
+        }
+        if let Some(rbo) = self.msaa_renderbuffers.remove(&target.0) {
+            self.gl.delete_renderbuffer(Some(&rbo));
+        }
         if let Some(fbo) = self.render_targets.remove(&target.0) {
             self.gl.delete_framebuffer(Some(&fbo));
         }
         self.render_target_sizes.remove(&target.0);
         // Note: the associated texture is NOT destroyed — the caller may still use it
+    }
+
+    fn set_anti_aliasing(&mut self, mode: AntiAliasing) {
+        let max_samples = self.gl
+            .get_parameter(GL::MAX_SAMPLES)
+            .ok()
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0) as i32;
+        self.msaa_samples = (mode.samples() as i32).min(max_samples);
+    }
+
+    fn anti_aliasing(&self) -> AntiAliasing {
+        match self.msaa_samples {
+            s if s >= 8 => AntiAliasing::MSAAx8,
+            s if s >= 4 => AntiAliasing::MSAAx4,
+            s if s >= 2 => AntiAliasing::MSAAx2,
+            _ => AntiAliasing::None,
+        }
     }
 }
 

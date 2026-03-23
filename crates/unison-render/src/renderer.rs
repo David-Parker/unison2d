@@ -138,6 +138,31 @@ pub enum BlendMode {
     Multiply,
 }
 
+/// Anti-aliasing mode for rendering.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AntiAliasing {
+    /// No anti-aliasing.
+    None,
+    /// 2x multisample anti-aliasing.
+    MSAAx2,
+    /// 4x multisample anti-aliasing.
+    MSAAx4,
+    /// 8x multisample anti-aliasing.
+    MSAAx8,
+}
+
+impl AntiAliasing {
+    /// Number of samples for this AA mode.
+    pub fn samples(self) -> u32 {
+        match self {
+            AntiAliasing::None => 1,
+            AntiAliasing::MSAAx2 => 2,
+            AntiAliasing::MSAAx4 => 4,
+            AntiAliasing::MSAAx8 => 8,
+        }
+    }
+}
+
 /// Renderer trait that platform crates implement
 pub trait Renderer {
     /// Error type for renderer operations
@@ -194,4 +219,17 @@ pub trait Renderer {
 
     /// Destroy a render target (but not its associated texture).
     fn destroy_render_target(&mut self, _target: RenderTargetId) {}
+
+    // ── Anti-aliasing ──
+
+    /// Set the anti-aliasing mode for offscreen render targets.
+    ///
+    /// Existing render targets are not affected — only newly created ones
+    /// will use the new setting. To apply a change, destroy and recreate
+    /// active render targets (the lighting and world systems do this
+    /// automatically on the next frame when the size changes).
+    fn set_anti_aliasing(&mut self, _mode: AntiAliasing) {}
+
+    /// Get the current anti-aliasing mode.
+    fn anti_aliasing(&self) -> AntiAliasing { AntiAliasing::None }
 }

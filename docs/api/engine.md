@@ -62,6 +62,15 @@ Thin shell for input, actions, renderer access, and compositing. Does NOT own a 
 | `create_render_target(w, h) -> Result<(RenderTargetId, TextureId)>` | Create offscreen target |
 | `destroy_render_target(target)` | Destroy target (keeps texture) |
 
+### Anti-Aliasing
+
+| Method | Description |
+|--------|-------------|
+| `set_anti_aliasing(mode)` | Set MSAA mode (`None`, `MSAAx2`, `MSAAx4`, `MSAAx8`) |
+| `anti_aliasing() -> AntiAliasing` | Get current AA mode |
+
+Default is `MSAAx4`. Clamped to hardware `MAX_SAMPLES`. Only affects newly created render targets.
+
 ### Assets
 
 | Method | Description |

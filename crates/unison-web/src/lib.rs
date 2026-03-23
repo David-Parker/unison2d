@@ -54,11 +54,21 @@ pub fn run<G: Game + 'static>(game: G) {
         .dyn_into::<web_sys::HtmlCanvasElement>()
         .expect("element is not a canvas");
 
-    let width = canvas.width() as f32;
-    let height = canvas.height() as f32;
+    // Scale canvas buffer to device pixel ratio for sharp rendering
+    let dpr = window.device_pixel_ratio() as f32;
+    let css_width = canvas.client_width() as f32;
+    let css_height = canvas.client_height() as f32;
+    let width = (css_width * dpr).round();
+    let height = (css_height * dpr).round();
+    canvas.set_width(width as u32);
+    canvas.set_height(height as u32);
+
+    let context_options = js_sys::Object::new();
+    js_sys::Reflect::set(&context_options, &"antialias".into(), &true.into())
+        .expect("failed to set antialias");
 
     let gl: GL = canvas
-        .get_context("webgl2")
+        .get_context_with_context_options("webgl2", &context_options)
         .expect("getContext failed")
         .expect("WebGL2 not supported")
         .dyn_into::<GL>()

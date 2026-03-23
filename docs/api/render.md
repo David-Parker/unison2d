@@ -39,6 +39,10 @@ pub trait Renderer {
     fn create_render_target(&mut self, width: u32, height: u32) -> Result<(RenderTargetId, TextureId), Self::Error>;
     fn bind_render_target(&mut self, target: RenderTargetId);
     fn destroy_render_target(&mut self, target: RenderTargetId);
+
+    // Anti-aliasing (default: no-op / None)
+    fn set_anti_aliasing(&mut self, mode: AntiAliasing);
+    fn anti_aliasing(&self) -> AntiAliasing;
 }
 ```
 
@@ -57,6 +61,25 @@ let (target, texture) = renderer.create_render_target(800, 600)?;
 renderer.bind_render_target(target);   // subsequent draws go to this target
 renderer.bind_render_target(RenderTargetId::SCREEN);  // back to screen
 renderer.destroy_render_target(target);  // FBO freed, texture kept
+```
+
+## AntiAliasing
+
+Controls MSAA sample count for offscreen render targets. Set via `Engine` or `Renderer`.
+
+```rust
+use unison2d::AntiAliasing;
+
+// In Game::init():
+engine.set_anti_aliasing(AntiAliasing::MSAAx4);
+engine.anti_aliasing()  // -> AntiAliasing::MSAAx4
+```
+
+Variants: `None` (1 sample), `MSAAx2`, `MSAAx4` (default), `MSAAx8`.
+
+Use `mode.samples()` to get the raw sample count. The renderer clamps to the GPU's `MAX_SAMPLES` — requesting `MSAAx8` on hardware that supports 4 will silently use 4.
+
+Changing the AA mode only affects **newly created** render targets. Existing targets continue at their original sample count until destroyed and recreated (which the lighting and world systems do automatically when the viewport resizes).
 ```
 
 ## BlendMode

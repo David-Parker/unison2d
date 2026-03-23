@@ -12,7 +12,7 @@ use unison_input::{ActionMap, InputState, KeyCode, MouseButton};
 use unison_math::{Color, Rect};
 use unison_assets::AssetStore;
 use crate::level::{LevelContext, RenderContext};
-use unison_render::{Renderer, RenderCommand, DrawSprite, TextureId, RenderTargetId, Camera};
+use unison_render::{AntiAliasing, Renderer, RenderCommand, DrawSprite, TextureId, RenderTargetId, Camera};
 
 /// The engine struct. Manages input, actions, and renderer access.
 ///
@@ -181,6 +181,30 @@ impl<A: Copy + Eq + Hash> Engine<A> {
     pub fn destroy_render_target(&mut self, target: RenderTargetId) {
         if let Some(r) = self.renderer.as_mut() {
             r.destroy_render_target(target);
+        }
+    }
+
+    // ── Anti-aliasing ──
+
+    /// Set the anti-aliasing mode for rendering.
+    ///
+    /// Controls MSAA sample count for offscreen render targets. Higher
+    /// values produce smoother edges at the cost of GPU memory and fill rate.
+    ///
+    /// ```ignore
+    /// engine.set_anti_aliasing(AntiAliasing::MSAAx4);
+    /// ```
+    pub fn set_anti_aliasing(&mut self, mode: AntiAliasing) {
+        if let Some(r) = self.renderer.as_mut() {
+            r.set_anti_aliasing(mode);
+        }
+    }
+
+    /// Get the current anti-aliasing mode.
+    pub fn anti_aliasing(&self) -> AntiAliasing {
+        match self.renderer.as_ref() {
+            Some(r) => r.anti_aliasing(),
+            None => AntiAliasing::None,
         }
     }
 
