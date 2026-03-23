@@ -23,13 +23,14 @@
 
 Traditional game engines are designed for humans clicking through editor panels. **Unison 2D is designed for agents writing code.** Every feature is accessible through a clean Rust API — no project files, no drag-and-drop, no hidden state.
 
-Unison is composed of several creates containing low level sub-systems. A high level API unifies them together. There is no complex ECS, no DSL for your agent to learn, no scripting system. Point your agent to the docs and start building games for every platform.
+Unison is composed of several crates containing low level sub-systems. A high level API unifies them together. There is no complex ECS, no DSL for your agent to learn, no scripting system. Point your agent to the docs and start building games for every platform.
 
 - **Code-first** — Everything is controlled through code and configuration
 - **Modular** — Use the full engine or pick individual crates
 - **Cross-platform** — Compile for Web, iOS, and Android from one codebase
 - **SIMD-accelerated physics** — XPBD soft body & rigid body simulation
 - **Dynamic lighting** — 2D lights with real-time soft shadows
+- **Declarative UI** — React-like UI system with diffing, layout, and input handling
 - **Zero-cost profiling** — Hierarchical function-level profiling behind a feature gate
 
 ## Crates
@@ -42,6 +43,7 @@ unison2d/crates/
 ├── unison-render/   # Platform-agnostic rendering traits
 ├── unison-lighting/ # 2D lighting with lightmap compositing and shadows
 ├── unison-input/    # Two-layer input (raw → action mapping)
+├── unison-ui/       # Declarative UI (menus, HUDs, buttons, text)
 ├── unison-profiler/ # Function-level profiling
 └── unison-web/      # Web platform (WebGL2, DOM input, rAF loop)
 ```
@@ -68,6 +70,7 @@ use unison2d::physics::{PhysicsWorld, BodyConfig, Material, Mesh};
 use unison2d::render::{Renderer, Camera, Color};
 use unison2d::lighting::{LightingSystem, PointLight, DirectionalLight, ShadowSettings};
 use unison2d::input::{InputState, KeyCode};
+use unison2d::ui::facade::Ui;
 use unison2d::profiler::{Profiler, profile_scope};
 use unison2d::math::Vec2;
 ```
