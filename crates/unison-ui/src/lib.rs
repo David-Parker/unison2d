@@ -4,4 +4,10 @@
 //! the previous frame, manages widget state (hover, focus, animations),
 //! and emits [`RenderCommand`]s through the engine's overlay system.
 
+pub mod node;
+pub mod style;
 pub mod text;
+
+// Macro module (macros are exported at crate root via #[macro_export])
+#[doc(hidden)]
+pub mod ui_macro;
