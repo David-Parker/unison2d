@@ -5,6 +5,7 @@
 //! and emits [`RenderCommand`]s through the engine's overlay system.
 
 pub mod diff;
+pub mod facade;
 pub mod input;
 pub mod layout;
 pub mod node;

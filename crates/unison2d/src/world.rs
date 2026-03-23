@@ -605,6 +605,12 @@ impl Default for World {
     }
 }
 
+impl unison_ui::facade::OverlayTarget for World {
+    fn draw_overlay(&mut self, command: RenderCommand, z_order: i32) {
+        self.overlay_commands.push((command, z_order));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
