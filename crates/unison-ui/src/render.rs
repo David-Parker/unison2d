@@ -134,7 +134,7 @@ fn render_node<E>(
     }
 }
 
-/// Render a Panel: background rect + optional border.
+/// Render a Panel: background rect + optional border, or 9-slice texture.
 fn render_panel<E>(
     node: &UiNode<E>,
     rect: &LayoutRect,
@@ -142,6 +142,25 @@ fn render_panel<E>(
     z: &mut i32,
     commands: &mut Vec<OverlayCommand>,
 ) {
+    // If a 9-slice texture is set, use it instead of solid color
+    if let Some(ref nine) = node.nine_slice {
+        let tint = node.panel_style.as_ref()
+            .map(|s| s.background)
+            .unwrap_or(Color::WHITE);
+        let sprites = crate::nine_slice::render_nine_slice(
+            nine, rect.x, rect.y, rect.width, rect.height, tint,
+        );
+        for sprite in sprites {
+            let overlay = pixel_sprite_to_overlay(&sprite, screen_size);
+            commands.push(OverlayCommand {
+                command: RenderCommand::Sprite(overlay),
+                z_order: *z,
+            });
+        }
+        *z += 1;
+        return;
+    }
+
     let style = node.panel_style.as_ref().cloned().unwrap_or_default();
 
     // Border (slightly larger rect behind the background)

@@ -8,6 +8,7 @@ pub mod diff;
 pub mod facade;
 pub mod input;
 pub mod layout;
+pub mod nine_slice;
 pub mod node;
 pub mod render;
 pub mod state;
