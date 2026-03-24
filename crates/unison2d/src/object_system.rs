@@ -28,11 +28,8 @@ pub struct ObjectSystem {
 impl ObjectSystem {
     /// Create a new ObjectSystem with default physics settings.
     pub fn new() -> Self {
-        let mut physics = PhysicsWorld::new();
-        physics.set_gravity(-9.8);
-
         Self {
-            physics,
+            physics: PhysicsWorld::new(),
             entries: HashMap::new(),
             handle_map: HashMap::new(),
             next_id: 0,
@@ -55,11 +52,9 @@ impl ObjectSystem {
 
         let id = self.next_object_id();
         self.handle_map.insert(handle, id);
-        self.entries.insert(id, ObjectEntry {
-            kind: ObjectKind::SoftBody { handle, color, texture, uvs, boundary_edges },
-            casts_shadow: true,
-            z_order: 0,
-        });
+        self.entries.insert(id, ObjectEntry::new(
+            ObjectKind::SoftBody { handle, color, texture, uvs, boundary_edges },
+        ));
         id
     }
 
@@ -71,11 +66,9 @@ impl ObjectSystem {
 
         let id = self.next_object_id();
         self.handle_map.insert(handle, id);
-        self.entries.insert(id, ObjectEntry {
-            kind: ObjectKind::RigidBody { handle, color },
-            casts_shadow: true,
-            z_order: 0,
-        });
+        self.entries.insert(id, ObjectEntry::new(
+            ObjectKind::RigidBody { handle, color },
+        ));
         id
     }
 
@@ -95,17 +88,15 @@ impl ObjectSystem {
     /// Use the sprite query/set methods to move or rotate them.
     pub fn spawn_sprite(&mut self, desc: SpriteDesc) -> ObjectId {
         let id = self.next_object_id();
-        self.entries.insert(id, ObjectEntry {
-            kind: ObjectKind::Sprite {
+        self.entries.insert(id, ObjectEntry::new(
+            ObjectKind::Sprite {
                 texture: desc.texture,
                 position: desc.position,
                 size: desc.size,
                 rotation: desc.rotation,
                 color: desc.color,
             },
-            casts_shadow: false, // Sprites don't cast shadows by default
-            z_order: 0,
-        });
+        ));
         id
     }
 
@@ -294,9 +285,9 @@ impl ObjectSystem {
 
     // ── Physics config ──
 
-    /// Set the gravity vector (negative = downward).
-    pub fn set_gravity(&mut self, gravity: Vec2) {
-        self.physics.set_gravity(gravity.y);
+    /// Set gravity strength (negative = downward). Default: -9.8
+    pub fn set_gravity(&mut self, gravity: f32) {
+        self.physics.set_gravity(gravity);
     }
 
     /// Set a flat ground plane at the given Y position.
@@ -533,7 +524,7 @@ mod tests {
     #[test]
     fn set_gravity_and_ground() {
         let mut objects = ObjectSystem::new();
-        objects.set_gravity(Vec2::new(0.0, -20.0));
+        objects.set_gravity(-20.0);
         objects.set_ground(-5.0);
 
         assert_eq!(objects.physics.gravity(), -20.0);

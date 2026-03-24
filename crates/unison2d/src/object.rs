@@ -113,6 +113,18 @@ pub(crate) struct ObjectEntry {
 }
 
 impl ObjectEntry {
+    /// Create a new ObjectEntry with default z_order (0) and shadow casting based on kind.
+    ///
+    /// Physics objects (soft/rigid bodies) cast shadows by default; sprites do not.
+    pub(crate) fn new(kind: ObjectKind) -> Self {
+        let casts_shadow = !matches!(kind, ObjectKind::Sprite { .. });
+        Self {
+            kind,
+            casts_shadow,
+            z_order: 0,
+        }
+    }
+
     /// Get the physics BodyHandle for this object, if it has one.
     ///
     /// Returns `None` for Sprite objects (no physics backing).

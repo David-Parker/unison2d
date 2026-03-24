@@ -13,7 +13,7 @@ use crate::object::ObjectId;
 use crate::object_system::ObjectSystem;
 
 /// The default camera name, created automatically.
-const DEFAULT_CAMERA: &str = "main";
+pub const DEFAULT_CAMERA: &str = "main";
 
 /// Follow-target entry: object to track, smoothing factor, and fixed offset.
 struct FollowTarget {
@@ -29,10 +29,10 @@ pub struct CameraSystem {
 }
 
 impl CameraSystem {
-    /// Create a new CameraSystem with a default "main" camera (26.67x15 world units, 16:9).
+    /// Create a new CameraSystem with a default "main" camera.
     pub fn new() -> Self {
         let mut cameras = HashMap::new();
-        cameras.insert(DEFAULT_CAMERA.to_string(), Camera::new(26.67, 15.0));
+        cameras.insert(DEFAULT_CAMERA.to_string(), Camera::default());
 
         Self {
             cameras,
@@ -135,7 +135,7 @@ mod tests {
     #[test]
     fn default_has_main_camera() {
         let cameras = CameraSystem::new();
-        assert!(cameras.get("main").is_some());
+        assert!(cameras.get(DEFAULT_CAMERA).is_some());
         assert_eq!(cameras.count(), 1);
     }
 
@@ -154,9 +154,9 @@ mod tests {
     #[test]
     fn get_mut_camera() {
         let mut cameras = CameraSystem::new();
-        let cam = cameras.get_mut("main").unwrap();
+        let cam = cameras.get_mut(DEFAULT_CAMERA).unwrap();
         cam.zoom = 2.0;
-        assert_eq!(cameras.get("main").unwrap().zoom, 2.0);
+        assert_eq!(cameras.get(DEFAULT_CAMERA).unwrap().zoom, 2.0);
     }
 
     #[test]
@@ -164,9 +164,9 @@ mod tests {
         let mut cameras = CameraSystem::new();
         let id = ObjectId::PLACEHOLDER;
 
-        cameras.follow("main", id, 0.1);
+        cameras.follow(DEFAULT_CAMERA, id, 0.1);
         // follow_targets is private, just verify unfollow doesn't panic
-        cameras.unfollow("main");
+        cameras.unfollow(DEFAULT_CAMERA);
     }
 
     #[test]
@@ -175,7 +175,7 @@ mod tests {
         cameras.add("ui", Camera::new(16.0, 9.0));
 
         let names: Vec<&str> = cameras.iter().map(|(name, _)| name).collect();
-        assert!(names.contains(&"main"));
+        assert!(names.contains(&DEFAULT_CAMERA));
         assert!(names.contains(&"ui"));
     }
 }

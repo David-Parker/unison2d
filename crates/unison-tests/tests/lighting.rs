@@ -1660,7 +1660,7 @@ fn e2e_world_auto_render_with_shadows() {
 
     let mut world = unison2d::World::new();
     world.set_background(Color::from_hex(0x1a1a2e));
-    world.objects.set_gravity(Vec2::new(0.0, -9.8));
+    world.objects.set_gravity(-9.8);
     world.objects.set_ground(-4.5);
 
     // Add a platform (creates an occluder)

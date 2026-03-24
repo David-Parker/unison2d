@@ -25,6 +25,7 @@ use unison_profiler::profile_scope;
 
 use crate::object_system::ObjectSystem;
 use crate::camera_system::CameraSystem;
+use crate::camera_system::DEFAULT_CAMERA;
 
 /// Rendering environment configuration for a World.
 pub struct Environment {
@@ -72,7 +73,7 @@ struct RenderLayer {
 /// ```ignore
 /// let mut world = World::new();
 /// world.set_background(Color::from_hex(0x1a1a2e));
-/// world.objects.set_gravity(Vec2::new(0.0, -9.8));
+/// world.objects.set_gravity(-9.8);
 /// let player = world.objects.spawn_soft_body(desc);
 /// world.cameras.follow("main", player, 0.08);
 ///
@@ -569,7 +570,7 @@ impl World {
     /// directly. After all layers: unlit commands, then overlay commands.
     pub fn auto_render(&mut self, renderer: &mut dyn Renderer<Error = String>) {
         profile_scope!("world.auto_render");
-        let camera = match self.cameras.get("main") {
+        let camera = match self.cameras.get(DEFAULT_CAMERA) {
             Some(c) => c.clone(),
             None => return,
         };
@@ -658,7 +659,7 @@ mod tests {
     #[test]
     fn world_new_has_defaults() {
         let world = World::new();
-        assert!(world.cameras.get("main").is_some());
+        assert!(world.cameras.get(DEFAULT_CAMERA).is_some());
         assert_eq!(world.background_color(), Color::BLACK);
         assert_eq!(world.objects.object_count(), 0);
     }
@@ -678,10 +679,10 @@ mod tests {
             texture: TextureId::NONE,
         });
 
-        world.cameras.follow("main", id, 1.0); // instant snap
+        world.cameras.follow(DEFAULT_CAMERA, id, 1.0); // instant snap
         world.step(1.0 / 60.0);
 
-        let cam = world.cameras.get("main").unwrap();
+        let cam = world.cameras.get(DEFAULT_CAMERA).unwrap();
         // Camera should have moved toward the object
         assert!(cam.x.abs() > 0.0 || cam.y.abs() > 0.0);
     }

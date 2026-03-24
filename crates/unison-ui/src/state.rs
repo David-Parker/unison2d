@@ -93,7 +93,8 @@ impl UiState {
 
     /// Advance animation timers and purge completed exit animations.
     pub fn update(&mut self, dt: f32) {
-        let hover_speed = 8.0; // reaches 1.0 in ~0.125s
+        /// Hover interpolation speed — reaches full hover in ~0.125s at 8.0.
+        const HOVER_SPEED: f32 = 8.0;
 
         let mut to_remove = Vec::new();
 
@@ -103,9 +104,9 @@ impl UiState {
 
             // Advance hover interpolation
             if state.hovered {
-                state.hover_time = (state.hover_time + hover_speed * dt).min(1.0);
+                state.hover_time = (state.hover_time + HOVER_SPEED * dt).min(1.0);
             } else {
-                state.hover_time = (state.hover_time - hover_speed * dt).max(0.0);
+                state.hover_time = (state.hover_time - HOVER_SPEED * dt).max(0.0);
             }
 
             // Advance exit animation
