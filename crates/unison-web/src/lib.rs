@@ -32,7 +32,7 @@ use std::rc::Rc;
 use wasm_bindgen::JsCast;
 use web_sys::WebGl2RenderingContext as GL;
 use unison2d::{Engine, Game};
-use unison_input::InputState;
+use unison_input::InputBuffer;
 use unison_render::Renderer;
 
 /// Run a game on the web platform.
@@ -88,8 +88,8 @@ pub fn run<G: Game + 'static>(game: G) {
     });
     unison_profiler::Profiler::set_enabled(true);
 
-    // Create shared input state
-    let input = Rc::new(RefCell::new(InputState::new()));
+    // Create shared input buffer
+    let input = Rc::new(RefCell::new(InputBuffer::new()));
 
     // Wire DOM events
     let _closures = self::input::wire_input(&canvas, input.clone());

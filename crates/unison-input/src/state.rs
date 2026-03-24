@@ -143,6 +143,8 @@ impl InputState {
     pub fn copy_held_from(&mut self, other: &InputState) {
         self.keys_held = other.keys_held.clone();
         self.mouse_buttons_held = other.mouse_buttons_held.clone();
+        self.mouse_pos = other.mouse_pos;
+        self.touches = other.touches.clone();
     }
 
     // ── Platform mutation API ──

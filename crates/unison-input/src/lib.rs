@@ -9,7 +9,9 @@
 mod types;
 mod state;
 mod action;
+mod buffer;
 
 pub use types::{KeyCode, MouseButton, Touch, TouchPhase};
 pub use state::InputState;
 pub use action::ActionMap;
+pub use buffer::InputBuffer;

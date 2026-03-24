@@ -6,7 +6,7 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 
 use unison2d::{Engine, Game};
-use unison_input::InputState;
+use unison_input::InputBuffer;
 use unison_profiler::Profiler;
 
 /// How often (in frames) to log profiler stats to the console
@@ -23,7 +23,7 @@ const MAX_ACCUMULATOR: f32 = 0.1;
 pub fn start_loop<G: Game + 'static>(
     mut game: G,
     engine: Rc<RefCell<Engine<G::Action>>>,
-    input: Rc<RefCell<InputState>>,
+    input: Rc<RefCell<InputBuffer>>,
 ) {
     let f: Rc<RefCell<Option<Closure<dyn FnMut(f64)>>>> = Rc::new(RefCell::new(None));
     let g = f.clone();
@@ -53,18 +53,15 @@ pub fn start_loop<G: Game + 'static>(
         // Clamp accumulator to prevent spiral of death
         accumulator += dt.min(MAX_ACCUMULATOR);
 
-        // Transfer input state from DOM event handler into engine.
-        // We swap the two InputState structs so the engine gets fresh DOM events
-        // and the shared ref gets a clean state for the next frame's DOM events.
-        {
-            let mut engine_ref = engine.borrow_mut();
+        // Transfer DOM events into the engine.
+        // InputBuffer only swaps when an update tick will run, so per-frame
+        // events (just_pressed / just_released) never get discarded unprocessed.
+        let will_update = accumulator >= FIXED_DT;
+        if will_update {
             let mut input_ref = input.borrow_mut();
-            std::mem::swap(&mut engine_ref.input, &mut *input_ref);
-            // Clear the shared input (now holding stale engine state) so new DOM events
-            // start from a clean held-key state. Copy over the engine's current held keys
-            // so that key-release events during the next frame work correctly.
-            input_ref.begin_frame();
-            input_ref.copy_held_from(&engine_ref.input);
+            input_ref.transfer(true);
+            let mut engine_ref = engine.borrow_mut();
+            input_ref.swap_into(&mut engine_ref.input);
         }
 
         // Fixed timestep updates
@@ -72,8 +69,6 @@ pub fn start_loop<G: Game + 'static>(
         while accumulator >= FIXED_DT {
             {
                 let mut engine_ref = engine.borrow_mut();
-                // On subsequent ticks within the same frame, clear per-frame flags
-                // so that just_started/just_ended only fire once per frame.
                 if !first_tick {
                     engine_ref.input.begin_frame();
                 }

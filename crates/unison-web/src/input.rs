@@ -5,13 +5,13 @@ use std::rc::Rc;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::{KeyboardEvent, MouseEvent, TouchEvent, HtmlCanvasElement};
-use unison_input::{InputState, KeyCode, MouseButton};
+use unison_input::{InputBuffer, KeyCode, MouseButton};
 
-/// Wire DOM keyboard, mouse, and touch events into the given InputState.
+/// Wire DOM keyboard, mouse, and touch events into the given InputBuffer.
 /// Returns a list of closures that must be kept alive for the duration of the game.
 pub fn wire_input(
     canvas: &HtmlCanvasElement,
-    input: Rc<RefCell<InputState>>,
+    input: Rc<RefCell<InputBuffer>>,
 ) -> Vec<Closure<dyn FnMut(web_sys::Event)>> {
     let window = web_sys::window().expect("no window");
     let mut closures: Vec<Closure<dyn FnMut(web_sys::Event)>> = Vec::new();
@@ -25,7 +25,7 @@ pub fn wire_input(
                 return;
             }
             if let Some(key) = map_key_code(&event.code()) {
-                input.borrow_mut().key_pressed(key);
+                input.borrow_mut().shared_mut().key_pressed(key);
                 // Prevent scrolling for game keys
                 if is_game_key(key) {
                     event.prevent_default();
@@ -43,7 +43,7 @@ pub fn wire_input(
         let closure = Closure::wrap(Box::new(move |event: web_sys::Event| {
             let event: KeyboardEvent = event.unchecked_into();
             if let Some(key) = map_key_code(&event.code()) {
-                input.borrow_mut().key_released(key);
+                input.borrow_mut().shared_mut().key_released(key);
             }
         }) as Box<dyn FnMut(web_sys::Event)>);
         window
@@ -59,6 +59,7 @@ pub fn wire_input(
             let event: MouseEvent = event.unchecked_into();
             input
                 .borrow_mut()
+                .shared_mut()
                 .mouse_moved(event.offset_x() as f32, event.offset_y() as f32);
         }) as Box<dyn FnMut(web_sys::Event)>);
         canvas
@@ -72,7 +73,7 @@ pub fn wire_input(
         let closure = Closure::wrap(Box::new(move |event: web_sys::Event| {
             let event: MouseEvent = event.unchecked_into();
             if let Some(btn) = map_mouse_button(event.button()) {
-                input.borrow_mut().mouse_button_pressed(btn);
+                input.borrow_mut().shared_mut().mouse_button_pressed(btn);
             }
         }) as Box<dyn FnMut(web_sys::Event)>);
         canvas
@@ -86,7 +87,7 @@ pub fn wire_input(
         let closure = Closure::wrap(Box::new(move |event: web_sys::Event| {
             let event: MouseEvent = event.unchecked_into();
             if let Some(btn) = map_mouse_button(event.button()) {
-                input.borrow_mut().mouse_button_released(btn);
+                input.borrow_mut().shared_mut().mouse_button_released(btn);
             }
         }) as Box<dyn FnMut(web_sys::Event)>);
         canvas
@@ -104,7 +105,7 @@ pub fn wire_input(
             let touches = event.changed_touches();
             for i in 0..touches.length() {
                 if let Some(touch) = touches.get(i) {
-                    input.borrow_mut().touch_started(
+                    input.borrow_mut().shared_mut().touch_started(
                         touch.identifier() as u64,
                         touch.client_x() as f32,
                         touch.client_y() as f32,
@@ -126,7 +127,7 @@ pub fn wire_input(
             let touches = event.changed_touches();
             for i in 0..touches.length() {
                 if let Some(touch) = touches.get(i) {
-                    input.borrow_mut().touch_moved(
+                    input.borrow_mut().shared_mut().touch_moved(
                         touch.identifier() as u64,
                         touch.client_x() as f32,
                         touch.client_y() as f32,
@@ -150,6 +151,7 @@ pub fn wire_input(
                 if let Some(touch) = touches.get(i) {
                     input
                         .borrow_mut()
+                        .shared_mut()
                         .touch_ended(touch.identifier() as u64);
                 }
             }
@@ -170,6 +172,7 @@ pub fn wire_input(
                 if let Some(touch) = touches.get(i) {
                     input
                         .borrow_mut()
+                        .shared_mut()
                         .touch_cancelled(touch.identifier() as u64);
                 }
             }
