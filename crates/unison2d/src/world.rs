@@ -343,16 +343,23 @@ impl World {
     }
 
     /// Composite the scene FBO texture onto the currently-bound target with alpha blending.
+    ///
+    /// If `clear_color` is `Some`, the target is cleared first (within the same
+    /// begin/end frame) to avoid flicker from a separate clear pass.
     fn composite_scene_fbo(
         renderer: &mut dyn Renderer<Error = String>,
         camera: &Camera,
         scene_texture: TextureId,
+        clear_color: Option<Color>,
     ) {
         let (min_x, min_y, max_x, max_y) = camera.bounds();
         let cx = (min_x + max_x) / 2.0;
         let cy = (min_y + max_y) / 2.0;
 
         renderer.begin_frame(camera);
+        if let Some(color) = clear_color {
+            renderer.clear(color);
+        }
         renderer.set_blend_mode(BlendMode::Alpha);
         renderer.draw(RenderCommand::Sprite(DrawSprite {
             texture: scene_texture,
@@ -399,6 +406,11 @@ impl World {
         let scene_target = self.scene_target;
         let scene_texture = self.scene_texture;
 
+        // Track whether the output target has been cleared this pass.
+        // The first layer to touch the output target must clear it with its
+        // clear color so stale content from previous frames doesn't bleed through.
+        let mut output_cleared = false;
+
         let layer_count = self.render_layers.len();
         let mut i = 0;
         while i < layer_count {
@@ -421,6 +433,7 @@ impl World {
                     renderer.clear(layer.config.clear_color);
                     renderer.end_frame();
                 }
+                output_cleared = true;
                 i += 1;
             } else {
                 // ── Lit group: collect consecutive lit layers ──
@@ -468,13 +481,27 @@ impl World {
                     self.lighting.composite_lightmap(renderer, camera);
                 }
 
-                // Composite lit scene FBO onto output
+                // Composite lit scene FBO onto output.
+                // If the output hasn't been cleared yet (no unlit layer preceded
+                // this lit group), clear it with the first lit layer's clear color
+                // to prevent stale content from previous frames bleeding through.
                 renderer.bind_render_target(output_target);
+                let clear = if !output_cleared {
+                    output_cleared = true;
+                    Some(self.render_layers[group_start].config.clear_color)
+                } else {
+                    None
+                };
                 // Only composite if group had content (avoid blank overlay)
                 let group_has_content = (group_start..i)
                     .any(|j| !self.render_layers[j].commands.is_empty());
                 if group_has_content {
-                    Self::composite_scene_fbo(renderer, camera, tex);
+                    Self::composite_scene_fbo(renderer, camera, tex, clear);
+                } else if let Some(color) = clear {
+                    // No content to composite, but still need to clear
+                    renderer.begin_frame(camera);
+                    renderer.clear(color);
+                    renderer.end_frame();
                 }
             }
         }
