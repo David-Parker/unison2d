@@ -195,8 +195,7 @@ mod tests {
     use crate::diff::{DiffOp, NodeKey};
     use crate::node::UiNode;
     use crate::style::Anchor;
-    use unison_input::InputState;
-    use unison_math::{Color, Vec2};
+    use unison_math::Color;
     use unison_render::RenderCommand;
 
     // ── Mock Overlay Target ──
@@ -217,43 +216,8 @@ mod tests {
         }
     }
 
-    fn screen() -> Vec2 {
-        Vec2::new(960.0, 540.0)
-    }
-
-    // ── Facade tests that don't require real font rendering ──
-
-    // Test the full frame cycle with non-text widgets
-    #[test]
-    fn full_frame_cycle_no_panic() {
-        // We can't create a real Ui without a valid font, so test subsystems directly
-        let tree: UiTree<()> = UiTree::new(vec![
-            UiNode::panel()
-                .with_anchor(Anchor::TopLeft)
-                .with_width(200.0)
-                .with_height(100.0)
-                .with_children(vec![
-                    UiNode::progress_bar(0.75),
-                ]),
-        ]);
-
-        // Simulate the facade flow manually
-        let mut state = UiState::new();
-        let input = InputState::new();
-
-        // Step 1: Process input against empty previous layout
-        let prev_tree: UiTree<()> = UiTree::empty();
-        let prev_layout = Layout { rects: Vec::new() };
-        let (result, _events) = process_input(&prev_tree, &prev_layout, &mut state, &input, screen());
-        assert!(!result.consumed_click);
-
-        // Step 2: Diff + layout
-        let ops = diff_trees(&prev_tree, &tree);
-        state.apply_diff(&ops);
-
-        // Verify state was created
-        assert!(state.get(&NodeKey::root(0)).is_some());
-    }
+    // full_frame_cycle_no_panic, conditional_ui_adds_and_removes, and
+    // ten_frame_lifecycle moved to unison-tests/tests/ui_lifecycle.rs
 
     #[test]
     fn diff_across_frames() {
@@ -285,33 +249,7 @@ mod tests {
         assert_eq!(state.len(), 1); // Same widget, just updated
     }
 
-    #[test]
-    fn conditional_ui_adds_and_removes() {
-        let mut state = UiState::new();
-
-        // Frame 1: Panel visible
-        let tree1: UiTree<()> = UiTree::new(vec![
-            UiNode::panel()
-                .with_anchor(Anchor::Center)
-                .with_width(200.0)
-                .with_height(100.0),
-        ]);
-        let ops1 = diff_trees(&UiTree::empty(), &tree1);
-        state.apply_diff(&ops1);
-        assert_eq!(state.len(), 1);
-
-        // Frame 2: Panel removed
-        let tree2: UiTree<()> = UiTree::empty();
-        let ops2 = diff_trees(&tree1, &tree2);
-        state.apply_diff(&ops2);
-        // Widget should be exiting, not yet removed
-        let ws = state.get(&NodeKey::root(0)).unwrap();
-        assert!(ws.is_exiting());
-
-        // After enough time, exit completes
-        state.update(0.2);
-        assert!(state.is_empty());
-    }
+    // conditional_ui_adds_and_removes moved to unison-tests/tests/ui_lifecycle.rs
 
     #[test]
     fn no_op_frame_all_unchanged() {
@@ -348,63 +286,7 @@ mod tests {
         assert!(state.get(&NodeKey::root(1)).is_some());
     }
 
-    #[test]
-    fn ten_frame_lifecycle() {
-        let mut state = UiState::new();
-        let dt = 0.016;
-
-        let menu_tree: UiTree<()> = UiTree::new(vec![
-            UiNode::panel()
-                .with_anchor(Anchor::Center)
-                .with_width(200.0)
-                .with_height(100.0)
-                .with_children(vec![
-                    UiNode::progress_bar(0.5),
-                ]),
-        ]);
-        let empty_tree: UiTree<()> = UiTree::empty();
-        let alt_menu: UiTree<()> = UiTree::new(vec![
-            UiNode::panel()
-                .with_anchor(Anchor::TopLeft)
-                .with_width(150.0)
-                .with_height(80.0),
-        ]);
-
-        let mut prev = UiTree::empty();
-
-        // Frames 1-3: show menu
-        for _ in 0..3 {
-            let ops = diff_trees(&prev, &menu_tree);
-            state.apply_diff(&ops);
-            state.update(dt);
-            prev = menu_tree.clone();
-        }
-        assert_eq!(state.len(), 2); // panel + progress_bar
-
-        // Frames 4-6: hide menu
-        for _ in 0..3 {
-            let ops = diff_trees(&prev, &empty_tree);
-            state.apply_diff(&ops);
-            state.update(dt);
-            prev = empty_tree.clone();
-        }
-
-        // After ~0.048s of hiding, exit animations should still be in progress
-        // (EXIT_DURATION = 0.12). But after frame 6 we've done 3 * 0.016 = 0.048s of exit.
-        // Need more time for full removal.
-        state.update(0.1); // Push past exit duration
-        assert!(state.is_empty(), "all widgets should be purged after exit");
-
-        // Frames 7-10: show different menu
-        for _ in 0..4 {
-            let ops = diff_trees(&prev, &alt_menu);
-            state.apply_diff(&ops);
-            state.update(dt);
-            prev = alt_menu.clone();
-        }
-        assert_eq!(state.len(), 1); // just the new panel
-        assert!(state.get(&NodeKey::root(0)).is_some());
-    }
+    // ten_frame_lifecycle moved to unison-tests/tests/ui_lifecycle.rs
 
     #[test]
     fn overlay_target_trait_works() {

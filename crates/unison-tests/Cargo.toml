@@ -10,3 +10,5 @@ unison2d = { path = "../unison2d" }
 unison-math = { path = "../unison-math" }
 unison-render = { path = "../unison-render" }
 unison-lighting = { path = "../unison-lighting" }
+unison-input = { path = "../unison-input" }
+unison-ui = { path = "../unison-ui" }

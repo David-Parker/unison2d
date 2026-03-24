@@ -325,10 +325,12 @@ dependencies = [
 name = "unison-tests"
 version = "0.1.0"
 dependencies = [
+ "unison-input",
  "unison-lighting",
  "unison-math",
  "unison-physics",
  "unison-render",
+ "unison-ui",
  "unison2d",
 ]
 

@@ -252,28 +252,7 @@ mod tests {
         assert!(!state.get(&NodeKey::root(0)).unwrap().hovered);
     }
 
-    #[test]
-    fn click_triggers_event() {
-        let (tree, layout, mut state) = setup_button_test();
-        let btn = &layout.rects[0];
-
-        // Use a single InputState across frames (like the real engine does)
-        let mut input = InputState::new();
-        input.mouse_moved(btn.x + 5.0, btn.y + 5.0);
-
-        // Frame 1: press inside
-        input.mouse_button_pressed(MouseButton::Left);
-        let (result, events) = process_input(&tree, &layout, &mut state, &input, screen());
-        assert!(result.consumed_click);
-        assert!(events.is_empty()); // No event on press, only on release
-
-        // Frame 2: release inside (begin_frame clears just_pressed, then release)
-        input.begin_frame();
-        input.mouse_button_released(MouseButton::Left);
-        let (_, events) = process_input(&tree, &layout, &mut state, &input, screen());
-        assert_eq!(events.len(), 1);
-        assert_eq!(events[0], Action::Click);
-    }
+    // Multi-frame click test moved to unison-tests/tests/ui_lifecycle.rs
 
     #[test]
     fn non_interactive_passthrough() {
