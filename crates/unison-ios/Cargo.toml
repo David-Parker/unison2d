@@ -1,0 +1,23 @@
+[package]
+name = "unison-ios"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Unison 2D Game Engine - iOS platform (Metal renderer, touch input, frame loop)"
+
+[dependencies]
+unison-math = { workspace = true }
+unison-render = { workspace = true }
+unison-input = { workspace = true }
+unison-profiler = { workspace = true }
+unison2d = { workspace = true }
+metal = "0.31"
+objc = "0.2"
+block = "0.1"
+core-graphics-types = "0.2"
+foreign-types = "0.5"
+
+[features]
+default = []
+simd = ["unison2d/simd"]
+profiling = ["unison-profiler/enabled", "unison2d/profiling"]

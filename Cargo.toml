@@ -12,6 +12,7 @@ members = [
     "crates/unison-lighting",
     "crates/unison-ui",
     "crates/unison-web",
+    "crates/unison-ios",
     "crates/unison-tests",
 ]
 
@@ -34,6 +35,7 @@ unison-profiler = { path = "crates/unison-profiler", default-features = false }
 unison-input = { path = "crates/unison-input" }
 unison-assets = { path = "crates/unison-assets" }
 unison-web = { path = "crates/unison-web" }
+unison-ios = { path = "crates/unison-ios" }
 
 # External dependencies
 flate2 = "1.0"
