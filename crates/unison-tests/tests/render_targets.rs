@@ -90,6 +90,8 @@ impl Renderer for MockRenderer {
         (960.0, 540.0)
     }
 
+    fn set_screen_size(&mut self, _width: f32, _height: f32) {}
+
     fn set_blend_mode(&mut self, mode: BlendMode) {
         self.ops.borrow_mut().push(RenderOp::SetBlend(mode));
     }

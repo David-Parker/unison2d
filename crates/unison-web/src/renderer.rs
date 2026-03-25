@@ -721,6 +721,11 @@ impl Renderer for WebGlRenderer {
         (self.canvas_width, self.canvas_height)
     }
 
+    fn set_screen_size(&mut self, width: f32, height: f32) {
+        self.canvas_width = width;
+        self.canvas_height = height;
+    }
+
     fn set_blend_mode(&mut self, mode: BlendMode) {
         if mode == self.current_blend_mode {
             return;

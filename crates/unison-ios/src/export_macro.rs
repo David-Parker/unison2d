@@ -63,10 +63,13 @@ macro_rules! export_game {
         #[no_mangle]
         pub unsafe extern "C" fn game_resize(
             state: *mut ::std::ffi::c_void,
-            _width: f32,
-            _height: f32,
+            width: f32,
+            height: f32,
         ) {
-            let _ = state;
+            let state = &mut *(state as *mut __UnisonGameState);
+            if let Some(renderer) = state.engine_mut().renderer_mut() {
+                renderer.set_screen_size(width, height);
+            }
         }
 
         #[no_mangle]

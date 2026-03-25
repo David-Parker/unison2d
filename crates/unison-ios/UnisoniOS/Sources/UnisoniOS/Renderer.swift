@@ -31,6 +31,11 @@ public class Renderer: NSObject, MTKViewDelegate {
         gameState = game_init(devicePtr, layerPtr, Float(size.width), Float(size.height))
         guard gameState != nil else { return nil }
 
+        // Set point-based screen size immediately so the first frame uses
+        // the correct coordinate system (matching UIKit touch coordinates).
+        let bounds = metalKitView.bounds.size
+        game_resize(gameState!, Float(bounds.width), Float(bounds.height))
+
         super.init()
     }
 
@@ -61,6 +66,10 @@ public class Renderer: NSObject, MTKViewDelegate {
 
     public func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
         guard let state = gameState else { return }
-        game_resize(state, Float(size.width), Float(size.height))
+        // Pass point-based size so the game coordinate system matches
+        // UIKit touch coordinates. The renderer derives pixel dimensions
+        // from drawableSize / points internally.
+        let bounds = view.bounds.size
+        game_resize(state, Float(bounds.width), Float(bounds.height))
     }
 }

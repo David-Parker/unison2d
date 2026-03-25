@@ -73,17 +73,27 @@ struct RenderTarget {
 ///
 /// Implements the [`Renderer`] trait from `unison-render`. Created with raw
 /// Metal device and CAMetalLayer pointers received from Swift via FFI.
+/// A set of pipeline states for one sample count (1 for screen, N for MSAA).
+struct PipelineSet {
+    base_alpha: RenderPipelineState,
+    base_additive: RenderPipelineState,
+    base_multiply: RenderPipelineState,
+    lit_alpha: RenderPipelineState,
+    lit_additive: RenderPipelineState,
+}
+
 pub struct MetalRenderer {
     device: Device,
     command_queue: CommandQueue,
     layer: *mut Object,
 
-    // Pipeline states
-    base_pipeline_alpha: RenderPipelineState,
-    base_pipeline_additive: RenderPipelineState,
-    base_pipeline_multiply: RenderPipelineState,
-    lit_pipeline_alpha: RenderPipelineState,
-    lit_pipeline_additive: RenderPipelineState,
+    // Pipeline states: screen (sample_count=1) and MSAA (sample_count=N)
+    screen_pipelines: PipelineSet,
+    msaa_pipelines: Option<PipelineSet>,
+
+    // Shader libraries (kept for pipeline recreation on AA change)
+    base_library: Library,
+    lit_library: Library,
 
     // Default sampler
     sampler_state: SamplerState,
@@ -110,9 +120,12 @@ pub struct MetalRenderer {
     current_drawable: Option<Drawable>,
     view_projection: [[f32; 4]; 3],
 
-    // Screen
+    // Screen (pixel dimensions for Metal rendering)
     screen_width: f32,
     screen_height: f32,
+    // Screen (point dimensions for game logic / UI / touch coords)
+    screen_width_points: f32,
+    screen_height_points: f32,
 
     // State tracking
     current_blend_mode: BlendMode,
@@ -155,52 +168,10 @@ impl MetalRenderer {
             .new_library_with_source(&lit_source, &CompileOptions::new())
             .map_err(|e| format!("Failed to compile lit shaders: {}", e))?;
 
-        let vertex_fn = base_library
-            .get_function("vertex_main", None)
-            .map_err(|e| format!("vertex_main not found: {}", e))?;
-        let fragment_fn = base_library
-            .get_function("fragment_main", None)
-            .map_err(|e| format!("fragment_main not found: {}", e))?;
-        let lit_vertex_fn = lit_library
-            .get_function("vertex_main", None)
-            .map_err(|e| format!("lit vertex_main not found: {}", e))?;
-        let lit_fragment_fn = lit_library
-            .get_function("lit_fragment_main", None)
-            .map_err(|e| format!("lit_fragment_main not found: {}", e))?;
-
-        // Vertex descriptor: position (float2), uv (float2), color (float4)
-        let vertex_desc = VertexDescriptor::new();
-        // Position: attribute 0, format float2, offset 0
-        let attr0 = vertex_desc.attributes().object_at(0).unwrap();
-        attr0.set_format(MTLVertexFormat::Float2);
-        attr0.set_offset(0);
-        attr0.set_buffer_index(0);
-        // UV: attribute 1, format float2, offset 8
-        let attr1 = vertex_desc.attributes().object_at(1).unwrap();
-        attr1.set_format(MTLVertexFormat::Float2);
-        attr1.set_offset(8);
-        attr1.set_buffer_index(0);
-        // Per-vertex color: attribute 2, format float4, offset 16
-        let attr2 = vertex_desc.attributes().object_at(2).unwrap();
-        attr2.set_format(MTLVertexFormat::Float4);
-        attr2.set_offset(16);
-        attr2.set_buffer_index(0);
-        // Layout: stride = 32 bytes (2+2+4 floats × 4 bytes)
-        let layout = vertex_desc.layouts().object_at(0).unwrap();
-        layout.set_stride(32);
-        layout.set_step_function(MTLVertexStepFunction::PerVertex);
-
-        // Create pipeline states for each blend mode
-        let base_pipeline_alpha =
-            Self::create_pipeline(&device, &vertex_fn, &fragment_fn, &vertex_desc, BlendMode::Alpha)?;
-        let base_pipeline_additive =
-            Self::create_pipeline(&device, &vertex_fn, &fragment_fn, &vertex_desc, BlendMode::Additive)?;
-        let base_pipeline_multiply =
-            Self::create_pipeline(&device, &vertex_fn, &fragment_fn, &vertex_desc, BlendMode::Multiply)?;
-        let lit_pipeline_alpha =
-            Self::create_pipeline(&device, &lit_vertex_fn, &lit_fragment_fn, &vertex_desc, BlendMode::Alpha)?;
-        let lit_pipeline_additive =
-            Self::create_pipeline(&device, &lit_vertex_fn, &lit_fragment_fn, &vertex_desc, BlendMode::Additive)?;
+        // Create pipeline states (sample_count=1 for screen rendering)
+        let screen_pipelines = Self::create_pipeline_set(
+            &device, &base_library, &lit_library, 1,
+        )?;
 
         // Default sampler (linear filtering, clamp-to-edge)
         let sampler_desc = SamplerDescriptor::new();
@@ -230,11 +201,10 @@ impl MetalRenderer {
             device,
             command_queue,
             layer: raw_layer,
-            base_pipeline_alpha,
-            base_pipeline_additive,
-            base_pipeline_multiply,
-            lit_pipeline_alpha,
-            lit_pipeline_additive,
+            screen_pipelines,
+            msaa_pipelines: None,
+            base_library,
+            lit_library,
             sampler_state,
             vertex_buffers,
             index_buffers,
@@ -252,6 +222,9 @@ impl MetalRenderer {
             view_projection: [[0.0; 4]; 3],
             screen_width: width,
             screen_height: height,
+            // Default points to pixels until game_resize is called with point-based size
+            screen_width_points: width,
+            screen_height_points: height,
             current_blend_mode: BlendMode::Alpha,
             current_aa: AntiAliasing::None,
         })
@@ -263,20 +236,20 @@ impl MetalRenderer {
         fragment_fn: &FunctionRef,
         vertex_desc: &VertexDescriptorRef,
         blend_mode: BlendMode,
+        sample_count: u64,
     ) -> Result<RenderPipelineState, String> {
         let desc = RenderPipelineDescriptor::new();
         desc.set_vertex_function(Some(vertex_fn));
         desc.set_fragment_function(Some(fragment_fn));
         desc.set_vertex_descriptor(Some(vertex_desc));
+        if sample_count > 1 {
+            desc.set_sample_count(sample_count);
+        }
 
         let color_attachment = desc.color_attachments().object_at(0).unwrap();
         color_attachment.set_pixel_format(MTLPixelFormat::BGRA8Unorm);
         color_attachment.set_blending_enabled(true);
 
-        // Blend factors must match the WebGL renderer exactly:
-        //   Alpha:    gl.blendFunc(SRC_ALPHA, ONE_MINUS_SRC_ALPHA)
-        //   Additive: gl.blendFunc(SRC_ALPHA, ONE)
-        //   Multiply: gl.blendFunc(DST_COLOR, ZERO)
         match blend_mode {
             BlendMode::Alpha => {
                 color_attachment.set_source_rgb_blend_factor(MTLBlendFactor::SourceAlpha);
@@ -301,6 +274,49 @@ impl MetalRenderer {
         device
             .new_render_pipeline_state(&desc)
             .map_err(|e| format!("Failed to create pipeline: {}", e))
+    }
+
+    /// Create a full set of pipeline states for a given sample count.
+    fn create_pipeline_set(
+        device: &DeviceRef,
+        base_library: &Library,
+        lit_library: &Library,
+        sample_count: u64,
+    ) -> Result<PipelineSet, String> {
+        let vertex_fn = base_library.get_function("vertex_main", None)
+            .map_err(|e| format!("vertex_main: {}", e))?;
+        let fragment_fn = base_library.get_function("fragment_main", None)
+            .map_err(|e| format!("fragment_main: {}", e))?;
+        let lit_vertex_fn = lit_library.get_function("vertex_main", None)
+            .map_err(|e| format!("lit vertex_main: {}", e))?;
+        let lit_fragment_fn = lit_library.get_function("lit_fragment_main", None)
+            .map_err(|e| format!("lit_fragment_main: {}", e))?;
+
+        // Vertex descriptor: position (float2), uv (float2), color (float4)
+        let vd = VertexDescriptor::new();
+        let attr0 = vd.attributes().object_at(0).unwrap();
+        attr0.set_format(MTLVertexFormat::Float2);
+        attr0.set_offset(0);
+        attr0.set_buffer_index(0);
+        let attr1 = vd.attributes().object_at(1).unwrap();
+        attr1.set_format(MTLVertexFormat::Float2);
+        attr1.set_offset(8);
+        attr1.set_buffer_index(0);
+        let attr2 = vd.attributes().object_at(2).unwrap();
+        attr2.set_format(MTLVertexFormat::Float4);
+        attr2.set_offset(16);
+        attr2.set_buffer_index(0);
+        let layout = vd.layouts().object_at(0).unwrap();
+        layout.set_stride(32);
+        layout.set_step_function(MTLVertexStepFunction::PerVertex);
+
+        Ok(PipelineSet {
+            base_alpha: Self::create_pipeline(device, &vertex_fn, &fragment_fn, &vd, BlendMode::Alpha, sample_count)?,
+            base_additive: Self::create_pipeline(device, &vertex_fn, &fragment_fn, &vd, BlendMode::Additive, sample_count)?,
+            base_multiply: Self::create_pipeline(device, &vertex_fn, &fragment_fn, &vd, BlendMode::Multiply, sample_count)?,
+            lit_alpha: Self::create_pipeline(device, &lit_vertex_fn, &lit_fragment_fn, &vd, BlendMode::Alpha, sample_count)?,
+            lit_additive: Self::create_pipeline(device, &lit_vertex_fn, &lit_fragment_fn, &vd, BlendMode::Additive, sample_count)?,
+        })
     }
 
     /// Compute a 3×3 orthographic view-projection matrix from a Camera.
@@ -508,10 +524,11 @@ impl MetalRenderer {
     ) {
         let encoder = self.current_encoder.as_ref().unwrap();
 
+        let ps = self.active_pipelines();
         let pipeline = match self.current_blend_mode {
-            BlendMode::Alpha => &self.base_pipeline_alpha,
-            BlendMode::Additive => &self.base_pipeline_additive,
-            BlendMode::Multiply => &self.base_pipeline_multiply,
+            BlendMode::Alpha => &ps.base_alpha,
+            BlendMode::Additive => &ps.base_additive,
+            BlendMode::Multiply => &ps.base_multiply,
         };
         encoder.set_render_pipeline_state(pipeline);
 
@@ -601,10 +618,11 @@ impl MetalRenderer {
 
         let encoder = self.current_encoder.as_ref().unwrap();
 
+        let ps = self.active_pipelines();
         let pipeline = match self.current_blend_mode {
-            BlendMode::Alpha => &self.lit_pipeline_alpha,
-            BlendMode::Additive => &self.lit_pipeline_additive,
-            BlendMode::Multiply => &self.lit_pipeline_alpha,
+            BlendMode::Alpha => &ps.lit_alpha,
+            BlendMode::Additive => &ps.lit_additive,
+            BlendMode::Multiply => &ps.lit_alpha,
         };
         encoder.set_render_pipeline_state(pipeline);
 
@@ -786,10 +804,39 @@ impl MetalRenderer {
         }
     }
 
-    /// Update the screen size (e.g., on device rotation).
-    pub fn set_screen_size(&mut self, width: f32, height: f32) {
-        self.screen_width = width;
-        self.screen_height = height;
+
+    /// Get the pipeline set matching the current render target's sample count.
+    /// Screen targets use sample_count=1, offscreen MSAA targets use the MSAA set.
+    fn active_pipelines(&self) -> &PipelineSet {
+        if self.current_render_target != RenderTargetId::SCREEN {
+            if let Some(ref msaa) = self.msaa_pipelines {
+                return msaa;
+            }
+        }
+        &self.screen_pipelines
+    }
+
+    /// Find the highest MSAA mode the device supports at or below `requested`.
+    fn best_supported_aa(&self, requested: AntiAliasing) -> AntiAliasing {
+        let candidates = [
+            AntiAliasing::MSAAx8,
+            AntiAliasing::MSAAx4,
+            AntiAliasing::MSAAx2,
+            AntiAliasing::None,
+        ];
+        for &mode in &candidates {
+            if mode.samples() > requested.samples() {
+                continue;
+            }
+            let count = mode.samples() as u64;
+            let supported: bool = unsafe {
+                objc::msg_send![self.device.as_ref(), supportsTextureSampleCount: count]
+            };
+            if supported {
+                return mode;
+            }
+        }
+        AntiAliasing::None
     }
 
     // ── Display frame lifecycle (called by GameState, not by the engine) ──
@@ -1003,7 +1050,12 @@ impl Renderer for MetalRenderer {
     }
 
     fn screen_size(&self) -> (f32, f32) {
-        (self.screen_width, self.screen_height)
+        (self.screen_width_points, self.screen_height_points)
+    }
+
+    fn set_screen_size(&mut self, width: f32, height: f32) {
+        self.screen_width_points = width;
+        self.screen_height_points = height;
     }
 
     fn set_blend_mode(&mut self, mode: BlendMode) {
@@ -1023,13 +1075,17 @@ impl Renderer for MetalRenderer {
         tex_desc.set_storage_mode(MTLStorageMode::Private);
         let texture = self.device.new_texture(&tex_desc);
 
-        let msaa_texture = if self.current_aa != AntiAliasing::None {
+        // Re-validate AA in case it was set before device capability was checked
+        let aa = self.best_supported_aa(self.current_aa);
+        self.current_aa = aa;
+
+        let msaa_texture = if aa != AntiAliasing::None {
             let msaa_desc = metal::TextureDescriptor::new();
             msaa_desc.set_width(width as u64);
             msaa_desc.set_height(height as u64);
             msaa_desc.set_pixel_format(MTLPixelFormat::BGRA8Unorm);
             msaa_desc.set_texture_type(MTLTextureType::D2Multisample);
-            msaa_desc.set_sample_count(self.current_aa.samples() as u64);
+            msaa_desc.set_sample_count(aa.samples() as u64);
             msaa_desc.set_usage(MTLTextureUsage::RenderTarget);
             msaa_desc.set_storage_mode(MTLStorageMode::Private);
             Some(self.device.new_texture(&msaa_desc))
@@ -1069,7 +1125,22 @@ impl Renderer for MetalRenderer {
     }
 
     fn set_anti_aliasing(&mut self, mode: AntiAliasing) {
-        self.current_aa = mode;
+        // Downgrade to the highest sample count the device supports.
+        let aa = self.best_supported_aa(mode);
+        self.current_aa = aa;
+
+        // Create MSAA pipeline set if needed (must match MSAA texture sample count).
+        if aa != AntiAliasing::None {
+            self.msaa_pipelines = Self::create_pipeline_set(
+                &self.device,
+                &self.base_library,
+                &self.lit_library,
+                aa.samples() as u64,
+            )
+            .ok();
+        } else {
+            self.msaa_pipelines = None;
+        }
     }
 
     fn anti_aliasing(&self) -> AntiAliasing {

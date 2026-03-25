@@ -192,6 +192,9 @@ pub trait Renderer {
     /// Get the screen/canvas size
     fn screen_size(&self) -> (f32, f32);
 
+    /// Update the screen/canvas size (e.g., on window resize or device rotation).
+    fn set_screen_size(&mut self, width: f32, height: f32);
+
     // ── Blend mode ──
 
     /// Set the blend mode for subsequent draw calls.

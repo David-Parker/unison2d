@@ -30,9 +30,29 @@ pub fn process_input<E: Clone>(
     input: &InputState,
     _screen_size: Vec2,
 ) -> (UiInputResult, Vec<E>) {
-    let mouse = input.mouse_position();
-    let mouse_just_pressed = input.is_mouse_just_pressed(MouseButton::Left);
-    let mouse_just_released = input.is_mouse_just_released(MouseButton::Left);
+    // Use touch as virtual cursor on touch devices (first touch = left click).
+    // Falls back to mouse input when no touches are active.
+    let has_touch = !input.active_touches().is_empty()
+        || !input.touches_just_ended().is_empty();
+    let (mouse, mouse_just_pressed, mouse_just_released) = if has_touch {
+        let began = input.touches_just_began();
+        let ended = input.touches_just_ended();
+        let just_pressed = !began.is_empty();
+        let just_released = !ended.is_empty();
+        // Use the most relevant touch position: ended > began > active
+        let pos = ended.first()
+            .or(began.first())
+            .or(input.active_touches().first())
+            .map(|t| t.position)
+            .unwrap_or(Vec2::ZERO);
+        (pos, just_pressed, just_released)
+    } else {
+        (
+            input.mouse_position(),
+            input.is_mouse_just_pressed(MouseButton::Left),
+            input.is_mouse_just_released(MouseButton::Left),
+        )
+    };
 
     let mut result = UiInputResult::default();
     let mut events: Vec<E> = Vec::new();
