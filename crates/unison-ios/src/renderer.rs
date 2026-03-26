@@ -16,7 +16,7 @@ use objc::sel_impl;
 use unison_math::Color;
 use unison_render::{
     AntiAliasing, BlendMode, Camera, DrawLitSprite, DrawMesh, DrawSprite, RenderCommand,
-    RenderTargetId, Renderer, TextureDescriptor, TextureFormat, TextureId,
+    RenderTargetId, Renderer, TextureDescriptor, TextureFilter, TextureFormat, TextureId,
 };
 
 use crate::shaders;
@@ -173,10 +173,11 @@ impl MetalRenderer {
             &device, &base_library, &lit_library, 1,
         )?;
 
-        // Default sampler (linear filtering, clamp-to-edge)
+        // Default sampler (trilinear filtering, clamp-to-edge)
         let sampler_desc = SamplerDescriptor::new();
         sampler_desc.set_min_filter(MTLSamplerMinMagFilter::Linear);
         sampler_desc.set_mag_filter(MTLSamplerMinMagFilter::Linear);
+        sampler_desc.set_mip_filter(MTLSamplerMipFilter::Linear);
         sampler_desc.set_address_mode_s(MTLSamplerAddressMode::ClampToEdge);
         sampler_desc.set_address_mode_t(MTLSamplerAddressMode::ClampToEdge);
         let sampler_state = device.new_sampler(&sampler_desc);
@@ -1003,6 +1004,14 @@ impl Renderer for MetalRenderer {
     }
 
     fn create_texture(&mut self, desc: &TextureDescriptor) -> Result<TextureId, String> {
+        let wants_mipmaps = desc.min_filter == TextureFilter::LinearMipmap;
+        let mip_levels = if wants_mipmaps {
+            let max_dim = desc.width.max(desc.height) as f32;
+            (max_dim.log2().floor() as u64) + 1
+        } else {
+            1
+        };
+
         let tex_desc = metal::TextureDescriptor::new();
         tex_desc.set_width(desc.width as u64);
         tex_desc.set_height(desc.height as u64);
@@ -1012,6 +1021,7 @@ impl Renderer for MetalRenderer {
             TextureFormat::Rgb8 => MTLPixelFormat::RGBA8Unorm, // expand below
             TextureFormat::Rgba8 => MTLPixelFormat::RGBA8Unorm,
         });
+        tex_desc.set_mipmap_level_count(mip_levels);
         tex_desc.set_usage(MTLTextureUsage::ShaderRead);
         tex_desc.set_storage_mode(MTLStorageMode::Shared);
 
@@ -1042,6 +1052,16 @@ impl Renderer for MetalRenderer {
             upload_data.as_ptr() as *const c_void,
             bytes_per_row as u64,
         );
+
+        // Generate mipmaps on the GPU
+        if wants_mipmaps && mip_levels > 1 {
+            let cmd_buf = self.command_queue.new_command_buffer();
+            let blit = cmd_buf.new_blit_command_encoder();
+            blit.generate_mipmaps(&texture);
+            blit.end_encoding();
+            cmd_buf.commit();
+            cmd_buf.wait_until_completed();
+        }
 
         let id = self.next_texture_id;
         self.next_texture_id += 1;

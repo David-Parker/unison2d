@@ -75,7 +75,7 @@ fragment float4 fragment_main(
     sampler tex_sampler [[sampler(0)]]
 ) {
     if (uniforms.use_texture != 0) {
-        float4 tex_color = tex.sample(tex_sampler, in.uv);
+        float4 tex_color = tex.sample(tex_sampler, in.uv, bias(-0.5));
         return tex_color * uniforms.color * in.vertex_color;
     } else {
         return uniforms.color * in.vertex_color;
@@ -124,7 +124,7 @@ fragment float4 lit_fragment_main(
     // Light shape
     float4 light;
     if (uniforms.use_texture != 0) {
-        light = tex.sample(tex_sampler, in.uv) * uniforms.color;
+        light = tex.sample(tex_sampler, in.uv, bias(-0.5)) * uniforms.color;
     } else {
         light = uniforms.color;
     }
