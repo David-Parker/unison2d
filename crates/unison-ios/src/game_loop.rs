@@ -6,6 +6,7 @@
 
 use unison2d::{Engine, Game};
 use unison_input::InputBuffer;
+use unison_profiler::Profiler;
 
 use crate::MetalRenderer;
 
@@ -13,6 +14,8 @@ use crate::MetalRenderer;
 const FIXED_DT: f32 = 1.0 / 60.0;
 /// Max accumulated time per frame (prevents spiral of death).
 const MAX_ACCUMULATOR: f32 = 0.1;
+/// How often (in frames) to log profiler stats to Xcode console.
+const PROFILER_LOG_INTERVAL: u64 = 120;
 
 /// Owns the game, engine, and input buffer. One instance per app lifetime.
 ///
@@ -59,6 +62,23 @@ impl<G: Game> GameState<G> {
         if self.initialized {
             return;
         }
+
+        // Set up profiler time function (mach_absolute_time → milliseconds)
+        use std::sync::Once;
+        static PROFILER_INIT: Once = Once::new();
+        PROFILER_INIT.call_once(|| {
+            // Query the timebase once — ratio to convert ticks → nanoseconds.
+            // On Apple Silicon this is always 1:1, but we handle the general case.
+            let mut info = mach_timebase_info { numer: 0, denom: 0 };
+            unsafe { mach_timebase_info(&mut info) };
+            unsafe {
+                NANOS_PER_TICK = info.numer as f64 / info.denom as f64;
+            }
+
+            unison_profiler::set_time_fn(mach_time_ms);
+            Profiler::set_enabled(true);
+        });
+
         self.engine.fixed_dt = FIXED_DT;
         self.game.init(&mut self.engine);
         self.initialized = true;
@@ -84,6 +104,8 @@ impl<G: Game> GameState<G> {
         if !self.initialized {
             return;
         }
+
+        Profiler::begin_frame();
 
         self.accumulator += dt.min(MAX_ACCUMULATOR);
 
@@ -115,5 +137,37 @@ impl<G: Game> GameState<G> {
 
         // End Metal display frame (present drawable, commit command buffer)
         (*self.metal_renderer).end_display_frame();
+
+        // End profiler frame and periodically log stats to Xcode console
+        Profiler::end_frame();
+        let frame_count = Profiler::frame_count();
+        if frame_count > 0 && frame_count % PROFILER_LOG_INTERVAL == 0 {
+            let stats = Profiler::format_stats();
+            eprintln!("{}", stats);
+            Profiler::reset();
+        }
     }
+}
+
+// --- mach_absolute_time plumbing for profiler ---
+
+/// Cached timebase ratio (set once during init, read every frame).
+/// Safety: written once under `Once`, then only read — no data race.
+static mut NANOS_PER_TICK: f64 = 1.0;
+
+/// Bare function (no captures) suitable for `set_time_fn`.
+fn mach_time_ms() -> f64 {
+    let ticks = unsafe { mach_absolute_time() };
+    (ticks as f64 * unsafe { NANOS_PER_TICK }) / 1_000_000.0
+}
+
+#[repr(C)]
+struct mach_timebase_info {
+    numer: u32,
+    denom: u32,
+}
+
+extern "C" {
+    fn mach_absolute_time() -> u64;
+    fn mach_timebase_info(info: *mut mach_timebase_info) -> i32;
 }

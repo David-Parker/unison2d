@@ -89,10 +89,14 @@ struct ProfilerState {
     frame_count: u64,
     /// Whether profiling is enabled
     enabled: bool,
-    /// Total frame time accumulator (for utilization calculation)
+    /// Total CPU frame time accumulator (begin_frame to end_frame)
     total_frame_time: f64,
+    /// Total wall-clock time accumulator (between successive begin_frame calls)
+    total_wall_time: f64,
     /// Frame start time
     frame_start_time: f64,
+    /// Wall-clock time of the previous begin_frame call (for measuring display interval)
+    prev_begin_time: f64,
     /// Target frame time in ms (e.g., 16.67 for 60 FPS)
     target_frame_time: f64,
 }
@@ -106,7 +110,9 @@ impl ProfilerState {
             frame_count: 0,
             enabled: cfg!(feature = "enabled"),
             total_frame_time: 0.0,
+            total_wall_time: 0.0,
             frame_start_time: 0.0,
+            prev_begin_time: 0.0,
             target_frame_time: 1000.0 / 60.0, // Default 60 FPS = 16.67ms
         }
     }
@@ -205,7 +211,13 @@ impl Profiler {
     pub fn begin_frame() {
         PROFILER.with(|p| {
             let mut state = p.borrow_mut();
-            state.frame_start_time = now();
+            let t = now();
+            // Track wall-clock time between begin_frame calls (= real display interval)
+            if state.prev_begin_time > 0.0 {
+                state.total_wall_time += t - state.prev_begin_time;
+            }
+            state.prev_begin_time = t;
+            state.frame_start_time = t;
         });
     }
 
@@ -248,6 +260,19 @@ impl Profiler {
             let state = p.borrow();
             if state.frame_count > 0 {
                 state.total_frame_time / state.frame_count as f64
+            } else {
+                0.0
+            }
+        })
+    }
+
+    /// Get average wall-clock time between frames (real display interval)
+    pub fn avg_wall_time() -> f64 {
+        PROFILER.with(|p| {
+            let state = p.borrow();
+            // wall_time is measured between begin_frame calls, so there are frame_count-1 intervals
+            if state.frame_count > 1 {
+                state.total_wall_time / (state.frame_count - 1) as f64
             } else {
                 0.0
             }
@@ -342,6 +367,8 @@ impl Profiler {
             state.history.clear();
             state.frame_count = 0;
             state.total_frame_time = 0.0;
+            state.total_wall_time = 0.0;
+            state.prev_begin_time = 0.0;
         });
     }
 
@@ -350,14 +377,16 @@ impl Profiler {
         let stats = Self::get_stats();
         let frame_count = Self::frame_count();
         let avg_frame_time = Self::avg_frame_time();
+        let avg_wall_time = Self::avg_wall_time();
         let target_frame_time = Self::target_frame_time();
         let target_fps = 1000.0 / target_frame_time;
-        let actual_fps = if avg_frame_time > 0.0 { 1000.0 / avg_frame_time } else { 0.0 };
+        let max_fps = if avg_frame_time > 0.0 { 1000.0 / avg_frame_time } else { 0.0 };
+        let display_fps = if avg_wall_time > 0.0 { 1000.0 / avg_wall_time } else { 0.0 };
 
         if stats.is_empty() {
             return format!(
-                "=== FPS ({} frames) === {:.0} FPS ({:.2}ms/frame)",
-                frame_count, actual_fps, avg_frame_time
+                "=== FPS ({} frames) === Display: {:.0} Hz | Max: {:.0} FPS ({:.2}ms/frame)",
+                frame_count, display_fps, max_fps, avg_frame_time
             );
         }
 
@@ -399,11 +428,12 @@ impl Profiler {
             frame_count
         );
         output.push_str(&format!(
-            "Target: {:.0} FPS ({:.2}ms) | Actual: {:.0} FPS ({:.2}ms)\n",
+            "Display: {:.0} Hz | Max: {:.0} FPS ({:.2}ms) | Target: {:.0} FPS ({:.2}ms)\n",
+            display_fps,
+            max_fps,
+            avg_frame_time,
             target_fps,
             target_frame_time,
-            actual_fps,
-            avg_frame_time
         ));
         output.push_str(&format!(
             "Budget: {:.2}ms/frame used ({:.1}%) | Headroom: {:.2}ms ({:.1}%)\n",

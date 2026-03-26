@@ -21,6 +21,18 @@ use unison_render::{
 
 use crate::shaders;
 
+// GCD semaphore FFI for triple-buffering synchronization
+const DISPATCH_TIME_FOREVER: u64 = !0;
+
+extern "C" {
+    fn dispatch_semaphore_create(value: i64) -> *mut Object;
+    fn dispatch_semaphore_wait(dsema: *mut Object, timeout: u64) -> i64;
+    fn dispatch_semaphore_signal(dsema: *mut Object) -> i64;
+}
+
+/// Safety: the dispatch_semaphore is thread-safe (GCD guarantees this).
+unsafe impl Send for MetalRenderer {}
+
 /// Number of frames in flight for triple-buffered vertex data.
 const MAX_FRAMES_IN_FLIGHT: usize = 3;
 
@@ -131,6 +143,9 @@ pub struct MetalRenderer {
     current_blend_mode: BlendMode,
     current_aa: AntiAliasing,
 
+    // Triple-buffering semaphore — limits in-flight frames to MAX_FRAMES_IN_FLIGHT.
+    // Signaled by the GPU completion handler, waited on at frame start.
+    frame_semaphore: *mut Object,
 }
 
 impl MetalRenderer {
@@ -228,6 +243,7 @@ impl MetalRenderer {
             screen_height_points: height,
             current_blend_mode: BlendMode::Alpha,
             current_aa: AntiAliasing::None,
+            frame_semaphore: dispatch_semaphore_create(MAX_FRAMES_IN_FLIGHT as i64),
         })
     }
 
@@ -850,6 +866,10 @@ impl MetalRenderer {
     /// # Safety
     /// `raw_drawable` must be a valid CAMetalDrawable pointer from MTKView.currentDrawable.
     pub unsafe fn begin_display_frame(&mut self, raw_drawable: *mut Object) {
+        unison_profiler::profile_scope!("metal.cmd_buffer");
+        // Wait for a buffer slot — only blocks if all MAX_FRAMES_IN_FLIGHT are in-flight
+        dispatch_semaphore_wait(self.frame_semaphore, DISPATCH_TIME_FOREVER);
+
         // Create command buffer for this display frame
         let cb = self.command_queue.new_command_buffer();
         self.current_command_buffer = Some(cb.to_owned());
@@ -888,8 +908,8 @@ impl MetalRenderer {
     /// End the display frame. Called once per CADisplayLink tick, after the
     /// engine's render cycle is complete.
     ///
-    /// Ends any active encoder, presents the drawable, commits the command
-    /// buffer, and waits for GPU completion before returning.
+    /// Ends any active encoder, presents the drawable, and commits the command
+    /// buffer. GPU completion signals the frame semaphore asynchronously.
     pub fn end_display_frame(&mut self) {
         // End any active render encoder
         if let Some(encoder) = self.current_encoder.take() {
@@ -902,8 +922,18 @@ impl MetalRenderer {
                 cmd_buf.present_drawable(&drawable);
             }
 
-            cmd_buf.commit();
-            cmd_buf.wait_until_completed();
+            // Signal the semaphore when the GPU finishes this frame,
+            // freeing a buffer slot for begin_display_frame.
+            let semaphore = self.frame_semaphore;
+            let handler = block::ConcreteBlock::new(move |_: &metal::CommandBufferRef| {
+                unsafe { dispatch_semaphore_signal(semaphore); }
+            });
+            cmd_buf.add_completed_handler(&handler.copy());
+
+            {
+                unison_profiler::profile_scope!("metal.commit");
+                cmd_buf.commit();
+            }
         }
 
         self.current_drawable = None;
@@ -923,6 +953,7 @@ impl Renderer for MetalRenderer {
     }
 
     fn clear(&mut self, color: Color) {
+        unison_profiler::profile_scope!("metal.clear");
         // End existing encoder to start fresh with a clear
         if let Some(encoder) = self.current_encoder.take() {
             encoder.end_encoding();
@@ -974,6 +1005,7 @@ impl Renderer for MetalRenderer {
     }
 
     fn draw(&mut self, command: RenderCommand) {
+        unison_profiler::profile_scope!("metal.draw");
         match command {
             RenderCommand::Sprite(sprite) => self.draw_sprite(sprite),
             RenderCommand::Mesh(mesh) => self.draw_mesh(mesh),
@@ -1144,6 +1176,7 @@ impl Renderer for MetalRenderer {
     }
 
     fn bind_render_target(&mut self, target: RenderTargetId) {
+        unison_profiler::profile_scope!("metal.bind_target");
         if let Some(encoder) = self.current_encoder.take() {
             encoder.end_encoding();
         }
