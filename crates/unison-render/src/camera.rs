@@ -87,6 +87,15 @@ impl Camera {
         (world_x, world_y)
     }
 
+    /// Adjust viewport width to match the screen's aspect ratio while keeping
+    /// the height fixed. Call this before rendering so the camera covers the
+    /// full screen without stretching.
+    pub fn fit_to_screen(&mut self, screen_width: f32, screen_height: f32) {
+        if screen_height > 0.0 {
+            self.width = self.height * (screen_width / screen_height);
+        }
+    }
+
     /// Convert world coordinates to screen coordinates
     pub fn world_to_screen(&self, world_x: f32, world_y: f32, screen_width: f32, screen_height: f32) -> (f32, f32) {
         // Offset from camera center

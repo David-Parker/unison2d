@@ -207,11 +207,11 @@ impl LightingSystem {
 
     /// Create or resize the lightmap FBO, shadow mask FBO, and gradient texture.
     ///
-    /// Called automatically before rendering. Uses `renderer.screen_size()`
+    /// Called automatically before rendering. Uses `renderer.drawable_size()`
     /// to match FBO sizes to the current viewport.
     pub fn ensure_resources(&mut self, renderer: &mut dyn Renderer<Error = String>) {
         profile_scope!("lighting.ensure_resources");
-        let (w, h) = renderer.screen_size();
+        let (w, h) = renderer.drawable_size();
         let (w, h) = (w as u32, h as u32);
 
         // ── Lightmap FBO ──
@@ -287,7 +287,7 @@ impl LightingSystem {
             None => return,
         };
 
-        let screen_size = renderer.screen_size();
+        let screen_size = renderer.drawable_size();
         let cam_bounds = camera.bounds(); // (min_x, min_y, max_x, max_y)
 
         // Build combined occluder list (object occluders + optional ground)
@@ -624,13 +624,17 @@ impl LightingSystem {
 
         renderer.begin_frame(camera);
         renderer.set_blend_mode(BlendMode::Multiply);
+        let uv = if renderer.fbo_origin_top_left() {
+            [0.0, 0.0, 1.0, 1.0]
+        } else {
+            [0.0, 1.0, 1.0, 0.0]
+        };
         renderer.draw(RenderCommand::Sprite(DrawSprite {
             texture: lightmap_tex,
             position: [cx, cy],
             size: [max_x - min_x, max_y - min_y],
             rotation: 0.0,
-            // V-flip UVs for FBO texture orientation
-            uv: [0.0, 1.0, 1.0, 0.0],
+            uv,
             color: Color::WHITE,
         }));
         renderer.set_blend_mode(BlendMode::Alpha);

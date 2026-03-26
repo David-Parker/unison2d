@@ -189,10 +189,18 @@ pub trait Renderer {
     /// Destroy a texture
     fn destroy_texture(&mut self, id: TextureId);
 
-    /// Get the screen/canvas size
+    /// Get the screen size in logical points (matches touch/UI coordinate space).
     fn screen_size(&self) -> (f32, f32);
 
-    /// Update the screen/canvas size (e.g., on window resize or device rotation).
+    /// Get the screen size in physical pixels (for GPU resources like FBOs).
+    ///
+    /// On non-retina displays this equals `screen_size()`. On retina/HiDPI
+    /// displays it is `screen_size() * scale_factor`.
+    fn drawable_size(&self) -> (f32, f32) {
+        self.screen_size()
+    }
+
+    /// Update the screen size in logical points (e.g., on window resize or device rotation).
     fn set_screen_size(&mut self, width: f32, height: f32);
 
     // ── Blend mode ──
@@ -222,6 +230,16 @@ pub trait Renderer {
 
     /// Destroy a render target (but not its associated texture).
     fn destroy_render_target(&mut self, _target: RenderTargetId) {}
+
+    // ── Platform hints ──
+
+    /// Whether FBO textures have origin at top-left (Metal) or bottom-left (OpenGL).
+    ///
+    /// OpenGL FBO textures have Y=0 at the bottom, so compositing requires a
+    /// V-flip. Metal textures have Y=0 at the top, so no flip is needed.
+    /// The engine uses this to select the correct UV orientation when
+    /// compositing offscreen render targets (scene FBO, lightmap).
+    fn fbo_origin_top_left(&self) -> bool { false }
 
     // ── Anti-aliasing ──
 

@@ -73,15 +73,23 @@ pub struct WebGlRenderer {
     next_render_target_id: u32,
     current_render_target: RenderTargetId,
     msaa_samples: i32,
-    // State
+    // State — physical pixel dimensions (canvas buffer size)
     canvas_width: f32,
     canvas_height: f32,
+    // Logical dimensions (CSS pixels, matches mouse/touch coordinate space)
+    logical_width: f32,
+    logical_height: f32,
+    device_pixel_ratio: f32,
     current_blend_mode: BlendMode,
 }
 
 impl WebGlRenderer {
     /// Create a new WebGL2 renderer from a canvas element.
-    pub fn new(gl: GL, width: f32, height: f32) -> Result<Self, String> {
+    ///
+    /// `width`/`height` are physical pixel dimensions (canvas buffer size).
+    /// `logical_width`/`logical_height` are CSS pixel dimensions (matches mouse coordinates).
+    /// `dpr` is the device pixel ratio (physical / logical).
+    pub fn new(gl: GL, width: f32, height: f32, logical_width: f32, logical_height: f32, dpr: f32) -> Result<Self, String> {
         // Compile shared vertex shader
         let vert = compile_shader(&gl, GL::VERTEX_SHADER, shaders::VERTEX_SHADER)?;
 
@@ -215,16 +223,23 @@ impl WebGlRenderer {
             msaa_samples,
             canvas_width: width,
             canvas_height: height,
+            logical_width,
+            logical_height,
+            device_pixel_ratio: dpr,
             current_blend_mode: BlendMode::Alpha,
         })
     }
 
-    /// Update canvas size (call when canvas resizes)
-    pub fn set_size(&mut self, width: f32, height: f32) {
+    /// Update canvas size (call when canvas resizes).
+    ///
+    /// `width`/`height` are physical pixel dimensions.
+    /// `logical_width`/`logical_height` are CSS pixel dimensions.
+    pub fn set_size(&mut self, width: f32, height: f32, logical_width: f32, logical_height: f32) {
         self.canvas_width = width;
         self.canvas_height = height;
-        self.gl
-            .viewport(0, 0, width as i32, height as i32);
+        self.logical_width = logical_width;
+        self.logical_height = logical_height;
+        self.gl.viewport(0, 0, width as i32, height as i32);
     }
 
     /// Build a 3x3 view-projection matrix from Camera.
@@ -718,12 +733,19 @@ impl Renderer for WebGlRenderer {
     }
 
     fn screen_size(&self) -> (f32, f32) {
+        (self.logical_width, self.logical_height)
+    }
+
+    fn drawable_size(&self) -> (f32, f32) {
         (self.canvas_width, self.canvas_height)
     }
 
     fn set_screen_size(&mut self, width: f32, height: f32) {
-        self.canvas_width = width;
-        self.canvas_height = height;
+        self.logical_width = width;
+        self.logical_height = height;
+        self.canvas_width = (width * self.device_pixel_ratio).round();
+        self.canvas_height = (height * self.device_pixel_ratio).round();
+        self.gl.viewport(0, 0, self.canvas_width as i32, self.canvas_height as i32);
     }
 
     fn set_blend_mode(&mut self, mode: BlendMode) {

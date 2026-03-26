@@ -97,18 +97,25 @@ pub fn wire_input(
     }
 
     // Touch events (on canvas)
+    // Touch events provide client_x/y (viewport-relative). We convert to
+    // canvas-relative CSS coordinates using getBoundingClientRect so they
+    // match the offset_x/y space used by mouse events.
     {
         let input = input.clone();
+        let canvas_el = canvas.clone();
         let closure = Closure::wrap(Box::new(move |event: web_sys::Event| {
             let event: TouchEvent = event.unchecked_into();
             event.prevent_default();
+            let rect = canvas_el.get_bounding_client_rect();
             let touches = event.changed_touches();
             for i in 0..touches.length() {
                 if let Some(touch) = touches.get(i) {
+                    let x = touch.client_x() as f32 - rect.left() as f32;
+                    let y = touch.client_y() as f32 - rect.top() as f32;
                     input.borrow_mut().shared_mut().touch_started(
                         touch.identifier() as u64,
-                        touch.client_x() as f32,
-                        touch.client_y() as f32,
+                        x,
+                        y,
                     );
                 }
             }
@@ -121,16 +128,20 @@ pub fn wire_input(
 
     {
         let input = input.clone();
+        let canvas_el = canvas.clone();
         let closure = Closure::wrap(Box::new(move |event: web_sys::Event| {
             let event: TouchEvent = event.unchecked_into();
             event.prevent_default();
+            let rect = canvas_el.get_bounding_client_rect();
             let touches = event.changed_touches();
             for i in 0..touches.length() {
                 if let Some(touch) = touches.get(i) {
+                    let x = touch.client_x() as f32 - rect.left() as f32;
+                    let y = touch.client_y() as f32 - rect.top() as f32;
                     input.borrow_mut().shared_mut().touch_moved(
                         touch.identifier() as u64,
-                        touch.client_x() as f32,
-                        touch.client_y() as f32,
+                        x,
+                        y,
                     );
                 }
             }

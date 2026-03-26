@@ -74,9 +74,10 @@ pub fn run<G: Game + 'static>(game: G) {
         .dyn_into::<GL>()
         .expect("not a WebGL2 context");
 
-    // Create renderer
+    // Create renderer (physical pixels for GPU buffer, logical/CSS pixels for UI/input)
     let mut web_renderer =
-        WebGlRenderer::new(gl, width, height).expect("Failed to create WebGL renderer");
+        WebGlRenderer::new(gl, width, height, css_width, css_height, dpr)
+            .expect("Failed to create WebGL renderer");
     web_renderer.init().expect("Failed to init renderer");
 
     // Set up profiler time function (returns milliseconds)

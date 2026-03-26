@@ -320,7 +320,7 @@ impl World {
 
     /// Create or resize the scene FBO to match the current screen size.
     fn ensure_scene_fbo(&mut self, renderer: &mut dyn Renderer<Error = String>) {
-        let (w, h) = renderer.screen_size();
+        let (w, h) = renderer.drawable_size();
         let (w, h) = (w as u32, h as u32);
 
         if self.scene_target.is_some() && self.scene_fbo_size == (w, h) {
@@ -362,13 +362,18 @@ impl World {
             renderer.clear(color);
         }
         renderer.set_blend_mode(BlendMode::Alpha);
+        // OpenGL FBOs need a V-flip (Y=0 at bottom); Metal does not (Y=0 at top).
+        let uv = if renderer.fbo_origin_top_left() {
+            [0.0, 0.0, 1.0, 1.0]
+        } else {
+            [0.0, 1.0, 1.0, 0.0]
+        };
         renderer.draw(RenderCommand::Sprite(DrawSprite {
             texture: scene_texture,
             position: [cx, cy],
             size: [max_x - min_x, max_y - min_y],
             rotation: 0.0,
-            // V-flip UVs for FBO texture orientation
-            uv: [0.0, 1.0, 1.0, 0.0],
+            uv,
             color: Color::WHITE,
         }));
         renderer.end_frame();
@@ -570,6 +575,11 @@ impl World {
     /// directly. After all layers: unlit commands, then overlay commands.
     pub fn auto_render(&mut self, renderer: &mut dyn Renderer<Error = String>) {
         profile_scope!("world.auto_render");
+        // Fit camera viewport to screen aspect ratio (keeps height, adjusts width)
+        let (sw, sh) = renderer.screen_size();
+        if let Some(c) = self.cameras.get_mut(DEFAULT_CAMERA) {
+            c.fit_to_screen(sw, sh);
+        }
         let camera = match self.cameras.get(DEFAULT_CAMERA) {
             Some(c) => c.clone(),
             None => return,
@@ -610,6 +620,14 @@ impl World {
 
         // Merge object commands into the default layer
         self.merge_objects_into_default_layer();
+
+        // Fit all cameras to screen aspect ratio
+        let (sw, sh) = renderer.screen_size();
+        for &(cam_name, _) in camera_targets {
+            if let Some(c) = self.cameras.get_mut(cam_name) {
+                c.fit_to_screen(sw, sh);
+            }
+        }
 
         for &(cam_name, target_id) in camera_targets {
             let camera = match self.cameras.get(cam_name) {

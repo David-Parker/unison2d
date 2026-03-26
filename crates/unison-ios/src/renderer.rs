@@ -500,7 +500,7 @@ impl MetalRenderer {
                 color_att.set_texture(Some(msaa_tex));
                 color_att.set_resolve_texture(Some(&target.texture));
                 color_att.set_load_action(MTLLoadAction::Load);
-                color_att.set_store_action(MTLStoreAction::MultisampleResolve);
+                color_att.set_store_action(MTLStoreAction::StoreAndMultisampleResolve);
             } else {
                 color_att.set_texture(Some(&target.texture));
                 color_att.set_load_action(MTLLoadAction::Load);
@@ -948,7 +948,11 @@ impl Renderer for MetalRenderer {
             if let Some(ref msaa_tex) = target.msaa_texture {
                 color_att.set_texture(Some(msaa_tex));
                 color_att.set_resolve_texture(Some(&target.texture));
-                color_att.set_store_action(MTLStoreAction::MultisampleResolve);
+                // StoreAndMultisampleResolve preserves the MSAA texture data
+                // so subsequent passes can re-bind this target with LoadAction::Load.
+                // Plain MultisampleResolve discards the MSAA data after resolving,
+                // which corrupts the scene when the lightmap composite re-binds.
+                color_att.set_store_action(MTLStoreAction::StoreAndMultisampleResolve);
             } else {
                 color_att.set_texture(Some(&target.texture));
                 color_att.set_store_action(MTLStoreAction::Store);
@@ -1052,6 +1056,12 @@ impl Renderer for MetalRenderer {
     fn screen_size(&self) -> (f32, f32) {
         (self.screen_width_points, self.screen_height_points)
     }
+
+    fn drawable_size(&self) -> (f32, f32) {
+        (self.screen_width, self.screen_height)
+    }
+
+    fn fbo_origin_top_left(&self) -> bool { true }
 
     fn set_screen_size(&mut self, width: f32, height: f32) {
         self.screen_width_points = width;
