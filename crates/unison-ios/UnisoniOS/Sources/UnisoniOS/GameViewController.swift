@@ -14,6 +14,7 @@ open class GameViewController: UIViewController {
 
     public var mtkView: MTKView!
     public var renderer: Renderer!
+    public private(set) var joystickView: JoystickView!
 
     open override func viewDidLoad() {
         super.viewDidLoad()
@@ -43,6 +44,20 @@ open class GameViewController: UIViewController {
         self.mtkView = mtkView
 
         view.isMultipleTouchEnabled = true
+
+        // Virtual joystick overlay (bottom-left)
+        let size = JoystickView.defaultSize
+        let joystick = JoystickView()
+        joystick.gameState = renderer.gameState
+        joystick.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(joystick)
+        NSLayoutConstraint.activate([
+            joystick.widthAnchor.constraint(equalToConstant: size),
+            joystick.heightAnchor.constraint(equalToConstant: size),
+            joystick.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 20),
+            joystick.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -20),
+        ])
+        joystickView = joystick
     }
 
     // MARK: - Touch forwarding to Rust

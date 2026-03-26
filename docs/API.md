@@ -252,6 +252,7 @@ Inside a Level, use `ctx.input` directly:
 ```rust
 ctx.input.is_key_pressed(KeyCode::ArrowLeft)       // held?
 ctx.input.is_key_just_pressed(KeyCode::Space)      // just pressed?
+ctx.input.axis()                                   // analog axis (Vec2, e.g., joystick)
 ```
 
 ### Available KeyCodes

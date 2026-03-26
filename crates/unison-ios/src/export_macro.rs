@@ -7,6 +7,10 @@
 //! ```ignore
 //! unison_ios::export_game!(MyGame, MyGame::new());
 //! ```
+//!
+//! The macro generates 9 `extern "C"` functions: `game_init`, `game_frame`,
+//! `game_resize`, `game_touch_began`, `game_touch_moved`, `game_touch_ended`,
+//! `game_touch_cancelled`, `game_set_axis`, and `game_destroy`.
 
 /// Generate all iOS FFI entry points for a concrete `Game` type.
 ///
@@ -20,10 +24,10 @@
 /// unison_ios::export_game!(DonutGame, new_donut_game());
 /// ```
 ///
-/// This generates 8 `#[no_mangle] pub unsafe extern "C"` functions:
+/// This generates 9 `#[no_mangle] pub unsafe extern "C"` functions:
 /// `game_init`, `game_frame`, `game_resize`, `game_touch_began`,
 /// `game_touch_moved`, `game_touch_ended`, `game_touch_cancelled`,
-/// `game_destroy`.
+/// `game_set_axis`, `game_destroy`.
 #[macro_export]
 macro_rules! export_game {
     ($game_type:ty, $constructor:expr) => {
@@ -110,6 +114,16 @@ macro_rules! export_game {
         ) {
             let state = &mut *(state as *mut __UnisonGameState);
             $crate::input::touch_cancelled(state.input_mut(), id);
+        }
+
+        #[no_mangle]
+        pub unsafe extern "C" fn game_set_axis(
+            state: *mut ::std::ffi::c_void,
+            x: f32,
+            y: f32,
+        ) {
+            let state = &mut *(state as *mut __UnisonGameState);
+            $crate::input::set_axis(state.input_mut(), x, y);
         }
 
         #[no_mangle]

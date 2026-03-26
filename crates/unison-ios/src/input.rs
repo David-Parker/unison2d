@@ -24,3 +24,8 @@ pub fn touch_ended(input: &mut InputBuffer, id: u64) {
 pub fn touch_cancelled(input: &mut InputBuffer, id: u64) {
     input.shared_mut().touch_cancelled(id);
 }
+
+/// Set the axis value (e.g., from a virtual joystick).
+pub fn set_axis(input: &mut InputBuffer, x: f32, y: f32) {
+    input.shared_mut().set_axis(x, y);
+}

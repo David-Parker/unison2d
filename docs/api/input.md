@@ -32,6 +32,14 @@ Platform crates feed native events into `InputState`. Game code usually reads ac
 | `touches_just_ended()` | Touches that ended this frame |
 | `get_touch(id)` | Get specific touch by ID |
 
+### Axis
+
+| Method | Description |
+|--------|-------------|
+| `axis()` | Current axis value (`Vec2`, each component -1.0 to 1.0) |
+
+Used for analog input such as virtual joysticks on mobile. Continuous state — persists across frames until explicitly changed.
+
 ### Platform Mutation API
 
 Platform crates call these to feed events:
@@ -45,6 +53,7 @@ input.touch_started(id, x, y);
 input.touch_moved(id, x, y);
 input.touch_ended(id);
 input.touch_cancelled(id);
+input.set_axis(x, y);             // virtual joystick / analog input
 input.begin_frame(); // call at start of each frame
 ```
 

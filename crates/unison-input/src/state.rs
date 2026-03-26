@@ -25,6 +25,9 @@ pub struct InputState {
     touches: HashMap<u64, Touch>,
     touches_just_began: Vec<u64>,
     touches_just_ended: Vec<u64>,
+
+    // Axis (e.g., virtual joystick)
+    axis: Vec2,
 }
 
 impl InputState {
@@ -41,6 +44,7 @@ impl InputState {
             touches: HashMap::new(),
             touches_just_began: Vec::new(),
             touches_just_ended: Vec::new(),
+            axis: Vec2::ZERO,
         }
     }
 
@@ -135,6 +139,13 @@ impl InputState {
         self.touches.get(&id)
     }
 
+    // ── Axis queries ──
+
+    /// Current axis value (e.g., from a virtual joystick). Each component is in -1.0..=1.0.
+    pub fn axis(&self) -> Vec2 {
+        self.axis
+    }
+
     // ── Transfer API ──
 
     /// Copy held-key and held-mouse-button state from another InputState.
@@ -145,6 +156,7 @@ impl InputState {
         self.mouse_buttons_held = other.mouse_buttons_held.clone();
         self.mouse_pos = other.mouse_pos;
         self.touches = other.touches.clone();
+        self.axis = other.axis;
     }
 
     // ── Platform mutation API ──
@@ -215,6 +227,12 @@ impl InputState {
             touch.phase = TouchPhase::Cancelled;
             self.touches_just_ended.push(id);
         }
+    }
+
+    /// Set the axis value (call from platform layer, e.g., virtual joystick).
+    /// Each component is clamped to -1.0..=1.0.
+    pub fn set_axis(&mut self, x: f32, y: f32) {
+        self.axis = Vec2::new(x.clamp(-1.0, 1.0), y.clamp(-1.0, 1.0));
     }
 }
 
@@ -330,5 +348,29 @@ mod tests {
 
         assert_eq!(input.active_touches().len(), 2);
         assert_eq!(input.touches_just_began().len(), 2);
+    }
+
+    #[test]
+    fn axis_defaults_to_zero() {
+        let input = InputState::new();
+        assert_eq!(input.axis(), Vec2::ZERO);
+    }
+
+    #[test]
+    fn axis_clamps_to_unit_range() {
+        let mut input = InputState::new();
+        input.set_axis(2.0, -3.0);
+        assert_eq!(input.axis(), Vec2::new(1.0, -1.0));
+
+        input.set_axis(-0.5, 0.7);
+        assert_eq!(input.axis(), Vec2::new(-0.5, 0.7));
+    }
+
+    #[test]
+    fn axis_survives_begin_frame() {
+        let mut input = InputState::new();
+        input.set_axis(0.8, -0.3);
+        input.begin_frame();
+        assert_eq!(input.axis(), Vec2::new(0.8, -0.3));
     }
 }

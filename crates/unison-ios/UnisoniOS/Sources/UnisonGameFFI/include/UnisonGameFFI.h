@@ -43,6 +43,11 @@ void game_touch_ended(void* state, uint64_t id);
 /// Feed a touch-cancelled event.
 void game_touch_cancelled(void* state, uint64_t id);
 
+/// Set the input axis value (e.g., from a virtual joystick).
+/// @param x  Horizontal axis, -1.0 (left) to 1.0 (right)
+/// @param y  Vertical axis, -1.0 (down) to 1.0 (up)
+void game_set_axis(void* state, float x, float y);
+
 /// Destroy the game state and free memory. Do not use the pointer after this call.
 void game_destroy(void* state);
 
