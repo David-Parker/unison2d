@@ -86,13 +86,19 @@ impl<'a> RenderContext<'a> {
     ///
     /// Coordinates are in normalized screen space: (0,0) is bottom-left,
     /// (1,1) is top-right. Intended for render-target textures (PiP cameras,
-    /// minimaps) — UVs are V-flipped for correct FBO orientation.
+    /// minimaps) — UVs are adjusted for the platform's FBO orientation.
     pub fn draw_overlay(&mut self, texture: TextureId, position: [f32; 2], size: [f32; 2]) {
         let cx = position[0] + size[0] / 2.0;
         let cy = position[1] + size[1] / 2.0;
 
         let mut cam = Camera::new(1.0, 1.0);
         cam.set_position(0.5, 0.5);
+
+        let uv = if self.renderer.fbo_origin_top_left() {
+            [0.0, 0.0, 1.0, 1.0]
+        } else {
+            [0.0, 1.0, 1.0, 0.0]
+        };
 
         self.renderer.bind_render_target(RenderTargetId::SCREEN);
         self.renderer.begin_frame(&cam);
@@ -101,7 +107,7 @@ impl<'a> RenderContext<'a> {
             position: [cx, cy],
             size,
             rotation: 0.0,
-            uv: [0.0, 1.0, 1.0, 0.0],
+            uv,
             color: Color::WHITE,
         }));
         self.renderer.end_frame();
@@ -126,6 +132,12 @@ impl<'a> RenderContext<'a> {
         let mut cam = Camera::new(1.0, 1.0);
         cam.set_position(0.5, 0.5);
 
+        let uv = if self.renderer.fbo_origin_top_left() {
+            [0.0, 0.0, 1.0, 1.0]
+        } else {
+            [0.0, 1.0, 1.0, 0.0]
+        };
+
         self.renderer.bind_render_target(RenderTargetId::SCREEN);
         self.renderer.begin_frame(&cam);
 
@@ -146,7 +158,7 @@ impl<'a> RenderContext<'a> {
             position: [cx, cy],
             size,
             rotation: 0.0,
-            uv: [0.0, 1.0, 1.0, 0.0],
+            uv,
             color: Color::WHITE,
         }));
 

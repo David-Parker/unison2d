@@ -235,12 +235,17 @@ impl<A: Copy + Eq + Hash> Engine<A> {
         if let Some(r) = self.renderer.as_mut() {
             let center = screen_rect.center();
             let size = screen_rect.size();
+            let uv = if r.fbo_origin_top_left() {
+                [0.0, 0.0, 1.0, 1.0]
+            } else {
+                [0.0, 1.0, 1.0, 0.0]
+            };
             r.draw(RenderCommand::Sprite(DrawSprite {
                 texture,
                 position: [center.x, center.y],
                 size: [size.x, size.y],
                 rotation: 0.0,
-                uv: [0.0, 0.0, 1.0, 1.0],
+                uv,
                 color: Color::WHITE,
             }));
         }
