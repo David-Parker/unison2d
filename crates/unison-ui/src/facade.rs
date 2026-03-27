@@ -48,12 +48,14 @@ pub struct Ui<E: Clone> {
 impl<E: Clone> Ui<E> {
     /// Create a new UI system with the given font.
     ///
-    /// `font_bytes` should be raw TTF/OTF data.
+    /// `font_bytes` should be raw TTF/OTF data. The device scale factor is
+    /// derived from the renderer's `drawable_size / screen_size`.
     pub fn new(
         font_bytes: Vec<u8>,
         renderer: &mut dyn Renderer<Error = String>,
     ) -> Result<Self, String> {
-        let text_renderer = TextRenderer::new(font_bytes, renderer)?;
+        let scale_factor = compute_scale_factor(renderer);
+        let text_renderer = TextRenderer::new(font_bytes, scale_factor, renderer)?;
         Ok(Self {
             prev_tree: UiTree::empty(),
             curr_tree: UiTree::empty(),
@@ -105,6 +107,10 @@ impl<E: Clone> Ui<E> {
         tree: UiTree<E>,
         renderer: &mut dyn Renderer<Error = String>,
     ) {
+        // Update scale factor in case it changed (e.g., window moved between displays)
+        let scale_factor = compute_scale_factor(renderer);
+        let _ = self.text_renderer.set_scale_factor(scale_factor, renderer);
+
         // Diff against previous tree
         let ops = diff_trees(&self.prev_tree, &tree);
         self.state.apply_diff(&ops);
@@ -186,6 +192,17 @@ struct TextRendererMeasurer<'a> {
 impl<'a> TextMeasurer for TextRendererMeasurer<'a> {
     fn measure(&mut self, text: &str, font_size: f32) -> Vec2 {
         self.text_renderer.measure(text, font_size, self.renderer)
+    }
+}
+
+/// Derive the device scale factor from the renderer's drawable vs logical size.
+fn compute_scale_factor(renderer: &dyn Renderer<Error = String>) -> f32 {
+    let (sw, _) = renderer.screen_size();
+    if sw > 0.0 {
+        let (dw, _) = renderer.drawable_size();
+        (dw / sw).max(1.0)
+    } else {
+        1.0
     }
 }
 

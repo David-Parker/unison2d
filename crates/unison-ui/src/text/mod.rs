@@ -20,13 +20,27 @@ pub struct TextRenderer {
 
 impl TextRenderer {
     /// Create a new TextRenderer from raw font bytes (TTF/OTF).
+    ///
+    /// `scale_factor` is the device pixel ratio (e.g., 2.0 on Retina).
+    /// Glyphs are rasterized at `font_size * scale_factor` for crisp HiDPI text.
     pub fn new(
         font_bytes: Vec<u8>,
+        scale_factor: f32,
         renderer: &mut dyn Renderer<Error = String>,
     ) -> Result<Self, String> {
         let font = FontData::from_bytes(font_bytes)?;
-        let atlas = GlyphAtlas::new(INITIAL_ATLAS_SIZE, INITIAL_ATLAS_SIZE, renderer)?;
+        let atlas = GlyphAtlas::new(INITIAL_ATLAS_SIZE, INITIAL_ATLAS_SIZE, scale_factor, renderer)?;
         Ok(Self { font, atlas })
+    }
+
+    /// Update the device scale factor. Clears the glyph cache so glyphs
+    /// are re-rasterized at the new resolution on next use.
+    pub fn set_scale_factor(
+        &mut self,
+        scale_factor: f32,
+        renderer: &mut dyn Renderer<Error = String>,
+    ) -> Result<(), String> {
+        self.atlas.set_scale_factor(scale_factor, renderer)
     }
 
     /// The atlas texture ID (for use in render commands).

@@ -53,13 +53,21 @@ pub struct GlyphAtlas {
     shelf_height: u32,
     /// 1-pixel padding between glyphs.
     padding: u32,
+    /// Device scale factor (e.g., 2.0 on Retina). Glyphs are rasterized at
+    /// `font_size * scale_factor` but GlyphEntry stores logical (point) sizes.
+    scale_factor: f32,
 }
 
 impl GlyphAtlas {
     /// Create a new atlas with the given initial dimensions.
+    ///
+    /// `scale_factor` is the device pixel ratio (e.g., 2.0 on Retina).
+    /// Glyphs are rasterized at `font_size * scale_factor` for crisp rendering,
+    /// but `GlyphEntry` dimensions are stored in logical points.
     pub fn new(
         width: u32,
         height: u32,
+        scale_factor: f32,
         renderer: &mut dyn Renderer<Error = String>,
     ) -> Result<Self, String> {
         let pixels = vec![0u8; (width * height * 4) as usize];
@@ -74,7 +82,27 @@ impl GlyphAtlas {
             shelf_y: 0,
             shelf_height: 0,
             padding: 1,
+            scale_factor,
         })
+    }
+
+    /// Update the scale factor. Clears the glyph cache so glyphs are
+    /// re-rasterized at the new resolution on next use.
+    pub fn set_scale_factor(
+        &mut self,
+        scale_factor: f32,
+        renderer: &mut dyn Renderer<Error = String>,
+    ) -> Result<(), String> {
+        if (self.scale_factor - scale_factor).abs() < 0.001 {
+            return Ok(());
+        }
+        self.scale_factor = scale_factor;
+        self.entries.clear();
+        self.pixels.fill(0);
+        self.shelf_x = 0;
+        self.shelf_y = 0;
+        self.shelf_height = 0;
+        self.upload(renderer)
     }
 
     /// The atlas texture ID.
@@ -109,10 +137,11 @@ impl GlyphAtlas {
             return Ok(&self.entries[&key]);
         }
 
-        // Rasterize the glyph
-        let scaled = font.font().as_scaled(PxScale::from(font_size));
+        // Rasterize at physical size for crisp rendering on HiDPI
+        let raster_size = font_size * self.scale_factor;
+        let scaled = font.font().as_scaled(PxScale::from(raster_size));
         let glyph = glyph_id.with_scale_and_position(
-            PxScale::from(font_size),
+            PxScale::from(raster_size),
             ab_glyph::point(0.0, scaled.ascent()),
         );
 
@@ -136,11 +165,13 @@ impl GlyphAtlas {
         let gw = (bounds.max.x - bounds.min.x).ceil() as u32;
         let gh = (bounds.max.y - bounds.min.y).ceil() as u32;
 
+        let inv_scale = 1.0 / self.scale_factor;
+
         if gw == 0 || gh == 0 {
             let entry = GlyphEntry {
                 uv: [0.0, 0.0, 0.0, 0.0],
-                offset_x: bounds.min.x,
-                offset_y: bounds.min.y,
+                offset_x: bounds.min.x * inv_scale,
+                offset_y: bounds.min.y * inv_scale,
                 width: 0.0,
                 height: 0.0,
             };
@@ -175,12 +206,13 @@ impl GlyphAtlas {
         let u1 = (px + gw) as f32 / self.width as f32;
         let v1 = (py + gh) as f32 / self.height as f32;
 
+        // Store logical (point) sizes — divide physical raster dims by scale
         let entry = GlyphEntry {
             uv: [u0, v0, u1, v1],
-            offset_x: bounds.min.x,
-            offset_y: bounds.min.y,
-            width: gw as f32,
-            height: gh as f32,
+            offset_x: bounds.min.x * inv_scale,
+            offset_y: bounds.min.y * inv_scale,
+            width: gw as f32 * inv_scale,
+            height: gh as f32 * inv_scale,
         };
 
         // Advance shelf cursor
@@ -277,11 +309,13 @@ impl GlyphAtlas {
             size_key: size_key(font_size),
         };
 
-        let scaled = font.font().as_scaled(PxScale::from(font_size));
+        let raster_size = font_size * self.scale_factor;
+        let scaled = font.font().as_scaled(PxScale::from(raster_size));
         let glyph = glyph_id.with_scale_and_position(
-            PxScale::from(font_size),
+            PxScale::from(raster_size),
             ab_glyph::point(0.0, scaled.ascent()),
         );
+        let inv_scale = 1.0 / self.scale_factor;
 
         let outlined = match font.font().outline_glyph(glyph) {
             Some(o) => o,
@@ -304,8 +338,8 @@ impl GlyphAtlas {
         if gw == 0 || gh == 0 {
             self.entries.insert(key, GlyphEntry {
                 uv: [0.0, 0.0, 0.0, 0.0],
-                offset_x: bounds.min.x,
-                offset_y: bounds.min.y,
+                offset_x: bounds.min.x * inv_scale,
+                offset_y: bounds.min.y * inv_scale,
                 width: 0.0,
                 height: 0.0,
             });
@@ -351,10 +385,10 @@ impl GlyphAtlas {
 
         self.entries.insert(key, GlyphEntry {
             uv: [u0, v0, u1, v1],
-            offset_x: bounds.min.x,
-            offset_y: bounds.min.y,
-            width: gw as f32,
-            height: gh as f32,
+            offset_x: bounds.min.x * inv_scale,
+            offset_y: bounds.min.y * inv_scale,
+            width: gw as f32 * inv_scale,
+            height: gh as f32 * inv_scale,
         });
 
         Ok(())

@@ -883,6 +883,19 @@ impl MetalRenderer {
                 Some(Drawable::from_ptr(raw_drawable as *mut MTLDrawable));
         }
 
+        // Sync physical pixel dimensions from the drawable texture.
+        // This keeps drawable_size() correct after device rotation, since
+        // game_resize only updates logical point dimensions.
+        // (Inlined instead of using drawable_texture() to avoid borrowing all of self.)
+        if let Some(ref drawable) = self.current_drawable {
+            let tex_ptr: *mut Object = objc::msg_send![drawable.as_ptr(), texture];
+            if !tex_ptr.is_null() {
+                let tex = &*(tex_ptr as *const TextureRef);
+                self.screen_width = tex.width() as f32;
+                self.screen_height = tex.height() as f32;
+            }
+        }
+
         // Clear the drawable to black immediately. The engine's render cycle
         // may skip clear() (e.g., overlay-only frames), and Metal's Load
         // action would read garbage from uninitialized memory.
