@@ -75,6 +75,18 @@ impl Color {
     pub const fn to_rgb_tuple(self) -> (f32, f32, f32) {
         (self.r, self.g, self.b)
     }
+
+    /// Linear interpolation between two colors (component-wise).
+    /// `t=0` returns `self`, `t=1` returns `other`.
+    #[inline]
+    pub fn lerp(self, other: Color, t: f32) -> Color {
+        Color::new(
+            self.r + (other.r - self.r) * t,
+            self.g + (other.g - self.g) * t,
+            self.b + (other.b - self.b) * t,
+            self.a + (other.a - self.a) * t,
+        )
+    }
 }
 
 impl Default for Color {
@@ -156,5 +168,22 @@ mod tests {
         let c = Color::new(0.1, 0.2, 0.3, 0.4);
         let arr: [f32; 4] = c.into();
         assert_eq!(arr, [0.1, 0.2, 0.3, 0.4]);
+    }
+
+    #[test]
+    fn test_lerp() {
+        let a = Color::new(0.0, 0.0, 0.0, 1.0);
+        let b = Color::new(1.0, 1.0, 1.0, 0.0);
+        let mid = a.lerp(b, 0.5);
+        assert!((mid.r - 0.5).abs() < 1e-6);
+        assert!((mid.g - 0.5).abs() < 1e-6);
+        assert!((mid.b - 0.5).abs() < 1e-6);
+        assert!((mid.a - 0.5).abs() < 1e-6);
+
+        // Endpoints
+        let start = a.lerp(b, 0.0);
+        assert_eq!(start, a);
+        let end = a.lerp(b, 1.0);
+        assert_eq!(end, b);
     }
 }

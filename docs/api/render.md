@@ -31,6 +31,8 @@ pub trait Renderer {
     fn create_texture(&mut self, desc: &TextureDescriptor) -> Result<TextureId, Self::Error>;
     fn destroy_texture(&mut self, id: TextureId);
     fn screen_size(&self) -> (f32, f32);
+    fn drawable_size(&self) -> (f32, f32);         // default: screen_size()
+    fn set_screen_size(&mut self, width: f32, height: f32);
 
     // Blend mode
     fn set_blend_mode(&mut self, mode: BlendMode);  // default: no-op
@@ -40,11 +42,24 @@ pub trait Renderer {
     fn bind_render_target(&mut self, target: RenderTargetId);
     fn destroy_render_target(&mut self, target: RenderTargetId);
 
+    // Platform hints
+    fn fbo_origin_top_left(&self) -> bool;         // default: false
+
     // Anti-aliasing (default: no-op / None)
     fn set_anti_aliasing(&mut self, mode: AntiAliasing);
     fn anti_aliasing(&self) -> AntiAliasing;
 }
 ```
+
+### drawable_size / set_screen_size
+
+`screen_size()` returns the viewport in **logical points** (matches touch/UI coordinates). `drawable_size()` returns the viewport in **physical pixels** (for GPU resources like FBOs). On non-retina displays they are equal; on HiDPI/Retina displays `drawable_size() = screen_size() * scale_factor`. Default implementation returns `screen_size()`.
+
+`set_screen_size(width, height)` updates the logical viewport (e.g., on window resize or device rotation).
+
+### fbo_origin_top_left
+
+Reports whether FBO textures have their origin at the top-left (`true`, Metal) or bottom-left (`false`, OpenGL). The engine uses this to select the correct UV orientation when compositing offscreen render targets (scene FBO, lightmap). Default is `false` (OpenGL convention).
 
 ## RenderTargetId
 
@@ -80,7 +95,6 @@ Variants: `None` (1 sample), `MSAAx2`, `MSAAx4` (default), `MSAAx8`.
 Use `mode.samples()` to get the raw sample count. The renderer clamps to the GPU's `MAX_SAMPLES` — requesting `MSAAx8` on hardware that supports 4 will silently use 4.
 
 Changing the AA mode only affects **newly created** render targets. Existing targets continue at their original sample count until destroyed and recreated (which the lighting and world systems do automatically when the viewport resizes).
-```
 
 ## BlendMode
 
@@ -156,6 +170,27 @@ DrawLitSprite {
 }
 ```
 
+## Primitives
+
+Factory functions for common shapes. These return `RenderCommand::Mesh` values — no renderer changes needed.
+
+```rust
+use unison2d::render::primitives::{circle, gradient_circle};
+
+// Solid filled circle (32 segments by default)
+world.draw(circle(center, radius, Color::RED), 0);
+
+// Radial gradient circle (opaque center, transparent edge) — useful for glows
+world.draw(gradient_circle(center, radius, glow_color), 0);
+```
+
+| Function | Description |
+|----------|-------------|
+| `circle(center, radius, color)` | Solid filled circle (32 segments) |
+| `circle_with_segments(center, radius, color, n)` | Solid circle with custom segment count |
+| `gradient_circle(center, radius, color)` | Radial gradient circle (32 segments) |
+| `gradient_circle_with_segments(center, radius, color, n)` | Gradient circle with custom segment count |
+
 ## Camera
 
 2D orthographic camera.
@@ -167,6 +202,7 @@ cam.translate(dx, dy);
 cam.move_toward(target_x, target_y, smoothing);
 cam.zoom = 2.0;       // 2x zoom
 cam.rotation = 0.1;   // radians
+cam.fit_to_screen(screen_w, screen_h); // adjust width to match aspect ratio
 
 cam.bounds()            // -> (min_x, min_y, max_x, max_y)
 cam.is_visible(x, y)   // -> bool
@@ -174,7 +210,9 @@ cam.screen_to_world(sx, sy, screen_w, screen_h) // -> (f32, f32)
 cam.world_to_screen(wx, wy, screen_w, screen_h) // -> (f32, f32)
 ```
 
-Default: position (0, 0), viewport (20, 15), zoom 1.0.
+Default: position (0, 0), viewport (26.67, 15), zoom 1.0.
+
+`fit_to_screen(screen_w, screen_h)` adjusts the viewport **width** to match the screen's aspect ratio while keeping the height fixed. Call before rendering so the camera covers the full screen without stretching.
 
 ## Color
 
@@ -187,8 +225,10 @@ Color::from_hex(0xFF8000)           // from hex
 // Presets
 Color::WHITE, Color::BLACK, Color::RED, Color::GREEN, Color::BLUE, Color::TRANSPARENT
 
-color.to_array()  // -> [f32; 4]
-color.to_rgba8()  // -> [u8; 4]
+color.to_array()     // -> [f32; 4]
+color.to_rgba8()     // -> [u8; 4]
+color.to_rgb_tuple() // -> (f32, f32, f32) — drops alpha
+color.lerp(other, t) // -> Color — linear interpolation (t = 0..1)
 ```
 
 ## Texture

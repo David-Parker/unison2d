@@ -33,6 +33,7 @@ Each crate has a per-crate deep dive in `docs/api/`. Read the relevant doc befor
 | `unison-math` | [math.md](docs/api/math.md) | Shared Vec2, Color, Rect types |
 | `unison-assets` | [assets.md](docs/api/assets.md) | Build-time asset embedding & runtime store |
 | `unison-web` | [web.md](docs/api/web.md) | Web platform (WebGL2, DOM input, rAF loop) |
+| `unison-ios` | [ios.md](docs/api/ios.md) | iOS platform (Metal renderer, touch input, frame loop) |
 | `unison-profiler` | [profiler.md](docs/api/profiler.md) | Function-level profiling |
 | `unison-tests` | — | Headless e2e / simulation tests (physics, rendering, etc.) |
 

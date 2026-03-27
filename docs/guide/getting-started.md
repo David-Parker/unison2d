@@ -49,7 +49,7 @@ impl Game for MyGame {
     fn init(&mut self, engine: &mut Engine<Action>) {
         // Configure the world
         self.world.set_background(Color::from_hex(0x1a1a2e));
-        self.world.objects.set_gravity(Vec2::new(0.0, -9.8));
+        self.world.objects.set_gravity(-9.8);
         self.world.objects.set_ground(-5.0);
 
         // Spawn a bouncy ring

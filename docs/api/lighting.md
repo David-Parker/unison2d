@@ -79,6 +79,11 @@ pub enum ShadowFilter {
     Pcf5,   // 5-tap PCF — cardinal + center
     Pcf13,  // 13-tap PCF — 3×3 grid + 4 extended
 }
+
+impl ShadowFilter {
+    /// Get the integer value passed to the shader uniform (0, 5, or 13).
+    pub fn as_uniform_value(&self) -> u32;
+}
 ```
 
 ### `LightId`
@@ -101,10 +106,72 @@ pub struct Occluder {
 }
 
 impl Occluder {
+    pub fn new(edges: Vec<OccluderEdge>) -> Self;
     pub fn from_aabb(cx: f32, cy: f32, hw: f32, hh: f32) -> Self;
     pub fn from_ground(y: f32, x_min: f32, x_max: f32) -> Self;
     pub fn from_boundary_edges(positions: &[f32], boundary_edges: &[(u32, u32)]) -> Self;
 }
+```
+
+### `ShadowQuad`
+
+A projected shadow polygon (2 triangles, 4 vertices) produced by the shadow projection functions. Vertices are in world space and should be drawn as solid black geometry to the shadow mask FBO. Near vertices carry full shadow alpha; far vertices may fade depending on attenuation settings.
+
+```rust
+pub struct ShadowQuad {
+    pub positions: [f32; 8],       // 4 vertices × 2 components: [ax, ay, bx, by, b'x, b'y, a'x, a'y]
+    pub indices: [u32; 6],         // Triangle indices (always [0,1,2, 0,2,3])
+    pub vertex_colors: [f32; 16],  // Per-vertex RGBA (4 verts × 4 components)
+}
+```
+
+### Shadow projection functions
+
+Public functions in the `shadow` module for computing shadow geometry from lights and occluders.
+
+```rust
+/// Check if an occluder edge is back-facing relative to a point light.
+pub fn is_back_facing_point(edge: &OccluderEdge, light_pos: [f32; 2]) -> bool;
+
+/// Check if an occluder edge is back-facing relative to a directional light.
+pub fn is_back_facing_directional(edge: &OccluderEdge, light_direction: [f32; 2]) -> bool;
+
+/// Compute shadow quads for a point light.
+/// Projects back-facing occluder edges radially away from the light.
+/// `shadow_distance` caps how far shadows extend (0.0 = full radius).
+/// `shadow_attenuation` controls fade curve: alpha = (1 - t)^attenuation.
+pub fn project_point_shadows(
+    light_pos: [f32; 2],
+    light_radius: f32,
+    occluders: &[Occluder],
+    shadow_distance: f32,
+    shadow_attenuation: f32,
+) -> Vec<ShadowQuad>;
+
+/// Compute shadow quads for a directional light.
+/// Projects back-facing occluder edges along the light direction.
+/// `cast_distance` is typically the camera diagonal.
+pub fn project_directional_shadows(
+    light_direction: [f32; 2],
+    cast_distance: f32,
+    occluders: &[Occluder],
+    shadow_distance: f32,
+    shadow_attenuation: f32,
+) -> Vec<ShadowQuad>;
+
+/// Compute boundary edges from a triangle mesh.
+/// Returns vertex index pairs (v0, v1) for edges belonging to exactly one triangle.
+/// These form the outer silhouette used as occluder edges for shadow casting.
+pub fn compute_boundary_edges(triangles: &[u32]) -> Vec<(u32, u32)>;
+```
+
+### `generate_radial_gradient`
+
+Generates the radial gradient texture used for point light rendering.
+
+```rust
+/// Produces a `size × size` RGBA texture with quadratic falloff: alpha = 1 - dist².
+pub fn generate_radial_gradient(size: u32) -> TextureDescriptor;
 ```
 
 ### `LightingSystem`
@@ -169,6 +236,23 @@ let light = world.lighting.add_light(PointLight::new(
     6.0,
 ));
 ```
+
+### Light following an object
+
+Use `World::light_follow` to have a point light automatically track an object's position each `step()`. This is the preferred approach over manually syncing positions in `update()`.
+
+```rust
+let light = world.lighting.add_light(PointLight::new(pos, color, 1.0, 6.0));
+world.light_follow(light, player_id);
+
+// Optional: follow with an offset
+world.light_follow_with_offset(light, player_id, Vec2::new(0.0, 2.0));
+
+// Stop following
+world.light_unfollow(light);
+```
+
+The position is synced instantly (no smoothing) to avoid shadow artifacts from position lag.
 
 ### Shadow casting
 

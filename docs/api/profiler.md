@@ -54,6 +54,7 @@ Profiler::init();                    // call once at startup
 Profiler::set_enabled(true);        // enable/disable at runtime
 Profiler::is_enabled()              // -> bool
 Profiler::set_target_fps(60.0);     // for budget calculations
+Profiler::target_frame_time()      // -> f64 (ms), e.g. 16.67 for 60 FPS
 ```
 
 ### Frame Management
@@ -77,7 +78,8 @@ Scopes nest automatically — `begin_scope("a")` then `begin_scope("b")` creates
 ```rust
 Profiler::frame_count()       // -> u64
 Profiler::total_frame_time()  // -> f64 (ms)
-Profiler::avg_frame_time()    // -> f64 (ms)
+Profiler::avg_frame_time()    // -> f64 (ms, CPU time averaged over frames)
+Profiler::avg_wall_time()     // -> f64 (ms, real display interval between frames)
 Profiler::reset();
 
 // Structured data
@@ -92,8 +94,8 @@ Profiler::format_stats() // -> String
 
 ```
 === Profiler Stats (3600 frames) ===
-Target: 60 FPS (16.67ms) | Actual: 59 FPS (16.90ms)
-Budget: 16.73ms/frame used (100.4%) | Headroom: -0.07ms (-0.4%)
+Display: 60 Hz | Max: 62 FPS (16.13ms) | Target: 60 FPS (16.67ms)
+Budget: 15.20ms/frame used (91.2%) | Headroom: 1.47ms (8.8%)
 ---------------------------------------------------------------------------
 Scope                                   self%    total%   Calls
 ---------------------------------------------------------------------------

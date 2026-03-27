@@ -38,6 +38,8 @@
 /// - [`profiler`] — Lightweight function-level profiling
 /// - [`input`] — Two-layer input system (raw state + action mapping)
 /// - [`assets`] — Build-time asset embedding and runtime asset store
+/// - [`lighting`] — 2D lighting with lightmap compositing and shadows
+/// - [`ui`] — Declarative React-like UI system (HUDs, menus, buttons)
 
 // Engine layer
 mod engine;

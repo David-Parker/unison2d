@@ -20,9 +20,10 @@ use unison_math::{Color, Vec2};
 use unison_render::{
     BlendMode, Camera, DrawSprite, Renderer, RenderCommand, RenderTargetId, TextureId,
 };
-use unison_lighting::LightingSystem;
+use unison_lighting::{LightId, LightingSystem};
 use unison_profiler::profile_scope;
 
+use crate::object::ObjectId;
 use crate::object_system::ObjectSystem;
 use crate::camera_system::CameraSystem;
 use crate::camera_system::DEFAULT_CAMERA;
@@ -55,6 +56,13 @@ pub struct RenderLayerConfig {
     /// color (e.g. sky blue). Subsequent layers typically use
     /// [`Color::TRANSPARENT`] so lower layers show through.
     pub clear_color: Color,
+}
+
+/// A point light that tracks an object's position each step.
+struct LightFollowTarget {
+    light: LightId,
+    object: ObjectId,
+    offset: Vec2,
 }
 
 /// Internal render layer state.
@@ -100,6 +108,9 @@ pub struct World {
     /// Screen-space overlay commands queued this frame (drawn after lighting).
     overlay_commands: Vec<(RenderCommand, i32)>,
 
+    /// Point lights that auto-track object positions in `step()`.
+    light_follow_targets: Vec<LightFollowTarget>,
+
     /// Offscreen FBO for lit layer groups (created lazily, resized on viewport change).
     scene_target: Option<RenderTargetId>,
     scene_texture: Option<TextureId>,
@@ -129,6 +140,7 @@ impl World {
             lighting: LightingSystem::new(),
             render_layers: vec![scene_layer],
             default_layer,
+            light_follow_targets: Vec::new(),
             unlit_commands: Vec::new(),
             overlay_commands: Vec::new(),
             scene_target: None,
@@ -277,12 +289,60 @@ impl World {
         self.objects.despawn(id);
     }
 
+    // ── Light follow ──
+
+    /// Make a point light follow an object's position each step.
+    ///
+    /// The light's position is set to the object's position after each
+    /// physics step. This is an instant sync (no smoothing) to avoid
+    /// shadow artifacts from position lag.
+    ///
+    /// Only point lights can follow objects (directional lights have no position).
+    pub fn light_follow(&mut self, light: LightId, target: ObjectId) {
+        self.light_follow_with_offset(light, target, Vec2::ZERO);
+    }
+
+    /// Like [`light_follow`](Self::light_follow), but with a fixed offset.
+    pub fn light_follow_with_offset(&mut self, light: LightId, target: ObjectId, offset: Vec2) {
+        if let Some(ft) = self.light_follow_targets.iter_mut().find(|ft| ft.light == light) {
+            ft.object = target;
+            ft.offset = offset;
+        } else {
+            self.light_follow_targets.push(LightFollowTarget { light, object: target, offset });
+        }
+    }
+
+    /// Update the offset for an already-following light. No-op if not following.
+    pub fn set_light_follow_offset(&mut self, light: LightId, offset: Vec2) {
+        if let Some(ft) = self.light_follow_targets.iter_mut().find(|ft| ft.light == light) {
+            ft.offset = offset;
+        }
+    }
+
+    /// Stop a light from following any object.
+    pub fn light_unfollow(&mut self, light: LightId) {
+        self.light_follow_targets.retain(|ft| ft.light != light);
+    }
+
+    /// Update all light follow targets from current object positions.
+    fn update_light_follows(&mut self) {
+        for ft in &self.light_follow_targets {
+            let pos = self.objects.get_position(ft.object);
+            if let Some(light) = self.lighting.get_light_mut(ft.light) {
+                light.position = pos + ft.offset;
+            }
+        }
+    }
+
+    // ── Simulation ──
+
     /// Advance the world by one timestep.
     ///
-    /// Steps physics, then updates camera follow targets.
+    /// Steps physics, then updates camera follow targets and light follow targets.
     pub fn step(&mut self, dt: f32) {
         self.objects.step(dt);
         self.cameras.update_follows(&self.objects);
+        self.update_light_follows();
     }
 
     /// Snapshot physics state for interpolated rendering.
@@ -792,5 +852,99 @@ mod tests {
         }, 0);
 
         assert_eq!(world.overlay_commands.len(), 1);
+    }
+
+    #[test]
+    fn light_follow_updates_position() {
+        let mut world = World::new();
+        world.lighting.set_enabled(true);
+
+        let obj = world.objects.spawn_soft_body(SoftBodyDesc {
+            mesh: create_ring_mesh(1.0, 0.5, 8, 2),
+            material: unison_physics::Material::RUBBER,
+            position: Vec2::new(5.0, 3.0),
+            color: Color::WHITE,
+            texture: TextureId::NONE,
+        });
+
+        let light = world.lighting.add_light(unison_lighting::PointLight {
+            position: Vec2::ZERO,
+            color: Color::WHITE,
+            intensity: 1.0,
+            radius: 5.0,
+            casts_shadows: false,
+            shadow: Default::default(),
+        });
+
+        world.light_follow(light, obj);
+        world.step(1.0 / 60.0);
+
+        let light_pos = world.lighting.get_light(light).unwrap().position;
+        let obj_pos = world.objects.get_position(obj);
+        assert!((light_pos.x - obj_pos.x).abs() < 0.01);
+        assert!((light_pos.y - obj_pos.y).abs() < 0.01);
+    }
+
+    #[test]
+    fn light_follow_with_offset() {
+        let mut world = World::new();
+        world.lighting.set_enabled(true);
+
+        let obj = world.objects.spawn_soft_body(SoftBodyDesc {
+            mesh: create_ring_mesh(1.0, 0.5, 8, 2),
+            material: unison_physics::Material::RUBBER,
+            position: Vec2::new(5.0, 3.0),
+            color: Color::WHITE,
+            texture: TextureId::NONE,
+        });
+
+        let light = world.lighting.add_light(unison_lighting::PointLight {
+            position: Vec2::ZERO,
+            color: Color::WHITE,
+            intensity: 1.0,
+            radius: 5.0,
+            casts_shadows: false,
+            shadow: Default::default(),
+        });
+
+        world.light_follow_with_offset(light, obj, Vec2::new(0.0, 2.0));
+        world.step(1.0 / 60.0);
+
+        let light_pos = world.lighting.get_light(light).unwrap().position;
+        let obj_pos = world.objects.get_position(obj);
+        assert!((light_pos.x - obj_pos.x).abs() < 0.01);
+        assert!((light_pos.y - (obj_pos.y + 2.0)).abs() < 0.01);
+    }
+
+    #[test]
+    fn light_unfollow_stops_tracking() {
+        let mut world = World::new();
+        world.lighting.set_enabled(true);
+
+        let light = world.lighting.add_light(unison_lighting::PointLight {
+            position: Vec2::new(99.0, 99.0),
+            color: Color::WHITE,
+            intensity: 1.0,
+            radius: 5.0,
+            casts_shadows: false,
+            shadow: Default::default(),
+        });
+
+        let obj = world.objects.spawn_soft_body(SoftBodyDesc {
+            mesh: create_ring_mesh(1.0, 0.5, 8, 2),
+            material: unison_physics::Material::RUBBER,
+            position: Vec2::new(5.0, 3.0),
+            color: Color::WHITE,
+            texture: TextureId::NONE,
+        });
+
+        world.light_follow(light, obj);
+        world.light_unfollow(light);
+        world.step(1.0 / 60.0);
+
+        // Light should still be at its original position
+        let light_pos = world.lighting.get_light(light).unwrap().position;
+        assert!((light_pos.x - 99.0).abs() < 0.01);
+        assert!((light_pos.y - 99.0).abs() < 0.01);
     }
 }

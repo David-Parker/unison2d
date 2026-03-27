@@ -44,8 +44,11 @@ unison2d/crates/
 ├── unison-lighting/ # 2D lighting with lightmap compositing and shadows
 ├── unison-input/    # Two-layer input (raw → action mapping)
 ├── unison-ui/       # Declarative UI (menus, HUDs, buttons, text)
+├── unison-assets/   # Build-time asset embedding & runtime store
 ├── unison-profiler/ # Function-level profiling
-└── unison-web/      # Web platform (WebGL2, DOM input, rAF loop)
+├── unison-web/      # Web platform (WebGL2, DOM input, rAF loop)
+├── unison-ios/      # iOS platform (Metal renderer, touch input, frame loop)
+└── unison-tests/    # Headless e2e / simulation tests
 ```
 
 All subsystems are independent. Use `unison2d` to get everything, or depend on individual crates.

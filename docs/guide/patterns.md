@@ -231,15 +231,24 @@ impl DayNightCycle {
         let angle = smoothstep(phase_t) * PI;
 
         // Direction: sun right→left, moon left→right
-        light.direction = if t < 0.5 {
-            Vec2::new(angle.cos(), -angle.sin())
-        } else {
-            Vec2::new(-angle.cos(), -angle.sin())
-        };
+        if let Some(light) = world.lighting.get_directional_light_mut(self.light) {
+            light.direction = if t < 0.5 {
+                Vec2::new(angle.cos(), -angle.sin())
+            } else {
+                Vec2::new(-angle.cos(), -angle.sin())
+            };
 
-        // Lerp color/intensity between sun and moon based on sun_amount
-        light.color = lerp_color(MOON_COLOR, sun_color, sun_amount);
-        light.intensity = lerp(moon_intensity, sun_intensity, sun_amount);
+            // Lerp color/intensity between sun and moon based on sun_amount
+            let mc = MOON_COLOR;
+            let sc = sun_color;
+            light.color = Color::new(
+                mc.r + (sc.r - mc.r) * sun_amount,
+                mc.g + (sc.g - mc.g) * sun_amount,
+                mc.b + (sc.b - mc.b) * sun_amount,
+                1.0,
+            );
+            light.intensity = lerp(moon_intensity, sun_intensity, sun_amount);
+        }
     }
 }
 ```

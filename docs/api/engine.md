@@ -10,7 +10,8 @@ Game (your struct, implements Game trait)
 ├── World            — self-contained simulation
 │   ├── ObjectSystem   — physics + object registry
 │   ├── CameraSystem   — named cameras + follow targets
-│   └── LightingSystem — point lights, directional lights, shadows
+│   ├── LightingSystem — point lights, directional lights, shadows
+│   └── Environment    — rendering environment (background color, etc.)
 └── Level (trait)    — optional scene abstraction
 ```
 
@@ -110,7 +111,7 @@ Self-contained simulation. Composes subsystems for physics/objects and cameras.
 ```rust
 let mut world = World::new();
 world.set_background(Color::from_hex(0x1a1a2e));
-world.objects.set_gravity(Vec2::new(0.0, -9.8));
+world.objects.set_gravity(-9.8);
 world.objects.set_ground(-5.0);
 let player = world.objects.spawn_soft_body(desc);
 world.cameras.follow("main", player, 0.08);
@@ -121,10 +122,10 @@ world.step(dt);
 
 | Method | Description |
 |--------|-------------|
-| `new() -> World` | Default world (main camera 20×15, standard gravity) |
+| `new() -> World` | Default world (main camera 26.67×15, standard gravity) |
 | `set_background(color)` | Set clear color |
 | `background_color() -> Color` | Get clear color |
-| `step(dt)` | Advance physics + update camera follows |
+| `step(dt)` | Advance physics + update camera follows + update light follows |
 | `snapshot_for_render()` | Snapshot for interpolated rendering |
 | `create_render_layer(name, config)` | Create a named render layer, returns `RenderLayerId` |
 | `create_render_layer_before(name, config, before)` | Create a layer inserted before another layer |
@@ -134,6 +135,10 @@ world.step(dt);
 | `draw(command, z_order)` | Queue to the default scene layer (sorted with objects, affected by lighting) |
 | `draw_unlit(command, z_order)` | Queue world-space render command drawn after all layers (not darkened) |
 | `draw_overlay(command, z_order)` | Queue screen-space overlay command (drawn after all layers, 0..1 coords) |
+| `light_follow(light, object)` | Make a point light follow an object's position each step |
+| `light_follow_with_offset(light, object, offset)` | Follow with a fixed Vec2 offset |
+| `set_light_follow_offset(light, offset)` | Change offset on an already-following light |
+| `light_unfollow(light)` | Stop following |
 | `auto_render(renderer)` | Render all layers through "main" camera to current target |
 | `render_to_targets(renderer, &[(&str, RenderTargetId)])` | Multi-camera rendering with layers to targets |
 
@@ -194,7 +199,7 @@ Owns the physics world + object registry.
 
 | Method | Description |
 |--------|-------------|
-| `set_gravity(Vec2)` | Set gravity |
+| `set_gravity(f32)` | Set gravity magnitude (applied in -Y direction) |
 | `set_ground(y)` | Set flat ground at y |
 | `clear_ground()` | Remove ground |
 | `set_ground_friction(f32)` | Ground friction (0=ice, 1=sticky). Default: 0.8 |
@@ -234,7 +239,7 @@ Named cameras with optional follow targets.
 | `set_follow_offset(name, offset)` | Change offset on an already-following camera |
 | `unfollow(name)` | Stop following |
 
-Default: "main" camera at 20×15.
+Default: "main" camera at 26.67×15.
 
 ### LightingSystem (`world.lighting`)
 

@@ -28,6 +28,7 @@ impl Prefab for DonutPrefab {
             material: Material::METAL,
             position,
             color: Color::from_hex(0xd4943a),
+            texture: TextureId::NONE,
         })
     }
 }
@@ -59,6 +60,7 @@ impl Prefab for CratePrefab {
             material: self.material,
             position,
             color: Color::from_hex(0x8b6914),
+            texture: TextureId::NONE,
         })
     }
 }
@@ -96,7 +98,7 @@ Beyond prefabs, extract any repeated setup into plain functions. A common patter
 pub fn new_world() -> World {
     let mut world = World::new();
     world.set_background(Color::from_hex(0x1a1a2e));
-    world.objects.set_gravity(Vec2::new(0.0, -9.8));
+    world.objects.set_gravity(-9.8);
     world.objects.set_ground(-4.5);
     world.objects.set_ground_restitution(0.0);
     world

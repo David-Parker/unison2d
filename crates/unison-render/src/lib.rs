@@ -9,6 +9,7 @@ mod sprite;
 mod camera;
 mod renderer;
 mod image;
+pub mod primitives;
 
 pub use color::Color;
 pub use texture::{TextureId, TextureFormat, TextureFilter, TextureWrap, TextureDescriptor};

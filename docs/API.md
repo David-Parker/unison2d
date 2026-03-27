@@ -47,16 +47,16 @@ Self-contained simulation owning physics, objects, cameras, and environment.
 ```rust
 let mut world = World::new();
 world.set_background(Color::from_hex(0x1a1a2e));
-world.objects.set_gravity(Vec2::new(0.0, -9.8));
+world.objects.set_gravity(-9.8);
 world.objects.set_ground(-5.0);
 ```
 
 | Method | Description |
 |--------|-------------|
-| `new()` | Default world (main camera 20x15) |
+| `new()` | Default world (main camera 26.67×15) |
 | `set_background(color)` | Set clear color (convenience for `environment.background_color`) |
 | `background_color()` | Get clear color |
-| `step(dt)` | Advance physics + update camera follows |
+| `step(dt)` | Advance physics + update camera/light follows |
 | `create_render_layer(name, config)` | Create a named render layer, returns `RenderLayerId` |
 | `create_render_layer_before(name, config, before)` | Create a layer inserted before another layer |
 | `default_layer()` | Get the default scene layer ID |
@@ -65,6 +65,10 @@ world.objects.set_ground(-5.0);
 | `draw(command, z_order)` | Queue to the default scene layer (sorted with objects, affected by lighting) |
 | `draw_unlit(command, z_order)` | Queue a world-space render command drawn after all layers (not darkened) |
 | `draw_overlay(command, z_order)` | Queue a screen-space overlay command (after all layers) |
+| `light_follow(light, object)` | Make a point light follow an object each step |
+| `light_follow_with_offset(light, object, offset)` | Follow with a fixed Vec2 offset |
+| `set_light_follow_offset(light, offset)` | Change offset on an already-following light |
+| `light_unfollow(light)` | Stop following |
 | `auto_render(renderer)` | Render all layers through "main" camera |
 | `render_to_targets(renderer, &[(&str, RenderTargetId)])` | Multi-camera render with layers |
 | `spawn_soft_body(SoftBodyDesc)` | Spawn a soft body |
@@ -203,7 +207,7 @@ let grounded = world.objects.is_grounded(id);            // touching ground?
 ### Physics Configuration
 
 ```rust
-world.objects.set_gravity(Vec2::new(0.0, -9.8));  // gravity direction + magnitude
+world.objects.set_gravity(-9.8);                   // gravity magnitude (applied in -Y direction)
 world.objects.set_ground(-5.0);                    // flat ground at y=-5
 world.objects.clear_ground();                      // remove ground
 world.objects.set_ground_friction(0.8);            // 0=ice, 1=sticky
@@ -261,7 +265,7 @@ ctx.input.axis()                                   // analog axis (Vec2, e.g., j
 
 ## Cameras
 
-Cameras live on the world's `CameraSystem`. A default "main" camera (20x15) is created automatically.
+Cameras live on the world's `CameraSystem`. A default "main" camera (26.67×15) is created automatically.
 
 ```rust
 world.cameras.follow("main", player_id, 0.08);  // follow with smoothing
@@ -426,6 +430,31 @@ world.draw(tree_mesh, 0);           // default scene layer — lit
 Color::from_hex(0xff9f43)           // from hex
 Color::from_rgba8(255, 159, 67, 255) // from RGBA bytes
 Color::WHITE, Color::BLACK, Color::RED, Color::GREEN, Color::BLUE
+color.lerp(other, 0.5)              // linear interpolation
+```
+
+### Math Utilities
+
+```rust
+use unison2d::math::{lerp, smoothstep, Rng};
+
+lerp(0.0, 10.0, 0.5)     // 5.0 — scalar linear interpolation
+smoothstep(0.5)           // 0.5 — smooth ease-in/ease-out
+
+let mut rng = Rng::new(42);       // deterministic xorshift32 PRNG
+rng.range_f32(0.0, 1.0)           // f32 in [0, 1)
+rng.range_u32(1, 7)               // u32 in [1, 7)
+```
+
+### Shape Primitives
+
+Factory functions that return `RenderCommand::Mesh` — no renderer changes needed.
+
+```rust
+use unison2d::render::primitives::{circle, gradient_circle};
+
+world.draw(circle(center, radius, color), 0);
+world.draw(gradient_circle(center, radius, glow_color), 0);  // radial gradient (opaque center, transparent edge)
 ```
 
 ## Assets
@@ -544,8 +573,6 @@ pub struct RenderContext<'a> {
 | `create_render_target(w, h)` | Create an offscreen render target, returns `(RenderTargetId, TextureId)` |
 | `bind_render_target(id)` | Bind a render target for subsequent draw calls |
 | `destroy_render_target(id)` | Destroy an offscreen render target |
-| `set_anti_aliasing(mode)` | Set MSAA mode: `None`, `MSAAx2`, `MSAAx4`, `MSAAx8` |
-| `anti_aliasing()` | Get current AA mode |
 | `screen_size()` | Get screen/canvas size in pixels |
 | `draw_overlay(texture, position, size)` | Draw a render-target texture as a screen-space overlay (0..1 NDC) |
 | `draw_overlay_bordered(texture, position, size, border_width, border_color)` | Same, with a colored border |
