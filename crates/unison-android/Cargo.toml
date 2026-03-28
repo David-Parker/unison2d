@@ -1,0 +1,21 @@
+[package]
+name = "unison-android"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Unison 2D Game Engine - Android platform (OpenGL ES 3.0 renderer, touch input, frame loop)"
+
+[dependencies]
+unison-math = { workspace = true }
+unison-render = { workspace = true }
+unison-input = { workspace = true }
+unison-profiler = { workspace = true }
+unison2d = { workspace = true }
+jni = "0.21"
+glow = "0.16"
+libc = "0.2"
+
+[features]
+default = []
+simd = ["unison2d/simd"]
+profiling = ["unison-profiler/enabled", "unison2d/profiling"]

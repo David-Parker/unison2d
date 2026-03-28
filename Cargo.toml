@@ -13,6 +13,7 @@ members = [
     "crates/unison-ui",
     "crates/unison-web",
     "crates/unison-ios",
+    "crates/unison-android",
     "crates/unison-tests",
 ]
 
@@ -36,6 +37,7 @@ unison-input = { path = "crates/unison-input" }
 unison-assets = { path = "crates/unison-assets" }
 unison-web = { path = "crates/unison-web" }
 unison-ios = { path = "crates/unison-ios" }
+unison-android = { path = "crates/unison-android" }
 
 # External dependencies
 flate2 = "1.0"
