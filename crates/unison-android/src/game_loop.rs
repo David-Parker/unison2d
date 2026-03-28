@@ -105,6 +105,15 @@ impl<G: Game> GameState<G> {
 
         self.accumulator += dt.min(MAX_ACCUMULATOR);
 
+        // Guarantee at least one update per display frame. Overlay commands
+        // (UI) are cleared each frame, so every render pass needs a preceding
+        // update to re-queue them. Minor timing jitter can otherwise cause
+        // the accumulator to fall just short of FIXED_DT, skipping the update
+        // and producing visible UI flicker.
+        if self.accumulator < FIXED_DT {
+            self.accumulator = FIXED_DT;
+        }
+
         // Transfer touch/input events into the engine
         let will_update = self.accumulator >= FIXED_DT;
         if will_update {

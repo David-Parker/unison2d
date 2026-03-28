@@ -228,9 +228,10 @@ impl GlesRenderer {
             gl.blend_func(glow::SRC_ALPHA, glow::ONE_MINUS_SRC_ALPHA);
         }
 
-        // Query max MSAA samples, cap at 4 (matching web renderer)
-        let max_samples = unsafe { gl.get_parameter_i32(glow::MAX_SAMPLES) };
-        let msaa_samples = max_samples.min(4);
+        // Default to no MSAA — budget Adreno/Mali GPUs take a big hit from
+        // multisample renderbuffer storage and blit resolve. Games can opt
+        // in via set_anti_aliasing() for higher-end devices.
+        let msaa_samples = 0;
 
         Ok(Self {
             gl,
@@ -725,8 +726,8 @@ impl Renderer for GlesRenderer {
 
     fn create_render_target(&mut self, width: u32, height: u32) -> Result<(RenderTargetId, TextureId), String> {
         unsafe {
-            // ── Resolve FBO (texture attachment, for sampling) ──
-            let resolve_fbo = self.gl.create_framebuffer().map_err(|e| e.to_string())?;
+            // ── Texture FBO (always created — used for sampling the result) ──
+            let texture_fbo = self.gl.create_framebuffer().map_err(|e| e.to_string())?;
 
             let texture = self.gl.create_texture().map_err(|e| e.to_string())?;
             self.gl.bind_texture(glow::TEXTURE_2D, Some(texture));
@@ -741,7 +742,7 @@ impl Renderer for GlesRenderer {
             self.gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_WRAP_S, glow::CLAMP_TO_EDGE as i32);
             self.gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_WRAP_T, glow::CLAMP_TO_EDGE as i32);
 
-            self.gl.bind_framebuffer(glow::FRAMEBUFFER, Some(resolve_fbo));
+            self.gl.bind_framebuffer(glow::FRAMEBUFFER, Some(texture_fbo));
             self.gl.framebuffer_texture_2d(
                 glow::FRAMEBUFFER, glow::COLOR_ATTACHMENT0,
                 glow::TEXTURE_2D, Some(texture), 0,
@@ -750,35 +751,53 @@ impl Renderer for GlesRenderer {
             let status = self.gl.check_framebuffer_status(glow::FRAMEBUFFER);
             if status != glow::FRAMEBUFFER_COMPLETE {
                 self.gl.bind_framebuffer(glow::FRAMEBUFFER, None);
-                self.gl.delete_framebuffer(resolve_fbo);
+                self.gl.delete_framebuffer(texture_fbo);
                 self.gl.delete_texture(texture);
-                return Err(format!("Resolve framebuffer not complete: status {}", status));
+                return Err(format!("Framebuffer not complete: status {}", status));
             }
 
-            // ── MSAA FBO (renderbuffer attachment, for drawing) ──
-            let msaa_fbo = self.gl.create_framebuffer().map_err(|e| e.to_string())?;
-            let rbo = self.gl.create_renderbuffer().map_err(|e| e.to_string())?;
+            // Register texture
+            let tex_id = self.next_texture_id;
+            self.next_texture_id += 1;
+            self.textures.insert(tex_id, texture);
 
-            self.gl.bind_renderbuffer(glow::RENDERBUFFER, Some(rbo));
-            self.gl.renderbuffer_storage_multisample(
-                glow::RENDERBUFFER, self.msaa_samples,
-                glow::RGBA8, width as i32, height as i32,
-            );
+            let rt_id = self.next_render_target_id;
+            self.next_render_target_id += 1;
 
-            self.gl.bind_framebuffer(glow::FRAMEBUFFER, Some(msaa_fbo));
-            self.gl.framebuffer_renderbuffer(
-                glow::FRAMEBUFFER, glow::COLOR_ATTACHMENT0,
-                glow::RENDERBUFFER, Some(rbo),
-            );
+            if self.msaa_samples > 1 {
+                // ── MSAA path: separate draw FBO with renderbuffer, blit to texture FBO ──
+                let msaa_fbo = self.gl.create_framebuffer().map_err(|e| e.to_string())?;
+                let rbo = self.gl.create_renderbuffer().map_err(|e| e.to_string())?;
 
-            let status = self.gl.check_framebuffer_status(glow::FRAMEBUFFER);
-            if status != glow::FRAMEBUFFER_COMPLETE {
-                self.gl.bind_framebuffer(glow::FRAMEBUFFER, None);
-                self.gl.delete_framebuffer(msaa_fbo);
-                self.gl.delete_framebuffer(resolve_fbo);
-                self.gl.delete_renderbuffer(rbo);
-                self.gl.delete_texture(texture);
-                return Err(format!("MSAA framebuffer not complete: status {}", status));
+                self.gl.bind_renderbuffer(glow::RENDERBUFFER, Some(rbo));
+                self.gl.renderbuffer_storage_multisample(
+                    glow::RENDERBUFFER, self.msaa_samples,
+                    glow::RGBA8, width as i32, height as i32,
+                );
+
+                self.gl.bind_framebuffer(glow::FRAMEBUFFER, Some(msaa_fbo));
+                self.gl.framebuffer_renderbuffer(
+                    glow::FRAMEBUFFER, glow::COLOR_ATTACHMENT0,
+                    glow::RENDERBUFFER, Some(rbo),
+                );
+
+                let status = self.gl.check_framebuffer_status(glow::FRAMEBUFFER);
+                if status != glow::FRAMEBUFFER_COMPLETE {
+                    self.gl.bind_framebuffer(glow::FRAMEBUFFER, None);
+                    self.gl.delete_framebuffer(msaa_fbo);
+                    self.gl.delete_framebuffer(texture_fbo);
+                    self.gl.delete_renderbuffer(rbo);
+                    self.gl.delete_texture(texture);
+                    return Err(format!("MSAA framebuffer not complete: status {}", status));
+                }
+
+                self.msaa_fbos.insert(rt_id, msaa_fbo);
+                self.msaa_renderbuffers.insert(rt_id, rbo);
+            } else {
+                // ── No MSAA: draw directly to the texture FBO ──
+                // Store the texture FBO as both the "msaa" (draw) and resolve target
+                // so bind_render_target works without special-casing.
+                self.msaa_fbos.insert(rt_id, texture_fbo);
             }
 
             // Unbind
@@ -786,17 +805,7 @@ impl Renderer for GlesRenderer {
             self.gl.bind_renderbuffer(glow::RENDERBUFFER, None);
             self.gl.bind_texture(glow::TEXTURE_2D, None);
 
-            // Register texture
-            let tex_id = self.next_texture_id;
-            self.next_texture_id += 1;
-            self.textures.insert(tex_id, texture);
-
-            // Register render target
-            let rt_id = self.next_render_target_id;
-            self.next_render_target_id += 1;
-            self.msaa_fbos.insert(rt_id, msaa_fbo);
-            self.msaa_renderbuffers.insert(rt_id, rbo);
-            self.render_targets.insert(rt_id, resolve_fbo);
+            self.render_targets.insert(rt_id, texture_fbo);
             self.render_target_sizes.insert(rt_id, (width, height));
 
             Ok((RenderTargetId(rt_id), TextureId(tex_id)))
@@ -809,20 +818,23 @@ impl Renderer for GlesRenderer {
             self.gl.active_texture(glow::TEXTURE0);
             self.gl.bind_texture(glow::TEXTURE_2D, None);
 
-            // Resolve the current MSAA FBO -> resolve FBO before switching away
+            // Resolve the current MSAA FBO -> resolve FBO before switching away.
+            // Skip if no MSAA (msaa_fbo == resolve_fbo, i.e. same FBO).
             let prev = self.current_render_target;
             if prev != target && prev != RenderTargetId::SCREEN {
                 if let (Some(&msaa_fbo), Some(&resolve_fbo)) =
                     (self.msaa_fbos.get(&prev.0), self.render_targets.get(&prev.0))
                 {
-                    if let Some(&(w, h)) = self.render_target_sizes.get(&prev.0) {
-                        self.gl.bind_framebuffer(glow::READ_FRAMEBUFFER, Some(msaa_fbo));
-                        self.gl.bind_framebuffer(glow::DRAW_FRAMEBUFFER, Some(resolve_fbo));
-                        self.gl.blit_framebuffer(
-                            0, 0, w as i32, h as i32,
-                            0, 0, w as i32, h as i32,
-                            glow::COLOR_BUFFER_BIT, glow::NEAREST,
-                        );
+                    if msaa_fbo != resolve_fbo {
+                        if let Some(&(w, h)) = self.render_target_sizes.get(&prev.0) {
+                            self.gl.bind_framebuffer(glow::READ_FRAMEBUFFER, Some(msaa_fbo));
+                            self.gl.bind_framebuffer(glow::DRAW_FRAMEBUFFER, Some(resolve_fbo));
+                            self.gl.blit_framebuffer(
+                                0, 0, w as i32, h as i32,
+                                0, 0, w as i32, h as i32,
+                                glow::COLOR_BUFFER_BIT, glow::NEAREST,
+                            );
+                        }
                     }
                 }
             }
@@ -843,15 +855,21 @@ impl Renderer for GlesRenderer {
     }
 
     fn destroy_render_target(&mut self, target: RenderTargetId) {
+        let msaa_fbo = self.msaa_fbos.remove(&target.0);
+        let resolve_fbo = self.render_targets.remove(&target.0);
         unsafe {
-            if let Some(fbo) = self.msaa_fbos.remove(&target.0) {
+            if let Some(fbo) = msaa_fbo {
                 self.gl.delete_framebuffer(fbo);
             }
             if let Some(rbo) = self.msaa_renderbuffers.remove(&target.0) {
                 self.gl.delete_renderbuffer(rbo);
             }
-            if let Some(fbo) = self.render_targets.remove(&target.0) {
-                self.gl.delete_framebuffer(fbo);
+            // Only delete the resolve FBO if it's different from the MSAA FBO
+            // (when MSAA is off, they're the same FBO — already deleted above)
+            if let Some(fbo) = resolve_fbo {
+                if msaa_fbo != Some(fbo) {
+                    self.gl.delete_framebuffer(fbo);
+                }
             }
         }
         self.render_target_sizes.remove(&target.0);
