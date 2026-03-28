@@ -20,6 +20,10 @@ class JoystickView(context: Context) : View(context) {
     companion object {
         /** Default diameter of the joystick base in dp. */
         const val DEFAULT_SIZE_DP = 120
+        /** Extra padding around the base circle so stroke/thumb aren't clipped by view bounds. */
+        const val PADDING_DP = 22f
+        /** Total view size in dp (base + padding on each side). */
+        const val VIEW_SIZE_DP = DEFAULT_SIZE_DP + (PADDING_DP * 2).toInt()
     }
 
     /**
@@ -63,8 +67,8 @@ class JoystickView(context: Context) : View(context) {
 
         val cx = width / 2f
         val cy = height / 2f
-        // Inset by half stroke width so the stroke stays within view bounds
-        val baseRadius = min(width, height) / 2f - baseStrokePaint.strokeWidth / 2f
+        val paddingPx = PADDING_DP * resources.displayMetrics.density
+        val baseRadius = min(width, height) / 2f - paddingPx
 
         // Base circle
         canvas.drawCircle(cx, cy, baseRadius, basePaint)
@@ -114,7 +118,8 @@ class JoystickView(context: Context) : View(context) {
     private fun handleThumbMove(px: Float, py: Float) {
         val cx = width / 2f
         val cy = height / 2f
-        val maxRadius = min(width, height) / 2f
+        val paddingPx = PADDING_DP * resources.displayMetrics.density
+        val maxRadius = min(width, height) / 2f - paddingPx
 
         var dx = px - cx
         var dy = py - cy

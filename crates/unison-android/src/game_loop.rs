@@ -4,6 +4,7 @@
 //! a `GameState` struct whose `frame` method is called from Kotlin via JNI
 //! on each GLSurfaceView draw callback.
 
+use log::info;
 use unison2d::{Engine, Game};
 use unison_input::InputBuffer;
 use unison_profiler::Profiler;
@@ -63,10 +64,15 @@ impl<G: Game> GameState<G> {
             return;
         }
 
-        // Set up profiler time function (clock_gettime CLOCK_MONOTONIC -> milliseconds)
+        // Initialize Android logger + profiler (once per process)
         use std::sync::Once;
         static PROFILER_INIT: Once = Once::new();
         PROFILER_INIT.call_once(|| {
+            android_logger::init_once(
+                android_logger::Config::default()
+                    .with_max_level(log::LevelFilter::Info)
+                    .with_tag("unison2d"),
+            );
             unison_profiler::set_time_fn(monotonic_time_ms);
             Profiler::set_enabled(true);
         });
@@ -133,7 +139,9 @@ impl<G: Game> GameState<G> {
         let frame_count = Profiler::frame_count();
         if frame_count > 0 && frame_count % PROFILER_LOG_INTERVAL == 0 {
             let stats = Profiler::format_stats();
-            eprintln!("{}", stats);
+            for line in stats.lines() {
+                info!("{}", line);
+            }
             Profiler::reset();
         }
     }

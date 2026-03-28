@@ -1,10 +1,14 @@
 package com.unison2d
 
 import android.app.Activity
+import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
 import android.view.MotionEvent
+import android.view.View
 import android.view.ViewGroup
+import android.view.WindowInsets
+import android.view.WindowInsetsController
 import android.view.WindowManager
 import android.widget.FrameLayout
 
@@ -41,12 +45,24 @@ open class GameActivity : Activity() {
         // Load the Rust game library
         System.loadLibrary(nativeLibraryName)
 
-        // Fullscreen immersive
-        @Suppress("DEPRECATION")
-        window.setFlags(
-            WindowManager.LayoutParams.FLAG_FULLSCREEN,
-            WindowManager.LayoutParams.FLAG_FULLSCREEN
-        )
+        // Fullscreen immersive — hide both status bar and navigation bar
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            window.insetsController?.let { controller ->
+                controller.hide(WindowInsets.Type.systemBars())
+                controller.systemBarsBehavior =
+                    WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            }
+        } else {
+            @Suppress("DEPRECATION")
+            window.decorView.systemUiVisibility = (
+                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                    or View.SYSTEM_UI_FLAG_FULLSCREEN
+                    or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                    or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                    or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                    or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+            )
+        }
 
         val root = FrameLayout(this)
 
@@ -60,8 +76,8 @@ open class GameActivity : Activity() {
 
         // Virtual joystick overlay (bottom-left)
         joystickView = JoystickView(this)
-        val joystickSizePx = (JoystickView.DEFAULT_SIZE_DP * resources.displayMetrics.density).toInt()
-        val marginPx = (20 * resources.displayMetrics.density).toInt()
+        val joystickSizePx = (JoystickView.VIEW_SIZE_DP * resources.displayMetrics.density).toInt()
+        val marginPx = 0 // Padding inside the view provides visual offset from screen edge
         val lp = FrameLayout.LayoutParams(joystickSizePx, joystickSizePx).apply {
             gravity = Gravity.BOTTOM or Gravity.START
             leftMargin = marginPx
