@@ -43,6 +43,7 @@
 
 // Engine layer
 mod engine;
+mod event_bus;
 mod object;
 mod object_system;
 mod camera_system;
@@ -52,6 +53,7 @@ mod prefab;
 mod game;
 
 pub use engine::Engine;
+pub use event_bus::{EventBus, HandlerId};
 pub use unison_render::AntiAliasing;
 pub use object::{ObjectId, SoftBodyDesc, RigidBodyDesc, SpriteDesc};
 pub use object_system::ObjectSystem;
