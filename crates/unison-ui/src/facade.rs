@@ -14,7 +14,7 @@
 //! ```
 
 use unison_input::InputState;
-use unison_core::Vec2;
+use unison_core::{EventSink, Vec2};
 use unison_render::Renderer;
 
 use crate::diff::diff_trees;
@@ -26,7 +26,7 @@ use crate::state::UiState;
 use crate::text::TextRenderer;
 
 /// The main UI facade. Generic over the game's event/action type `E`.
-pub struct Ui<E: Clone> {
+pub struct Ui<E: Clone + 'static> {
     /// Previous frame's tree (for diffing).
     prev_tree: UiTree<E>,
     /// Current frame's tree (set by `describe`).
@@ -39,13 +39,15 @@ pub struct Ui<E: Clone> {
     text_renderer: TextRenderer,
     /// Events triggered this frame (click actions etc.).
     events: Vec<E>,
+    /// Optional event sink — when set, events are emitted here instead of the internal vec.
+    event_sink: Option<EventSink>,
     /// Screen size (cached from last begin_frame).
     screen_size: Vec2,
     /// Whether `describe` has been called this frame.
     described: bool,
 }
 
-impl<E: Clone> Ui<E> {
+impl<E: Clone + 'static> Ui<E> {
     /// Create a new UI system with the given font.
     ///
     /// `font_bytes` should be raw TTF/OTF data. The device scale factor is
@@ -63,9 +65,19 @@ impl<E: Clone> Ui<E> {
             state: UiState::new(),
             text_renderer,
             events: Vec::new(),
+            event_sink: None,
             screen_size: Vec2::new(960.0, 540.0),
             described: false,
         })
+    }
+
+    /// Connect this UI to an event sink.
+    ///
+    /// When set, click events are emitted directly into the sink (routed to the
+    /// `EventBus` on flush) instead of accumulating in the internal buffer.
+    /// Call `drain_events()` still works but returns an empty vec when a sink is set.
+    pub fn set_event_sink(&mut self, sink: EventSink) {
+        self.event_sink = Some(sink);
     }
 
     /// Start a new frame. Processes input against the *previous* frame's layout,
@@ -94,7 +106,14 @@ impl<E: Clone> Ui<E> {
             screen_size,
         );
 
-        self.events = events;
+        // Route events: sink (→ EventBus) if wired, otherwise internal vec
+        if let Some(ref sink) = self.event_sink {
+            for event in events {
+                sink.emit(event);
+            }
+        } else {
+            self.events = events;
+        }
         result
     }
 

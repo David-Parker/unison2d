@@ -153,6 +153,22 @@ impl<'a, S> Ctx<'a, S> {
         self.renderer.end_frame();
     }
 
+    // ── UI factory ──
+
+    /// Create a UI system pre-wired to the event bus.
+    ///
+    /// Events from button clicks route through the `EventBus` automatically.
+    ///
+    /// ```ignore
+    /// let ui = ctx.create_ui::<MenuAction>(font_bytes)?;
+    /// ```
+    pub fn create_ui<E: Clone + 'static>(&mut self, font_bytes: Vec<u8>) -> Result<unison_ui::facade::Ui<E>, String> {
+        let sink = self.events.create_sink();
+        let mut ui = unison_ui::facade::Ui::new(font_bytes, self.renderer)?;
+        ui.set_event_sink(sink);
+        Ok(ui)
+    }
+
     // ── Event system ──
 
     /// Translate raw physics collision events and fire all pending event handlers.

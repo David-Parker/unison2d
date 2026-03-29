@@ -171,6 +171,24 @@ impl<A: Copy + Eq + Hash> Engine<A> {
         &mut self.events
     }
 
+    /// Create a UI system pre-wired to the event bus.
+    ///
+    /// Events from button clicks are automatically routed through the
+    /// `EventBus` instead of requiring manual `drain_events()` calls.
+    ///
+    /// ```ignore
+    /// let ui = engine.create_ui::<MenuAction>(font_bytes)?;
+    /// ```
+    pub fn create_ui<E: Clone + 'static>(&mut self, font_bytes: Vec<u8>) -> Result<unison_ui::facade::Ui<E>, String> {
+        let sink = self.events.create_sink();
+        let renderer = self.renderer.as_mut()
+            .ok_or("No renderer available")?
+            .as_mut();
+        let mut ui = unison_ui::facade::Ui::new(font_bytes, renderer)?;
+        ui.set_event_sink(sink);
+        Ok(ui)
+    }
+
     // ── Render targets ──
 
     /// Create an offscreen render target.
