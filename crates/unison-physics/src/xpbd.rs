@@ -193,6 +193,11 @@ pub struct CollisionSystem {
     pub stats_overlapping_pairs: u32,
     pub stats_collisions_found: u32,
     pub stats_iterations_run: u32,
+    // Collision events: when enabled, body pairs with contacts are recorded
+    pub(crate) collision_events_enabled: bool,
+    /// Body pair indices (soft body array index, not handles) that had contacts.
+    /// May contain duplicates — caller deduplicates via HashSet.
+    pub(crate) contact_body_pairs: Vec<(u32, u32)>,
 }
 
 impl CollisionSystem {
@@ -217,6 +222,8 @@ impl CollisionSystem {
             stats_overlapping_pairs: 0,
             stats_collisions_found: 0,
             stats_iterations_run: 0,
+            collision_events_enabled: false,
+            contact_body_pairs: Vec::new(),
         }
     }
 
@@ -370,6 +377,11 @@ impl CollisionSystem {
     pub fn resolve_collisions_with_kinematic_n(&mut self, bodies: &mut [XPBDSoftBody], is_kinematic: &[bool], iterations: u32) -> u32 {
         if self.overlapping_pairs.is_empty() {
             return 0;
+        }
+
+        // Clear contact pairs for this resolution pass
+        if self.collision_events_enabled {
+            self.contact_body_pairs.clear();
         }
 
         // Build candidates on first call after prepare()
@@ -679,7 +691,7 @@ impl CollisionSystem {
     /// Batches distance computation for 4 candidates at a time, then applies
     /// corrections scalar with kinematic awareness.
     #[cfg(feature = "simd")]
-    fn resolve_candidate_collisions_kinematic(&self, bodies: &mut [XPBDSoftBody], is_kinematic: &[bool]) -> u32 {
+    fn resolve_candidate_collisions_kinematic(&mut self, bodies: &mut [XPBDSoftBody], is_kinematic: &[bool]) -> u32 {
         let mut total_collisions = 0u32;
         let min_dist = self.min_dist;
         let min_dist_sq = min_dist * min_dist;
@@ -764,6 +776,12 @@ impl CollisionSystem {
                 if a_kinematic && b_kinematic { continue; }
 
                 total_collisions += 1;
+
+                if self.collision_events_enabled {
+                    let pair = if c.body_a < c.body_b { (c.body_a, c.body_b) } else { (c.body_b, c.body_a) };
+                    self.contact_body_pairs.push(pair);
+                }
+
                 let t = ts[j];
                 let dist = dist_sqs[j].sqrt();
                 let overlap = min_dist - dist;
@@ -813,7 +831,13 @@ impl CollisionSystem {
 
         // Scalar remainder
         for i in (chunks * 4)..n {
-            total_collisions += self.resolve_single_candidate_kinematic(bodies, i, min_dist, min_dist_sq, is_kinematic);
+            let found = self.resolve_single_candidate_kinematic(bodies, i, min_dist, min_dist_sq, is_kinematic);
+            if found > 0 && self.collision_events_enabled {
+                let c = &self.candidates[i];
+                let pair = if c.body_a < c.body_b { (c.body_a, c.body_b) } else { (c.body_b, c.body_a) };
+                self.contact_body_pairs.push(pair);
+            }
+            total_collisions += found;
         }
 
         total_collisions
@@ -822,13 +846,19 @@ impl CollisionSystem {
     /// Resolve collisions with kinematic body awareness (scalar fallback).
     /// Kinematic bodies don't get moved during collision resolution.
     #[cfg(not(feature = "simd"))]
-    fn resolve_candidate_collisions_kinematic(&self, bodies: &mut [XPBDSoftBody], is_kinematic: &[bool]) -> u32 {
+    fn resolve_candidate_collisions_kinematic(&mut self, bodies: &mut [XPBDSoftBody], is_kinematic: &[bool]) -> u32 {
         let mut total_collisions = 0u32;
         let min_dist = self.min_dist;
         let min_dist_sq = min_dist * min_dist;
 
         for i in 0..self.candidates.len() {
-            total_collisions += self.resolve_single_candidate_kinematic(bodies, i, min_dist, min_dist_sq, is_kinematic);
+            let found = self.resolve_single_candidate_kinematic(bodies, i, min_dist, min_dist_sq, is_kinematic);
+            if found > 0 && self.collision_events_enabled {
+                let c = &self.candidates[i];
+                let pair = if c.body_a < c.body_b { (c.body_a, c.body_b) } else { (c.body_b, c.body_a) };
+                self.contact_body_pairs.push(pair);
+            }
+            total_collisions += found;
         }
 
         total_collisions

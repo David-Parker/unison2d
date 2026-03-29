@@ -3,6 +3,8 @@
 //! Provides a clean interface for managing physics bodies, collision groups,
 //! and simulation stepping. Supports both soft bodies (XPBD) and true rigid bodies.
 
+use std::collections::HashSet;
+
 use crate::mesh::Mesh;
 use crate::rigid::{RigidBody, RigidBodyConfig, PointQuery};
 use crate::xpbd::{XPBDSoftBody, CollisionSystem};
@@ -18,6 +20,39 @@ impl BodyHandle {
     pub fn index(&self) -> usize {
         self.0
     }
+}
+
+// ── Collision events ──
+
+/// A raw collision event between two physics bodies (identified by handles).
+///
+/// Emitted at most once per body pair per `step()` call. For soft-soft
+/// collisions the contact data is approximate (first contact point found).
+#[derive(Clone, Debug)]
+pub struct RawCollisionEvent {
+    /// First body in the collision.
+    pub handle_a: BodyHandle,
+    /// Second body in the collision.
+    pub handle_b: BodyHandle,
+    /// Contact normal (from B toward A).
+    pub normal: Vec2,
+    /// Penetration depth.
+    pub penetration: f32,
+    /// Approximate contact point in world space.
+    pub contact_point: Vec2,
+    /// What kind of bodies collided.
+    pub kind: CollisionKind,
+}
+
+/// The types of bodies involved in a collision.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CollisionKind {
+    /// Two soft bodies.
+    SoftSoft,
+    /// A soft body (handle_a) and a rigid body (handle_b).
+    SoftRigid,
+    /// Two rigid bodies.
+    RigidRigid,
 }
 
 /// Collision group flags - bodies only collide if their groups overlap
@@ -230,6 +265,16 @@ pub struct PhysicsWorld {
 
     // Handle tracking
     next_handle: usize,
+    // Reverse lookup: array index → BodyHandle (parallel to soft_bodies / rigid_bodies)
+    soft_handles: Vec<BodyHandle>,
+    rigid_handles: Vec<BodyHandle>,
+
+    // Collision events
+    collision_events_enabled: bool,
+    /// Ordered (smaller, larger) handle pairs seen this step — for dedup.
+    active_collision_set: HashSet<(usize, usize)>,
+    /// Coalesced events ready for drain.
+    pending_collision_events: Vec<RawCollisionEvent>,
 
     // Render inflation: expand soft body meshes outward by this amount
     // to visually hide the collision skin gap (min_dist).
@@ -257,6 +302,11 @@ impl PhysicsWorld {
             post_collision_iters: 2,
             contact_iters: 5,
             next_handle: 0,
+            soft_handles: Vec::new(),
+            rigid_handles: Vec::new(),
+            collision_events_enabled: false,
+            active_collision_set: HashSet::new(),
+            pending_collision_events: Vec::new(),
             render_inflation: 0.075,
         }
     }
@@ -391,6 +441,7 @@ impl PhysicsWorld {
 
         self.soft_bodies.push(body);
         self.soft_body_data.push(body_data);
+        self.soft_handles.push(handle);
         self.triangles.push(mesh.triangles.clone());
         self.prev_render_positions.push(vertices.clone());
 
@@ -419,6 +470,7 @@ impl PhysicsWorld {
 
         self.rigid_bodies.push(body);
         self.rigid_body_data.push(body_data);
+        self.rigid_handles.push(handle);
 
         handle
     }
@@ -447,6 +499,7 @@ impl PhysicsWorld {
                 // Remove from soft body vectors
                 self.soft_bodies.remove(index);
                 self.soft_body_data.remove(index);
+                self.soft_handles.remove(index);
                 self.triangles.remove(index);
                 self.prev_render_positions.remove(index);
 
@@ -468,6 +521,7 @@ impl PhysicsWorld {
                 // Remove from rigid body vectors
                 self.rigid_bodies.remove(index);
                 self.rigid_body_data.remove(index);
+                self.rigid_handles.remove(index);
 
                 // Invalidate the handle
                 self.body_types[handle.0] = None;
@@ -1225,6 +1279,46 @@ impl PhysicsWorld {
         }
     }
 
+    // === Collision events ===
+
+    /// Enable or disable collision event recording.
+    ///
+    /// When enabled, `step()` accumulates one [`RawCollisionEvent`] per
+    /// colliding body pair. Retrieve them with [`drain_collision_events()`].
+    /// Defaults to `false` (zero overhead when unused).
+    pub fn set_collision_events_enabled(&mut self, enabled: bool) {
+        self.collision_events_enabled = enabled;
+        self.collision_system.collision_events_enabled = enabled;
+    }
+
+    /// Whether collision events are currently being recorded.
+    pub fn collision_events_enabled(&self) -> bool {
+        self.collision_events_enabled
+    }
+
+    /// Drain all collision events accumulated during the last `step()`.
+    ///
+    /// Returns an empty vec if collision events are disabled or no
+    /// collisions occurred.
+    pub fn drain_collision_events(&mut self) -> Vec<RawCollisionEvent> {
+        std::mem::take(&mut self.pending_collision_events)
+    }
+
+    /// Internal: record a unique collision pair (dedup by handle).
+    fn record_collision(&mut self, ha: BodyHandle, hb: BodyHandle, normal: Vec2, penetration: f32, contact_point: Vec2, kind: CollisionKind) {
+        let key = if ha.0 < hb.0 { (ha.0, hb.0) } else { (hb.0, ha.0) };
+        if self.active_collision_set.insert(key) {
+            self.pending_collision_events.push(RawCollisionEvent {
+                handle_a: ha,
+                handle_b: hb,
+                normal,
+                penetration,
+                contact_point,
+                kind,
+            });
+        }
+    }
+
     // === Simulation ===
 
     /// Snapshot current positions for render interpolation.
@@ -1243,6 +1337,12 @@ impl PhysicsWorld {
 
         if self.soft_bodies.is_empty() && self.rigid_bodies.is_empty() {
             return;
+        }
+
+        // Clear collision event state for this step
+        if self.collision_events_enabled {
+            self.active_collision_set.clear();
+            self.pending_collision_events.clear();
         }
 
         let substep_dt = dt / self.substeps as f32;
@@ -1282,6 +1382,16 @@ impl PhysicsWorld {
             {
                 profile_scope!("soft_collisions");
                 self.collision_system.resolve_collisions_n(&mut self.soft_bodies, self.contact_iters);
+            }
+
+            // Collect soft-soft contact pairs from collision system
+            if self.collision_events_enabled {
+                let pairs: Vec<_> = self.collision_system.contact_body_pairs.drain(..).collect();
+                for (sa, sb) in pairs {
+                    let ha = self.soft_handles[sa as usize];
+                    let hb = self.soft_handles[sb as usize];
+                    self.record_collision(ha, hb, Vec2::ZERO, 0.0, Vec2::ZERO, CollisionKind::SoftSoft);
+                }
             }
 
             // Resolve soft-vs-rigid collisions
@@ -1353,6 +1463,12 @@ impl PhysicsWorld {
             return;
         }
 
+        // Clear collision event state for this step
+        if self.collision_events_enabled {
+            self.active_collision_set.clear();
+            self.pending_collision_events.clear();
+        }
+
         let substep_dt = dt / self.substeps as f32;
 
         // Prepare collision system
@@ -1393,6 +1509,16 @@ impl PhysicsWorld {
             {
                 profile_scope!("soft_collisions");
                 self.collision_system.resolve_collisions_n(&mut self.soft_bodies, self.contact_iters);
+            }
+
+            // Collect soft-soft contact pairs from collision system
+            if self.collision_events_enabled {
+                let pairs: Vec<_> = self.collision_system.contact_body_pairs.drain(..).collect();
+                for (sa, sb) in pairs {
+                    let ha = self.soft_handles[sa as usize];
+                    let hb = self.soft_handles[sb as usize];
+                    self.record_collision(ha, hb, Vec2::ZERO, 0.0, Vec2::ZERO, CollisionKind::SoftSoft);
+                }
             }
 
             // Resolve soft-vs-rigid collisions
@@ -1453,17 +1579,21 @@ impl PhysicsWorld {
         let min_dist = 0.15; // Same as collision system
         let contact_threshold = 0.05; // Near-contact zone for rolling friction
         let margin = min_dist + contact_threshold;
+        let events_enabled = self.collision_events_enabled;
 
-        for soft_body in self.soft_bodies.iter_mut() {
-            // Cache soft body AABB once per soft body (not per rigid body)
-            let soft_aabb = soft_body.get_aabb();
+        // Collect (soft_idx, rigid_idx, normal, penetration, contact_point) for event recording.
+        // Stored locally to avoid borrow conflicts with self.soft_bodies/rigid_bodies.
+        let mut event_pairs: Vec<(usize, usize, f32, f32, f32, f32, f32)> = Vec::new();
 
-            for rigid_body in self.rigid_bodies.iter_mut() {
-                // Pre-compute trig values for this rigid body (rotation is constant during resolution)
+        for si in 0..self.soft_bodies.len() {
+            let soft_aabb = self.soft_bodies[si].get_aabb();
+
+            for ri in 0..self.rigid_bodies.len() {
+                let soft_body = &mut self.soft_bodies[si];
+                let rigid_body = &mut self.rigid_bodies[ri];
                 let cos_r = rigid_body.rotation.cos();
                 let sin_r = rigid_body.rotation.sin();
 
-                // Broad phase: AABB overlap using pre-computed trig
                 let rigid_aabb = rigid_body.collider.get_aabb_with_trig(
                     rigid_body.position, cos_r.abs(), sin_r.abs()
                 );
@@ -1475,13 +1605,13 @@ impl PhysicsWorld {
 
                 let friction = rigid_body.friction;
 
-                // Expanded rigid AABB for per-vertex culling
                 let cull_min_x = rigid_aabb.0 - margin;
                 let cull_min_y = rigid_aabb.1 - margin;
                 let cull_max_x = rigid_aabb.2 + margin;
                 let cull_max_y = rigid_aabb.3 + margin;
 
-                // Single-pass: unified query_point handles both penetration and near-surface
+                let mut had_contact = false;
+
                 for i in 0..soft_body.num_verts {
                     if soft_body.inv_mass[i] == 0.0 {
                         continue;
@@ -1490,14 +1620,18 @@ impl PhysicsWorld {
                     let vx = soft_body.pos[i * 2];
                     let vy = soft_body.pos[i * 2 + 1];
 
-                    // Per-vertex AABB culling (4 comparisons vs expensive narrow phase)
                     if vx < cull_min_x || vx > cull_max_x || vy < cull_min_y || vy > cull_max_y {
                         continue;
                     }
 
                     match rigid_body.query_point(vx, vy, contact_threshold, cos_r, sin_r) {
                         PointQuery::Penetrating(penetration, nx, ny) => {
-                            // Push soft body vertex out of rigid body
+                            // Record first contact for event
+                            if events_enabled && !had_contact {
+                                had_contact = true;
+                                event_pairs.push((si, ri, nx, ny, penetration, vx, vy));
+                            }
+
                             let soft_w = soft_body.inv_mass[i];
                             let rigid_w = rigid_body.inv_mass;
                             let total_w = soft_w + rigid_w;
@@ -1521,7 +1655,6 @@ impl PhysicsWorld {
                                 rigid_body.angular_velocity += torque;
                             }
 
-                            // Coulomb friction
                             let prev_x = soft_body.prev_pos[i * 2];
                             let prev_y = soft_body.prev_pos[i * 2 + 1];
                             let dx = soft_body.pos[i * 2] - prev_x;
@@ -1536,7 +1669,6 @@ impl PhysicsWorld {
                             soft_body.pos[i * 2 + 1] = prev_y + vel_normal * ny + tan_y * friction_factor;
                         }
                         PointQuery::NearSurface(_dist, nx, ny) => {
-                            // Near-contact rolling friction
                             let prev_x = soft_body.prev_pos[i * 2];
                             let prev_y = soft_body.prev_pos[i * 2 + 1];
                             let dx = soft_body.pos[i * 2] - prev_x;
@@ -1555,6 +1687,13 @@ impl PhysicsWorld {
                 }
             }
         }
+
+        // Record soft-rigid collision events (outside body borrows)
+        for (si, ri, nx, ny, pen, cx, cy) in event_pairs {
+            let ha = self.soft_handles[si];
+            let hb = self.rigid_handles[ri];
+            self.record_collision(ha, hb, Vec2::new(nx, ny), pen, Vec2::new(cx, cy), CollisionKind::SoftRigid);
+        }
     }
 
     /// Internal: resolve collisions between rigid body pairs.
@@ -1563,6 +1702,8 @@ impl PhysicsWorld {
     fn resolve_rigid_rigid_collisions(&mut self) {
         let n = self.rigid_bodies.len();
         if n < 2 { return; }
+        let events_enabled = self.collision_events_enabled;
+        let mut event_pairs: Vec<(usize, usize, f32, f32, f32, f32, f32)> = Vec::new();
 
         for i in 0..n {
             for j in (i + 1)..n {
@@ -1585,6 +1726,10 @@ impl PhysicsWorld {
                     &self.rigid_bodies[j],
                 );
                 let Some((penetration, nx, ny, contact_x, contact_y)) = contact else { continue };
+
+                if events_enabled {
+                    event_pairs.push((i, j, nx, ny, penetration, contact_x, contact_y));
+                }
 
                 let wa = self.rigid_bodies[i].inv_mass;
                 let wb = self.rigid_bodies[j].inv_mass;
@@ -1668,6 +1813,13 @@ impl PhysicsWorld {
                     }
                 }
             }
+        }
+
+        // Record rigid-rigid collision events (outside body borrows)
+        for (i, j, nx, ny, pen, cx, cy) in event_pairs {
+            let ha = self.rigid_handles[i];
+            let hb = self.rigid_handles[j];
+            self.record_collision(ha, hb, Vec2::new(nx, ny), pen, Vec2::new(cx, cy), CollisionKind::RigidRigid);
         }
     }
 

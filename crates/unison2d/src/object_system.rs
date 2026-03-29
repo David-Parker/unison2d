@@ -6,12 +6,30 @@
 
 use std::collections::HashMap;
 
-use unison_core::{Color, Vec2};
+use unison_core::{Color, EventSink, Vec2};
 use unison_physics::{BodyHandle, PhysicsWorld};
 use unison_render::{DrawMesh, DrawSprite, RenderCommand};
 use unison_lighting::Occluder;
 use unison_profiler::profile_scope;
 use crate::object::{ObjectEntry, ObjectId, ObjectKind, RigidBodyDesc, SoftBodyDesc, SpriteDesc};
+
+/// A collision event between two game objects.
+///
+/// Emitted into the [`EventBus`] after [`Ctx::flush_events()`] translates
+/// raw physics events from `BodyHandle` to `ObjectId`.
+#[derive(Clone, Debug)]
+pub struct CollisionEvent {
+    /// First object in the collision.
+    pub object_a: ObjectId,
+    /// Second object in the collision.
+    pub object_b: ObjectId,
+    /// Contact normal (from B toward A).
+    pub normal: Vec2,
+    /// Penetration depth.
+    pub penetration: f32,
+    /// Approximate contact point in world space.
+    pub contact_point: Vec2,
+}
 
 /// Manages game objects and their physics simulation.
 ///
@@ -327,6 +345,37 @@ impl ObjectSystem {
     /// Step the physics simulation by `dt` seconds.
     pub fn step(&mut self, dt: f32) {
         self.physics.step(dt);
+    }
+
+    // ── Collision events ──
+
+    /// Enable or disable collision event recording in the physics engine.
+    pub fn set_collision_events_enabled(&mut self, enabled: bool) {
+        self.physics.set_collision_events_enabled(enabled);
+    }
+
+    /// Whether collision events are currently enabled.
+    pub fn collision_events_enabled(&self) -> bool {
+        self.physics.collision_events_enabled()
+    }
+
+    /// Drain raw collision events from physics, translate BodyHandle → ObjectId,
+    /// and emit `CollisionEvent` into the given sink.
+    pub fn translate_collision_events(&mut self, sink: &EventSink) {
+        let raw_events = self.physics.drain_collision_events();
+        for raw in raw_events {
+            let obj_a = self.handle_map.get(&raw.handle_a).copied();
+            let obj_b = self.handle_map.get(&raw.handle_b).copied();
+            if let (Some(a), Some(b)) = (obj_a, obj_b) {
+                sink.emit(CollisionEvent {
+                    object_a: a,
+                    object_b: b,
+                    normal: raw.normal,
+                    penetration: raw.penetration,
+                    contact_point: raw.contact_point,
+                });
+            }
+        }
     }
 
     /// Snapshot physics state for interpolated rendering.

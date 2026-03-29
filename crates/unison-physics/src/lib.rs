@@ -51,6 +51,8 @@ pub use world::{
     BodyConfig,
     Material,
     CollisionGroups,
+    RawCollisionEvent,
+    CollisionKind,
 };
 
 // === Mesh utilities ===

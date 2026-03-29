@@ -11,7 +11,9 @@ use std::hash::Hash;
 use unison_input::{ActionMap, InputState, KeyCode, MouseButton};
 use unison_core::{Color, Rect};
 use unison_assets::AssetStore;
-use crate::level::{LevelContext, RenderContext};
+use crate::ctx::Ctx;
+use crate::event_bus::EventBus;
+use crate::World;
 use unison_render::{AntiAliasing, Renderer, RenderCommand, DrawSprite, TextureId, RenderTargetId, Camera};
 
 /// The engine struct. Manages input, actions, and renderer access.
@@ -35,6 +37,9 @@ pub struct Engine<A: Copy + Eq + Hash> {
 
     // Asset store for embedded assets.
     assets: AssetStore,
+
+    // Event bus for inter-component messaging.
+    events: EventBus<World>,
 }
 
 impl<A: Copy + Eq + Hash> Engine<A> {
@@ -46,6 +51,7 @@ impl<A: Copy + Eq + Hash> Engine<A> {
             renderer: None,
             fixed_dt: 1.0 / 60.0,
             assets: AssetStore::new(),
+            events: EventBus::new(),
         }
     }
 
@@ -135,33 +141,34 @@ impl<A: Copy + Eq + Hash> Engine<A> {
         renderer.create_texture(&desc)
     }
 
-    /// Build a [`LevelContext`] from this engine's input/dt and the given shared state.
+    /// Build a [`Ctx`] from this engine's input, renderer, events, dt, and the given shared state.
     ///
-    /// Convenience method to avoid manually constructing the context each frame:
+    /// The unified context replaces the old split `LevelContext` / `RenderContext`.
+    /// Levels receive this single context for both update and render.
+    ///
     /// ```ignore
-    /// let mut ctx = engine.level_context(&mut self.shared);
+    /// let mut ctx = engine.ctx(&mut self.shared);
     /// level.update(&mut ctx);
+    /// level.render(&mut ctx);
     /// ```
-    pub fn level_context<'a, S>(&'a self, shared: &'a mut S) -> LevelContext<'a, S> {
-        LevelContext {
+    ///
+    /// Panics if the renderer is not set (should only happen if called before platform init).
+    pub fn ctx<'a, S>(&'a mut self, shared: &'a mut S) -> Ctx<'a, S> {
+        let renderer = self.renderer.as_mut()
+            .expect("Engine::ctx() called before renderer was set")
+            .as_mut();
+        Ctx {
             input: &self.input,
             dt: self.fixed_dt,
             shared,
+            renderer,
+            events: &mut self.events,
         }
     }
 
-    /// Build a [`RenderContext`] from this engine's renderer.
-    ///
-    /// Convenience method to avoid manually unwrapping the renderer each frame:
-    /// ```ignore
-    /// if let Some(mut ctx) = engine.render_context() {
-    ///     level.render(&mut ctx);
-    /// }
-    /// ```
-    pub fn render_context(&mut self) -> Option<RenderContext<'_>> {
-        self.renderer.as_mut().map(|r| RenderContext {
-            renderer: &mut **r,
-        })
+    /// Access the event bus directly.
+    pub fn events(&mut self) -> &mut EventBus<World> {
+        &mut self.events
     }
 
     // ── Render targets ──
