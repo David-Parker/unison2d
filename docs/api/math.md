@@ -1,8 +1,8 @@
 # unison-core
 
-Shared math and color types used across all Unison 2D engine crates. Zero dependencies.
+Shared math, color, and event types used across all Unison 2D engine crates. Zero dependencies.
 
-Accessible via `unison2d::math` or directly as `unison_core`.
+Accessible via `unison2d::core` or directly as `unison_core`.
 
 ## Types
 
@@ -136,3 +136,28 @@ rng.range_u32(1, 7);           // u32 in [1, 7) (i.e., 1..6)
 ```
 
 A seed of 0 is replaced with 1 (xorshift has a fixed point at 0).
+
+## `EventSink`
+
+A cheap, cloneable write handle for emitting events into a shared buffer. Used by subsystems (UI, physics) to route events into the engine's `EventBus`.
+
+```rust
+use unison_core::EventSink;
+
+let sink = EventSink::new();
+sink.emit(42u32);                  // type-erased, stored as Box<dyn Any>
+let events = sink.drain();         // drain all pending events
+
+let sink2 = sink.clone();          // cheap Rc clone, shares the same buffer
+sink2.emit("hello".to_string());   // both sinks write to the same buffer
+```
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `new` | `fn new() -> EventSink` | Create a new sink with an empty buffer |
+| `emit` | `fn emit<T: 'static>(&self, event: T)` | Emit a type-erased event into the buffer |
+| `drain` | `fn drain(&self) -> Vec<Box<dyn Any>>` | Drain all pending events |
+| `is_empty` | `fn is_empty(&self) -> bool` | Check if buffer is empty |
+| `clone` | `fn clone(&self) -> EventSink` | Cheap Rc clone — shares the same buffer |
+
+Typically you don't create sinks directly. Use `EventBus::create_sink()` or `ctx.create_ui()` which wire the sink to the bus automatically.

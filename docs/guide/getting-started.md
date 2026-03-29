@@ -30,7 +30,7 @@ Every Unison game implements the `Game` trait. Here's the smallest working game:
 ```rust
 use wasm_bindgen::prelude::*;
 use unison2d::*;
-use unison2d::math::{Color, Vec2};
+use unison2d::core::{Color, Vec2};
 use unison2d::physics::{Material, mesh::create_ring_mesh};
 use unison2d::render::TextureId;
 use unison2d::input::KeyCode;
@@ -122,7 +122,7 @@ You create objects through `world.spawn_*()` methods and advance the simulation 
 
 `Engine<A>` is a thin shell the platform gives you. It provides:
 - Input binding and action queries
-- Renderer access (`engine.render_context()`)
+- Renderer access (`engine.ctx(&mut shared)`)
 - Fixed timestep (`engine.dt()`)
 
 Engine does NOT own your game state — that's your job.

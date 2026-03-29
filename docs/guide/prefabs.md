@@ -16,7 +16,7 @@ A prefab defines *how* to create an object. Each call to `spawn()` creates an in
 
 ```rust
 use unison2d::*;
-use unison2d::math::{Color, Vec2};
+use unison2d::core::{Color, Vec2};
 use unison2d::physics::{Material, mesh::create_ring_mesh};
 
 pub struct DonutPrefab;
@@ -146,7 +146,7 @@ pub fn drive_donut(world: &mut World, donut: ObjectId, input: &InputState, dt: f
 Then each level's update is just:
 
 ```rust
-fn update(&mut self, ctx: &mut LevelContext<SharedState>) {
+fn update(&mut self, ctx: &mut Ctx<SharedState>) {
     drive_donut(&mut self.world, self.donut, ctx.input, ctx.dt);
     // Level-specific logic...
     self.world.step(ctx.dt);

@@ -47,13 +47,31 @@ self.world.auto_render(&mut renderer);
 | Method | Description |
 |--------|-------------|
 | `Ui::new(font_bytes, renderer) -> Result<Self, String>` | Create UI with TTF/OTF font data. Scale factor derived from renderer's drawable/screen size. |
+| `set_event_sink(sink)` | Route click events through an `EventSink` (→ `EventBus`) instead of the internal buffer. |
 | `begin_frame(input, screen_size, dt) -> UiInputResult` | Process input against previous frame's layout, advance animations. Returns `UiInputResult`. |
 | `describe(tree, renderer)` | Diff against previous tree, update widget state, compute layout. Also re-checks scale factor. |
-| `drain_events() -> Vec<E>` | Consume triggered events. Second call returns empty vec. |
+| `drain_events() -> Vec<E>` | Consume triggered events. Returns empty vec when an event sink is set. |
 | `render(world, renderer)` | Emit overlay render commands via `OverlayTarget`. Call before `world.auto_render()`. |
 | `text_renderer() -> &mut TextRenderer` | Access the `TextRenderer` (e.g., for custom text measurement). |
 | `layout() -> &Layout` | Access current `Layout` (for debugging or custom hit testing). |
 | `state() -> &UiState` | Access widget `UiState` (for debugging or custom rendering). |
+
+### Event Routing
+
+By default, UI events accumulate in an internal buffer and are consumed via `drain_events()`. For EventBus integration, wire up an `EventSink`:
+
+```rust
+// Option A: Use the factory (creates UI + wires sink automatically)
+let ui = engine.create_ui::<MenuAction>(font_bytes)?;
+// or from a Ctx:
+let ui = ctx.create_ui::<MenuAction>(font_bytes)?;
+
+// Option B: Wire manually
+let mut ui = Ui::new(font_bytes, renderer)?;
+ui.set_event_sink(engine.events().create_sink());
+```
+
+When a sink is set, click events flow through the `EventBus` and can be handled with `ctx.events.on::<MenuAction>(...)`. When no sink is set, use `drain_events()` as before.
 
 ## `UiInputResult`
 

@@ -10,7 +10,7 @@ Force-based movement with ground check for jumping:
 const MOVE_FORCE: f32 = 80.0;
 const JUMP_IMPULSE: f32 = 10.0;
 
-fn update_player(&mut self, ctx: &mut LevelContext<SharedState>) {
+fn update_player(&mut self, ctx: &mut Ctx<SharedState>) {
     let left = ctx.input.is_key_pressed(KeyCode::ArrowLeft);
     let right = ctx.input.is_key_pressed(KeyCode::ArrowRight);
     let jump = ctx.input.is_key_just_pressed(KeyCode::Space);
@@ -59,7 +59,7 @@ struct MyLevel {
 const SPAWN_INTERVAL: f32 = 0.6;
 const MAX_OBJECTS: usize = 40;
 
-fn update(&mut self, ctx: &mut LevelContext<SharedState>) {
+fn update(&mut self, ctx: &mut Ctx<SharedState>) {
     self.spawn_timer += ctx.dt;
     if self.spawn_timer >= SPAWN_INTERVAL {
         self.spawn_timer -= SPAWN_INTERVAL;
@@ -154,10 +154,10 @@ struct MyLevel {
 world.cameras.add("overview", Camera::new(20.0, 15.0));
 
 // Lazy init (render targets need the renderer, which isn't available in the constructor):
-fn ensure_pip(&mut self, ctx: &mut RenderContext) {
+fn ensure_pip(&mut self, ctx: &mut Ctx<SharedState>) {
     if self.pip.is_some() { return; }
 
-    let (screen_w, screen_h) = ctx.screen_size();
+    let (screen_w, screen_h) = ctx.renderer.screen_size();
     let pip_w = (screen_w / 4.0) as u32;
     let pip_h = (pip_w as f32 * screen_h / screen_w) as u32;
 
@@ -168,7 +168,7 @@ fn ensure_pip(&mut self, ctx: &mut RenderContext) {
         cam.height = cam_height;
     }
 
-    let (target, texture) = ctx.create_render_target(pip_w, pip_h)
+    let (target, texture) = ctx.renderer.create_render_target(pip_w, pip_h)
         .expect("Failed to create PiP render target");
     self.pip = Some(PipTarget { target, texture });
 }
@@ -177,7 +177,7 @@ fn ensure_pip(&mut self, ctx: &mut RenderContext) {
 ### Rendering
 
 ```rust
-fn render(&mut self, ctx: &mut RenderContext) {
+fn render(&mut self, ctx: &mut Ctx<SharedState>) {
     self.ensure_pip(ctx);
     let pip = self.pip.as_ref().unwrap();
 

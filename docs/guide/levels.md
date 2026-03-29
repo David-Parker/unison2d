@@ -13,8 +13,8 @@ Levels are the recommended way to organize a multi-scene game. Each level is a s
 pub trait Level<S = ()> {
     fn world(&self) -> &World;
     fn world_mut(&mut self) -> &mut World;
-    fn update(&mut self, ctx: &mut LevelContext<S>);
-    fn render(&mut self, ctx: &mut RenderContext);
+    fn update(&mut self, ctx: &mut Ctx<S>);
+    fn render(&mut self, ctx: &mut Ctx<S>);
 
     // Lifecycle hooks (default no-op):
     fn on_enter(&mut self) {}
@@ -30,7 +30,7 @@ pub trait Level<S = ()> {
 
 ```rust
 use unison2d::*;
-use unison2d::math::{Color, Vec2};
+use unison2d::core::{Color, Vec2};
 use unison2d::physics::{Material, mesh::create_ring_mesh};
 use unison2d::input::KeyCode;
 
@@ -64,20 +64,20 @@ impl Level for GameplayLevel {
     fn world(&self) -> &World { &self.world }
     fn world_mut(&mut self) -> &mut World { &mut self.world }
 
-    fn update(&mut self, ctx: &mut LevelContext) {
+    fn update(&mut self, ctx: &mut Ctx<()>) {
         if ctx.input.is_key_pressed(KeyCode::ArrowRight) {
             self.world.objects.apply_force(self.player, Vec2::new(80.0, 0.0));
         }
         self.world.step(ctx.dt);
     }
 
-    fn render(&mut self, ctx: &mut RenderContext) {
+    fn render(&mut self, ctx: &mut Ctx<()>) {
         self.world.auto_render(ctx.renderer);
     }
 }
 ```
 
-Key difference from `Game`: levels use `ctx.input` (raw `InputState`) instead of `engine.action_*()`. This is because input bindings live on the Engine, not on levels.
+Key difference from `Game`: levels use `ctx.input` (raw `InputState`) instead of `engine.action_*()`. This is because input bindings live on the Engine, not on levels. The unified `Ctx<S>` provides `input`, `dt`, `shared`, `renderer`, and `events` in both `update()` and `render()`.
 
 ## Shared State & Events
 
@@ -101,7 +101,7 @@ pub struct SharedState {
 
 ```rust
 impl Level<SharedState> for GameplayLevel {
-    fn update(&mut self, ctx: &mut LevelContext<SharedState>) {
+    fn update(&mut self, ctx: &mut Ctx<SharedState>) {
         // Gameplay logic...
 
         if player_reached_goal {
@@ -125,7 +125,7 @@ impl Game for MyGame {
 
     fn update(&mut self, engine: &mut Engine<Action>) {
         // Build context and update the active level
-        let mut ctx = engine.level_context(&mut self.shared);
+        let mut ctx = engine.ctx(&mut self.shared);
         self.active_level_mut().update(&mut ctx);
 
         // Drain events and react
@@ -145,10 +145,8 @@ impl Game for MyGame {
     }
 
     fn render(&mut self, engine: &mut Engine<Action>) {
-        if let Some(renderer) = engine.renderer_mut() {
-            let mut ctx = RenderContext { renderer };
-            self.active_level_mut().render(&mut ctx);
-        }
+        let mut ctx = engine.ctx(&mut self.shared);
+        self.active_level_mut().render(&mut ctx);
     }
 
     // ...
@@ -207,12 +205,12 @@ This gives you:
 
 All hooks default to no-ops. Use them for setup/teardown that should happen on transitions (starting music, resetting timers, releasing resources).
 
-## RenderContext
+## Rendering
 
-Levels receive a `RenderContext` in `render()` instead of raw renderer access. It wraps the renderer and adds compositing helpers:
+Levels receive a `Ctx<S>` in `render()` — the same unified context used in `update()`. The renderer is available as `ctx.renderer`:
 
 ```rust
-fn render(&mut self, ctx: &mut RenderContext) {
+fn render(&mut self, ctx: &mut Ctx<S>) {
     // Simple: render all layers through the main camera
     self.world.auto_render(ctx.renderer);
 }
@@ -233,7 +231,7 @@ world.draw(tree_mesh, 0);          // default lit scene layer
 For multi-camera setups, use render targets and overlay helpers:
 
 ```rust
-fn render(&mut self, ctx: &mut RenderContext) {
+fn render(&mut self, ctx: &mut Ctx<S>) {
     self.world.render_to_targets(ctx.renderer, &[
         ("overview", self.pip_target),
         ("main", RenderTargetId::SCREEN),
@@ -244,13 +242,12 @@ fn render(&mut self, ctx: &mut RenderContext) {
 }
 ```
 
-The `Game` builds the `RenderContext` using `engine.render_context()`:
+The `Game` builds the `Ctx<S>` using `engine.ctx()`:
 
 ```rust
 fn render(&mut self, engine: &mut Engine<Action>) {
-    if let Some(mut ctx) = engine.render_context() {
-        level.render(&mut ctx);
-    }
+    let mut ctx = engine.ctx(&mut self.shared);
+    level.render(&mut ctx);
 }
 ```
 

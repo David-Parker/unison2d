@@ -17,8 +17,7 @@ Game (your struct)
 │   ├── LightingSystem — point lights, directional lights, shadows
 │   └── Environment    — background color
 └── Level<S> (trait) — optional scene abstraction with shared state
-    ├── LevelContext<S>  — input + dt + shared state
-    └── RenderContext    — renderer + compositing helpers
+    └── Ctx<S>           — unified context (input, renderer, events, dt, shared)
 ```
 
 - **Engine** is a thin shell — only input mapping, renderer access, and asset store
@@ -436,7 +435,7 @@ color.lerp(other, 0.5)              // linear interpolation
 ### Math Utilities
 
 ```rust
-use unison2d::math::{lerp, smoothstep, Rng};
+use unison2d::core::{lerp, smoothstep, Rng};
 
 lerp(0.0, 10.0, 0.5)     // 5.0 — scalar linear interpolation
 smoothstep(0.5)           // 0.5 — smooth ease-in/ease-out
@@ -528,8 +527,8 @@ Optional scene abstraction with shared state and lifecycle hooks. Each level own
 pub trait Level<S = ()> {
     fn world(&self) -> &World;
     fn world_mut(&mut self) -> &mut World;
-    fn update(&mut self, ctx: &mut LevelContext<S>);
-    fn render(&mut self, ctx: &mut RenderContext);
+    fn update(&mut self, ctx: &mut Ctx<S>);
+    fn render(&mut self, ctx: &mut Ctx<S>);
 
     // Lifecycle hooks (default no-op):
     fn on_enter(&mut self) {}
@@ -539,51 +538,76 @@ pub trait Level<S = ()> {
 }
 ```
 
-### LevelContext
+### Ctx (Unified Context)
 
-Bundled context passed to `Level::update()`:
+Single context passed to levels for both update and render. Replaces the old split `LevelContext` / `RenderContext`:
 
 ```rust
-pub struct LevelContext<'a, S = ()> {
-    pub input: &'a InputState,    // raw input for this frame
-    pub dt: f32,                  // fixed timestep delta
-    pub shared: &'a mut S,        // shared state from the Game
+pub struct Ctx<'a, S = ()> {
+    pub input: &'a InputState,                      // raw input for this frame
+    pub dt: f32,                                     // fixed timestep delta
+    pub shared: &'a mut S,                           // shared state from the Game
+    pub renderer: &'a mut dyn Renderer<Error = String>, // renderer
+    pub events: &'a mut EventBus<World>,             // event bus
 }
 ```
 
-Build it with the engine convenience method:
+Build from the engine:
 
 ```rust
-let mut ctx = engine.level_context(&mut self.shared);
+let mut ctx = engine.ctx(&mut self.shared);
 level.update(&mut ctx);
-```
-
-### RenderContext
-
-Bundled context passed to `Level::render()`:
-
-```rust
-pub struct RenderContext<'a> {
-    pub renderer: &'a mut dyn Renderer<Error = String>,
-}
+level.render(&mut ctx);
 ```
 
 | Method | Description |
 |--------|-------------|
-| `create_render_target(w, h)` | Create an offscreen render target, returns `(RenderTargetId, TextureId)` |
-| `bind_render_target(id)` | Bind a render target for subsequent draw calls |
-| `destroy_render_target(id)` | Destroy an offscreen render target |
 | `screen_size()` | Get screen/canvas size in pixels |
-| `draw_overlay(texture, position, size)` | Draw a render-target texture as a screen-space overlay (0..1 NDC) |
-| `draw_overlay_bordered(texture, position, size, border_width, border_color)` | Same, with a colored border |
+| `create_render_target(w, h)` | Create offscreen render target, returns `(RenderTargetId, TextureId)` |
+| `bind_render_target(id)` | Bind render target for draw calls |
+| `destroy_render_target(id)` | Destroy offscreen render target |
+| `draw_overlay(texture, position, size)` | Draw render-target texture as screen-space overlay (0..1 NDC) |
+| `draw_overlay_bordered(texture, pos, size, border, color)` | Same, with a colored border |
+| `create_ui::<E>(font_bytes) -> Result<Ui<E>>` | Create UI pre-wired to the event bus |
+| `flush_events(world)` | Translate collision events and fire all event handlers |
+| `on_collision(world, handler) -> HandlerId` | Register handler for all collisions |
+| `on_collision_for(world, object, handler) -> HandlerId` | Collisions involving a specific object |
+| `on_collision_between(world, a, b, handler) -> HandlerId` | Collisions between two specific objects |
 
-Build it with the engine convenience method:
+## Event System
+
+The `EventBus<World>` provides type-erased pub/sub messaging. Access via `ctx.events` or `engine.events()`.
+
+### Registering Handlers
 
 ```rust
-if let Some(mut ctx) = engine.render_context() {
-    level.render(&mut ctx);
-}
+ctx.events.on::<MyEvent>(|event, world| { /* handle */ });
+ctx.events.off(id);  // unsubscribe
 ```
+
+### Emitting Events
+
+```rust
+ctx.events.emit(MyEvent { score: 100 });
+```
+
+### Collision Events
+
+Auto-enabled when registering collision handlers:
+
+```rust
+ctx.on_collision(&mut self.world, |event, world| {
+    println!("{:?} hit {:?}", event.object_a, event.object_b);
+});
+
+ctx.on_collision_between(&mut self.world, player, coin, |event, world| {
+    world.objects.despawn(event.object_b);
+});
+```
+
+Call `ctx.flush_events(&mut self.world)` after `world.step(dt)` each frame.
+
+`CollisionEvent`: `object_a`, `object_b`, `normal`, `penetration`, `contact_point`.
 
 ## Project Setup
 

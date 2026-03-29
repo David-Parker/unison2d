@@ -45,16 +45,22 @@ Thin shell for input, actions, renderer access, and compositing. Does NOT own a 
 | `action_just_ended(action) -> bool` | Action released this frame |
 | `action_axis(neg, pos) -> f32` | -1/0/+1 axis from two actions |
 
-### Renderer Access
+### Context & Renderer
 
 | Method | Description |
 |--------|-------------|
+| `ctx(shared) -> Ctx<S>` | Build a unified `Ctx` for passing to levels |
 | `renderer_mut() -> Option<&mut dyn Renderer>` | Mutable renderer access |
-| `render_context() -> Option<RenderContext>` | Build a `RenderContext` for passing to levels |
-| `level_context(shared) -> LevelContext<S>` | Build a `LevelContext` for passing to levels |
 | `dt() -> f32` | Fixed timestep delta |
 | `input_state() -> &InputState` | Raw input state |
 | `actions_mut() -> &mut ActionMap<A>` | Direct action map access |
+
+### Events & UI
+
+| Method | Description |
+|--------|-------------|
+| `events() -> &mut EventBus<World>` | Access the event bus directly |
+| `create_ui::<E>(font_bytes) -> Result<Ui<E>>` | Create a UI pre-wired to the event bus |
 
 ### Render Targets
 
@@ -274,8 +280,8 @@ Optional abstraction for self-contained game scenes, generic over shared state `
 pub trait Level<S = ()> {
     fn world(&self) -> &World;
     fn world_mut(&mut self) -> &mut World;
-    fn update(&mut self, ctx: &mut LevelContext<S>);
-    fn render(&mut self, ctx: &mut RenderContext);
+    fn update(&mut self, ctx: &mut Ctx<S>);
+    fn render(&mut self, ctx: &mut Ctx<S>);
 
     fn on_enter(&mut self) {}
     fn on_exit(&mut self) {}
@@ -284,33 +290,82 @@ pub trait Level<S = ()> {
 }
 ```
 
-### LevelContext
+### Ctx (Unified Context)
+
+Replaces the old split `LevelContext` / `RenderContext`. Levels receive a single context for both update and render:
 
 ```rust
-pub struct LevelContext<'a, S = ()> {
+pub struct Ctx<'a, S = ()> {
     pub input: &'a InputState,
     pub dt: f32,
     pub shared: &'a mut S,
+    pub renderer: &'a mut dyn Renderer<Error = String>,
+    pub events: &'a mut EventBus<World>,
 }
 ```
 
-### RenderContext
+Build from the engine:
 
 ```rust
-pub struct RenderContext<'a> {
-    pub renderer: &'a mut dyn Renderer<Error = String>,
-}
+let mut ctx = engine.ctx(&mut self.shared);
+level.update(&mut ctx);
+level.render(&mut ctx);
 ```
 
 | Method | Description |
 |--------|-------------|
+| `screen_size()` | Get screen/canvas size in pixels |
 | `create_render_target(w, h)` | Create offscreen render target |
 | `bind_render_target(id)` | Bind render target for draw calls |
 | `destroy_render_target(id)` | Destroy offscreen render target |
-| `screen_size()` | Get screen/canvas size in pixels |
 | `draw_overlay(texture, position, size)` | Draw render-target texture as screen-space overlay (0..1 NDC) |
-| `draw_overlay_bordered(texture, position, size, border_width, border_color)` | Same, with a colored border |
+| `draw_overlay_bordered(texture, pos, size, border, color)` | Same, with a colored border |
+| `create_ui::<E>(font_bytes) -> Result<Ui<E>>` | Create a UI pre-wired to the event bus |
+| `flush_events(world)` | Translate collision events and fire all event handlers |
+| `on_collision(world, handler) -> HandlerId` | Register handler for all collisions |
+| `on_collision_for(world, object, handler) -> HandlerId` | Collisions involving a specific object |
+| `on_collision_between(world, a, b, handler) -> HandlerId` | Collisions between two specific objects |
+
+## Event System
+
+The `EventBus<World>` provides type-erased pub/sub messaging. Subsystems (UI, physics) emit events through `EventSink`s; game code registers handlers.
+
+### EventBus
+
+```rust
+// Register handlers
+let id = ctx.events.on::<MyEvent>(|event, world| { /* ... */ });
+ctx.events.off(id);  // unsubscribe
+
+// Emit events directly
+ctx.events.emit(MyEvent { score: 100 });
+
+// Flush: drains all sinks, fires handlers
+ctx.flush_events(&mut self.world);
 ```
+
+### Collision Events
+
+```rust
+// Register in init:
+ctx.on_collision(&mut self.world, |event, world| {
+    println!("{:?} hit {:?}", event.object_a, event.object_b);
+});
+
+ctx.on_collision_for(&mut self.world, player, |event, world| {
+    // fires when player is object_a or object_b
+});
+
+ctx.on_collision_between(&mut self.world, player, coin, |event, world| {
+    world.objects.despawn(event.object_b);
+});
+
+// In update:
+self.world.step(ctx.dt);
+ctx.flush_events(&mut self.world);
+```
+
+`CollisionEvent` fields: `object_a`, `object_b`, `normal`, `penetration`, `contact_point`.
 
 ## Object Types
 
