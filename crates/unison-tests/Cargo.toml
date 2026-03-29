@@ -7,7 +7,7 @@ publish = false
 [dev-dependencies]
 unison-physics = { path = "../unison-physics" }
 unison2d = { path = "../unison2d" }
-unison-math = { path = "../unison-math" }
+unison-core = { path = "../unison-core" }
 unison-render = { path = "../unison-render" }
 unison-lighting = { path = "../unison-lighting" }
 unison-input = { path = "../unison-input" }

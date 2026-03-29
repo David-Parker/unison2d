@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 use std::hash::Hash;
-use unison_math::Rect;
+use unison_core::Rect;
 use crate::types::{KeyCode, MouseButton, TouchPhase};
 use crate::state::InputState;
 
@@ -281,8 +281,8 @@ mod tests {
 
         // Define a jump button region at bottom-right of screen
         let jump_region = Rect::from_center(
-            unison_math::Vec2::new(700.0, 500.0),
-            unison_math::Vec2::new(100.0, 100.0),
+            unison_core::Vec2::new(700.0, 500.0),
+            unison_core::Vec2::new(100.0, 100.0),
         );
         actions.bind_touch_region(jump_region, TestAction::Jump);
 

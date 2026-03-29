@@ -1,6 +1,6 @@
 # unison-render
 
-Platform-agnostic rendering abstractions. Platform crates implement the `Renderer` trait. Depends on: `unison-math`, `image`.
+Platform-agnostic rendering abstractions. Platform crates implement the `Renderer` trait. Depends on: `unison-core`, `image`.
 
 ## decode_image
 

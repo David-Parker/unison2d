@@ -1,6 +1,6 @@
 # unison-physics
 
-XPBD soft body and rigid body physics simulation. Platform-independent. Uses `Vec2` from `unison-math`.
+XPBD soft body and rigid body physics simulation. Platform-independent. Uses `Vec2` from `unison-core`.
 
 ## PhysicsWorld
 
@@ -8,7 +8,7 @@ The main entry point. Manages all bodies and runs the simulation.
 
 ```rust
 use unison_physics::{PhysicsWorld, BodyHandle, BodyConfig, Material, Mesh};
-use unison_math::Vec2;
+use unison_core::Vec2;
 
 let mut world = PhysicsWorld::new();
 world.set_gravity(-9.81);
@@ -367,7 +367,7 @@ match body.query_point(px, py, contact_threshold, cos_r, sin_r) {
 
 ## Math
 
-Internal 2x2 matrix utilities used by the FEM solver. For `Vec2`, see `unison-math`.
+Internal 2x2 matrix utilities used by the FEM solver. For `Vec2`, see `unison-core`.
 
 ```rust
 type Mat2 = [f32; 4]; // column-major

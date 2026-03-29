@@ -13,7 +13,7 @@ use objc::runtime::Object;
 use objc::sel;
 use objc::sel_impl;
 
-use unison_math::Color;
+use unison_core::Color;
 use unison_render::{
     AntiAliasing, BlendMode, Camera, DrawLitSprite, DrawMesh, DrawSprite, RenderCommand,
     RenderTargetId, Renderer, TextureDescriptor, TextureFilter, TextureFormat, TextureId,

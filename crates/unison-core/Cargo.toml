@@ -1,0 +1,8 @@
+[package]
+name = "unison-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Unison 2D Game Engine - Core primitives: math, color, event sink"
+
+[dependencies]

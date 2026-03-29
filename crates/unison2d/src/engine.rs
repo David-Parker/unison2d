@@ -9,7 +9,7 @@
 use std::hash::Hash;
 
 use unison_input::{ActionMap, InputState, KeyCode, MouseButton};
-use unison_math::{Color, Rect};
+use unison_core::{Color, Rect};
 use unison_assets::AssetStore;
 use crate::level::{LevelContext, RenderContext};
 use unison_render::{AntiAliasing, Renderer, RenderCommand, DrawSprite, TextureId, RenderTargetId, Camera};

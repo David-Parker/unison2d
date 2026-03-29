@@ -1,3 +1,3 @@
-//! Color type — re-exported from unison-math.
+//! Color type — re-exported from unison-core.
 
-pub use unison_math::Color;
+pub use unison_core::Color;

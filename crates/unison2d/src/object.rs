@@ -1,6 +1,6 @@
 //! Object management — the registry of game objects tracked by Engine.
 
-use unison_math::{Color, Vec2};
+use unison_core::{Color, Vec2};
 use unison_physics::{BodyConfig, BodyHandle, Collider, Material, Mesh, RigidBodyConfig};
 use unison_render::TextureId;
 

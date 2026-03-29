@@ -314,5 +314,5 @@ Point lights are rendered using a 64×64 radial gradient texture generated at ru
 
 ## Dependencies
 
-- `unison-math` — Vec2, Color
+- `unison-core` — Vec2, Color
 - `unison-render` — Renderer trait, BlendMode, Camera, RenderCommand, DrawLitSprite

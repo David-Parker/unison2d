@@ -25,6 +25,32 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
+name = "aho-corasick"
+version = "1.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ddd31a130427c27518df266943a5308ed92d4b226cc639f5a8f1002816174301"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
+name = "android_log-sys"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "84521a3cf562bc62942e294181d9eef17eb38ceb8c68677bc49f144e4c3d4f8d"
+
+[[package]]
+name = "android_logger"
+version = "0.14.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "05b07e8e73d720a1f2e4b6014766e6039fd2e96a4fa44e2a78d0e1fa2ff49826"
+dependencies = [
+ "android_log-sys",
+ "env_filter",
+ "log",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -155,6 +181,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9481c1c90cbf2ac953f07c8d4a58aa3945c425b7185c9154d67a65e4230da511"
 dependencies = [
  "cfg-if",
+]
+
+[[package]]
+name = "env_filter"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1bf3c259d255ca70051b30e2e95b5446cdb8949ac4cd22c0d7fd634d89f568e2"
+dependencies = [
+ "log",
+ "regex",
 ]
 
 [[package]]
@@ -452,6 +488,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "regex"
+version = "1.12.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e10754a14b9137dd7b1e3e5b0493cc9171fdd105e0ab477f51b72e7f3ac0e276"
+dependencies = [
+ "aho-corasick",
+ "memchr",
+ "regex-automata",
+ "regex-syntax",
+]
+
+[[package]]
+name = "regex-automata"
+version = "0.4.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6e1dd4122fc1595e8162618945476892eefca7b88c52820e74af6262213cae8f"
+dependencies = [
+ "aho-corasick",
+ "memchr",
+ "regex-syntax",
+]
+
+[[package]]
+name = "regex-syntax"
+version = "0.8.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dc897dd8d9e8bd1ed8cdad82b5966c3e0ecae09fb1907d58efaa013543185d0a"
+
+[[package]]
 name = "rustversion"
 version = "1.0.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -537,11 +602,13 @@ checksum = "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75"
 name = "unison-android"
 version = "0.1.0"
 dependencies = [
+ "android_logger",
  "glow",
  "jni",
  "libc",
+ "log",
+ "unison-core",
  "unison-input",
- "unison-math",
  "unison-profiler",
  "unison-render",
  "unison2d",
@@ -555,10 +622,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "unison-core"
+version = "0.1.0"
+
+[[package]]
 name = "unison-input"
 version = "0.1.0"
 dependencies = [
- "unison-math",
+ "unison-core",
 ]
 
 [[package]]
@@ -570,8 +641,8 @@ dependencies = [
  "foreign-types",
  "metal",
  "objc",
+ "unison-core",
  "unison-input",
- "unison-math",
  "unison-profiler",
  "unison-render",
  "unison2d",
@@ -581,20 +652,16 @@ dependencies = [
 name = "unison-lighting"
 version = "0.1.0"
 dependencies = [
- "unison-math",
+ "unison-core",
  "unison-profiler",
  "unison-render",
 ]
 
 [[package]]
-name = "unison-math"
-version = "0.1.0"
-
-[[package]]
 name = "unison-physics"
 version = "0.1.0"
 dependencies = [
- "unison-math",
+ "unison-core",
  "unison-profiler",
  "wide",
 ]
@@ -608,16 +675,16 @@ name = "unison-render"
 version = "0.1.0"
 dependencies = [
  "image",
- "unison-math",
+ "unison-core",
 ]
 
 [[package]]
 name = "unison-tests"
 version = "0.1.0"
 dependencies = [
+ "unison-core",
  "unison-input",
  "unison-lighting",
- "unison-math",
  "unison-physics",
  "unison-render",
  "unison-ui",
@@ -629,8 +696,8 @@ name = "unison-ui"
 version = "0.1.0"
 dependencies = [
  "ab_glyph",
+ "unison-core",
  "unison-input",
- "unison-math",
  "unison-render",
 ]
 
@@ -639,8 +706,8 @@ name = "unison-web"
 version = "0.1.0"
 dependencies = [
  "js-sys",
+ "unison-core",
  "unison-input",
- "unison-math",
  "unison-profiler",
  "unison-render",
  "unison2d",
@@ -653,9 +720,9 @@ name = "unison2d"
 version = "0.1.0"
 dependencies = [
  "unison-assets",
+ "unison-core",
  "unison-input",
  "unison-lighting",
- "unison-math",
  "unison-physics",
  "unison-profiler",
  "unison-render",

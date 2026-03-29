@@ -151,12 +151,12 @@ mod tests {
         buf.transfer(true);
 
         // Engine has the events
-        assert_eq!(buf.engine().mouse_position(), unison_math::Vec2::new(100.0, 200.0));
+        assert_eq!(buf.engine().mouse_position(), unison_core::Vec2::new(100.0, 200.0));
         assert!(buf.engine().is_key_pressed(KeyCode::A));
         assert_eq!(buf.engine().active_touches().len(), 1);
 
         // Shared buffer got continuous state back via copy_held_from
-        assert_eq!(buf.shared.mouse_position(), unison_math::Vec2::new(100.0, 200.0));
+        assert_eq!(buf.shared.mouse_position(), unison_core::Vec2::new(100.0, 200.0));
         assert!(buf.shared.is_key_pressed(KeyCode::A));
         assert_eq!(buf.shared.active_touches().len(), 1);
 
@@ -197,6 +197,6 @@ mod tests {
         buf.transfer(true);
         assert!(buf.engine().is_mouse_just_pressed(MouseButton::Left));
         assert!(buf.engine().is_mouse_just_released(MouseButton::Left));
-        assert_eq!(buf.engine().mouse_position(), unison_math::Vec2::new(100.0, 50.0));
+        assert_eq!(buf.engine().mouse_position(), unison_core::Vec2::new(100.0, 50.0));
     }
 }

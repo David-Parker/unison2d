@@ -6,7 +6,7 @@ license.workspace = true
 description = "Unison 2D Game Engine - Android platform (OpenGL ES 3.0 renderer, touch input, frame loop)"
 
 [dependencies]
-unison-math = { workspace = true }
+unison-core = { workspace = true }
 unison-render = { workspace = true }
 unison-input = { workspace = true }
 unison-profiler = { workspace = true }

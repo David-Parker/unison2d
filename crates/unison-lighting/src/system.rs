@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use unison_math::Color;
+use unison_core::Color;
 use unison_render::{
     BlendMode, Camera, DrawLitSprite, DrawMesh, DrawSprite, RenderCommand, RenderTargetId,
     Renderer, TextureId,

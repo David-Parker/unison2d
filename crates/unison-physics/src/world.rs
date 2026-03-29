@@ -6,7 +6,7 @@
 use crate::mesh::Mesh;
 use crate::rigid::{RigidBody, RigidBodyConfig, PointQuery};
 use crate::xpbd::{XPBDSoftBody, CollisionSystem};
-use unison_math::Vec2;
+use unison_core::Vec2;
 use unison_profiler::profile_scope;
 
 /// Unique identifier for a physics body

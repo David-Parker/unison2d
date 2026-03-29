@@ -2,7 +2,7 @@
 resolver = "2"
 members = [
     "crates/unison2d",
-    "crates/unison-math",
+    "crates/unison-core",
     "crates/unison-physics",
     "crates/unison-render",
 
@@ -26,7 +26,7 @@ repository = "https://github.com/David-Parker/unison2d"
 [workspace.dependencies]
 # Internal crates
 unison2d = { path = "crates/unison2d" }
-unison-math = { path = "crates/unison-math" }
+unison-core = { path = "crates/unison-core" }
 unison-physics = { path = "crates/unison-physics" }
 unison-render = { path = "crates/unison-render" }
 unison-lighting = { path = "crates/unison-lighting" }

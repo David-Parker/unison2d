@@ -6,7 +6,7 @@ license.workspace = true
 description = "Unison 2D Game Engine - 2D lighting with lightmap compositing"
 
 [dependencies]
-unison-math = { workspace = true }
+unison-core = { workspace = true }
 unison-render = { workspace = true }
 unison-profiler = { workspace = true }
 

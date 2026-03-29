@@ -3,7 +3,7 @@
 //! This module provides true rigid bodies as an alternative to soft bodies.
 //! Rigid bodies maintain their shape and support circle and AABB colliders.
 
-use unison_math::Vec2;
+use unison_core::Vec2;
 
 /// Collider shape for rigid bodies
 #[derive(Clone, Debug)]

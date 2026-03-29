@@ -11,7 +11,7 @@
 //! └───┴──────┴───┘
 //! ```
 
-use unison_math::Color;
+use unison_core::Color;
 use unison_render::DrawSprite;
 
 use crate::style::NineSlice;
@@ -156,7 +156,7 @@ pub fn render_nine_slice(
 mod tests {
     use super::*;
     use crate::style::{EdgeInsets, NineSlice};
-    use unison_math::Color;
+    use unison_core::Color;
     use unison_render::TextureId;
 
     fn test_nine_slice() -> NineSlice {

@@ -1,6 +1,6 @@
 //! Style types for UI elements — anchoring, spacing, colors, text styles.
 
-use unison_math::Color;
+use unison_core::Color;
 use unison_render::TextureId;
 
 /// Screen anchor point for root-level containers.

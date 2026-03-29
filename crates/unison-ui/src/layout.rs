@@ -4,7 +4,7 @@
 //! 1. **Measure (bottom-up):** Compute intrinsic sizes for each node.
 //! 2. **Position (top-down):** Place nodes based on anchor and container direction.
 
-use unison_math::Vec2;
+use unison_core::Vec2;
 
 use crate::node::{UiNode, UiTree, WidgetKind};
 use crate::style::Anchor;

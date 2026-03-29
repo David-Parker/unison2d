@@ -6,7 +6,7 @@
 ///
 /// ```ignore
 /// use unison2d::*;
-/// use unison2d::math::{Color, Vec2};
+/// use unison2d::core::{Color, Vec2};
 /// use unison2d::input::KeyCode;
 ///
 /// struct MyGame { world: World, player: ObjectId }
@@ -32,7 +32,7 @@
 /// - [`Game`] — lifecycle trait: init, update, render
 ///
 /// ## Subsystem crates (re-exported)
-/// - [`math`] — Vec2, Color, Rect
+/// - [`core`] — Vec2, Color, Rect, EventSink
 /// - [`physics`] — XPBD soft body & rigid body simulation
 /// - [`render`] — Platform-agnostic rendering abstractions
 /// - [`profiler`] — Lightweight function-level profiling
@@ -62,7 +62,7 @@ pub use prefab::Prefab;
 pub use game::Game;
 
 // Subsystem re-exports
-pub use unison_math as math;
+pub use unison_core as core;
 pub use unison_physics as physics;
 pub use unison_render as render;
 pub use unison_profiler as profiler;

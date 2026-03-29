@@ -38,7 +38,7 @@ Unison is composed of several crates containing low level sub-systems. A high le
 ```
 unison2d/crates/
 ├── unison2d/        # Core engine — Game trait, re-exports everything
-├── unison-math/     # Vec2, Color, Rect — zero dependencies
+├── unison-core/     # Vec2, Color, Rect — zero dependencies
 ├── unison-physics/  # XPBD soft body & rigid body physics
 ├── unison-render/   # Platform-agnostic rendering traits
 ├── unison-lighting/ # 2D lighting with lightmap compositing and shadows

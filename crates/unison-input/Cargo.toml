@@ -6,4 +6,4 @@ license.workspace = true
 description = "Unison 2D Game Engine - Two-layer input system (raw state + action mapping)"
 
 [dependencies]
-unison-math = { workspace = true }
+unison-core = { workspace = true }

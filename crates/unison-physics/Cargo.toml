@@ -7,7 +7,7 @@ description = "Unison 2D Game Engine - Soft body physics"
 
 [dependencies]
 wide = { version = "0.7", optional = true }
-unison-math = { path = "../unison-math" }
+unison-core = { path = "../unison-core" }
 unison-profiler = { path = "../unison-profiler", default-features = false }
 
 [features]

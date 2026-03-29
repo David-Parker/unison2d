@@ -3,7 +3,7 @@
 pub mod atlas;
 pub mod font;
 
-use unison_math::{Color, Vec2};
+use unison_core::{Color, Vec2};
 use unison_render::{DrawSprite, RenderCommand, Renderer, TextureId};
 
 use atlas::GlyphAtlas;

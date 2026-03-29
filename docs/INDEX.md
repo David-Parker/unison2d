@@ -24,7 +24,7 @@ Per-crate deep dives:
 | `unison-render` | Platform-agnostic rendering traits | [api/render.md](api/render.md) |
 | `unison-lighting` | 2D lighting with lightmap compositing | [api/lighting.md](api/lighting.md) |
 | `unison-input` | Two-layer input (raw state + action mapping) | [api/input.md](api/input.md) |
-| `unison-math` | Shared Vec2, Color, Rect types | [api/math.md](api/math.md) |
+| `unison-core` | Shared Vec2, Color, Rect types | [api/math.md](api/math.md) |
 | `unison-assets` | Build-time asset embedding & runtime store | [api/assets.md](api/assets.md) |
 | `unison-ui` | Declarative React-like UI system (HUDs, menus, buttons) | [api/ui.md](api/ui.md) |
 | `unison-web` | Web platform (WebGL2, DOM input, rAF loop) | [api/web.md](api/web.md) |

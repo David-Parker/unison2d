@@ -6,7 +6,7 @@
 /// Deterministic xorshift32 PRNG.
 ///
 /// ```
-/// use unison_math::Rng;
+/// use unison_core::Rng;
 ///
 /// let mut rng = Rng::new(42);
 /// let x = rng.range_f32(0.0, 1.0);

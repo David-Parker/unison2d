@@ -1,7 +1,7 @@
 //! Input handling — hit testing, hover detection, click events, and input consumption.
 
 use unison_input::{InputState, MouseButton};
-use unison_math::Vec2;
+use unison_core::Vec2;
 
 use crate::diff::NodeKey;
 use crate::layout::Layout;
@@ -216,7 +216,7 @@ mod tests {
     use crate::state::UiState;
     use crate::style::Anchor;
     use unison_input::InputState;
-    use unison_math::Vec2;
+    use unison_core::Vec2;
 
     #[derive(Clone, Debug, PartialEq)]
     enum Action {

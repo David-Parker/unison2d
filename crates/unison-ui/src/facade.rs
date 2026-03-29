@@ -14,7 +14,7 @@
 //! ```
 
 use unison_input::InputState;
-use unison_math::Vec2;
+use unison_core::Vec2;
 use unison_render::Renderer;
 
 use crate::diff::diff_trees;
@@ -212,7 +212,7 @@ mod tests {
     use crate::diff::{DiffOp, NodeKey};
     use crate::node::UiNode;
     use crate::style::Anchor;
-    use unison_math::Color;
+    use unison_core::Color;
     use unison_render::RenderCommand;
 
     // ── Mock Overlay Target ──

@@ -1,6 +1,6 @@
 //! Input types: KeyCode, MouseButton, Touch, TouchPhase
 
-use unison_math::Vec2;
+use unison_core::Vec2;
 
 /// Keyboard key codes
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

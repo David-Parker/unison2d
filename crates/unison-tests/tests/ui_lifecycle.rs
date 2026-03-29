@@ -6,7 +6,7 @@
 //! cross-cutting behaviour rather than a single module.
 
 use unison_input::{InputState, MouseButton};
-use unison_math::Vec2;
+use unison_core::Vec2;
 use unison_ui::diff::{diff_trees, DiffOp, NodeKey};
 use unison_ui::input::process_input;
 use unison_ui::layout::{compute_layout, Layout, TextMeasurer};

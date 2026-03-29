@@ -16,7 +16,7 @@
 //! scene layer. [`World::draw_overlay`] queues screen-space commands drawn after
 //! all layers. All commands are cleared automatically each frame.
 
-use unison_math::{Color, Vec2};
+use unison_core::{Color, Vec2};
 use unison_render::{
     BlendMode, Camera, DrawSprite, Renderer, RenderCommand, RenderTargetId, TextureId,
 };
@@ -729,7 +729,7 @@ impl unison_ui::facade::OverlayTarget for World {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use unison_math::Vec2;
+    use unison_core::Vec2;
     use unison_physics::mesh::create_ring_mesh;
     use crate::object::SoftBodyDesc;
     use unison_render::TextureId;

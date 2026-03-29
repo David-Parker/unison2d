@@ -8,7 +8,7 @@
 //! to catch timing-dependent click bugs.
 
 use unison_input::{InputBuffer, InputState, MouseButton};
-use unison_math::Vec2;
+use unison_core::Vec2;
 use unison_ui::diff::diff_trees;
 use unison_ui::input::process_input;
 use unison_ui::layout::{compute_layout, Layout, TextMeasurer};

@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 
-use unison_math::Vec2;
+use unison_core::Vec2;
 use unison_render::Camera;
 
 use crate::object::ObjectId;

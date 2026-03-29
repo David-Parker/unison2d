@@ -5,7 +5,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use unison2d::World;
 use unison_input::{InputState, MouseButton};
-use unison_math::{Color, Vec2};
+use unison_core::{Color, Vec2};
 use unison_lighting::PointLight;
 use unison_render::{
     BlendMode, Camera, DrawSprite, RenderCommand, RenderTargetId, Renderer,

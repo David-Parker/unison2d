@@ -6,7 +6,7 @@
 use crate::color::Color;
 use crate::renderer::{DrawMesh, RenderCommand};
 use crate::texture::TextureId;
-use unison_math::Vec2;
+use unison_core::Vec2;
 
 /// Default segment count for circles.
 const DEFAULT_SEGMENTS: usize = 32;

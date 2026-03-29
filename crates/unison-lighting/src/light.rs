@@ -1,6 +1,6 @@
 //! Light types and identifiers.
 
-use unison_math::{Color, Vec2};
+use unison_core::{Color, Vec2};
 
 use crate::occluder::ShadowFilter;
 

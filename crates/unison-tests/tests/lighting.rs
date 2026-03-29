@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use unison_lighting::{DirectionalLight, LightingSystem, PointLight, ShadowFilter, ShadowSettings};
 use unison_lighting::gradient::generate_radial_gradient;
-use unison_math::{Color, Vec2};
+use unison_core::{Color, Vec2};
 use unison_render::{
     BlendMode, Camera, DrawLitSprite, RenderCommand, RenderTargetId, Renderer,
     TextureDescriptor, TextureFormat, TextureId,

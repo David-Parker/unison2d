@@ -3,7 +3,7 @@
 //! Captures detailed state snapshots during simulation for analysis.
 
 use std::collections::VecDeque;
-use unison_math::Vec2;
+use unison_core::Vec2;
 
 /// A single frame's worth of simulation state
 #[derive(Clone, Debug)]

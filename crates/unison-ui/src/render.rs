@@ -6,7 +6,7 @@
 //!
 //! The caller submits these to `World::draw_overlay(cmd, z_order)`.
 
-use unison_math::{Color, Vec2};
+use unison_core::{Color, Vec2};
 use unison_render::{DrawSprite, RenderCommand, Renderer, TextureId};
 
 use crate::animation::compute_animation;
@@ -397,7 +397,7 @@ mod tests {
     use crate::node::{UiNode, UiTree};
     use crate::state::UiState;
     use crate::style::{Anchor, PanelStyle};
-    use unison_math::Vec2;
+    use unison_core::Vec2;
 
     struct FixedMeasurer;
     impl TextMeasurer for FixedMeasurer {

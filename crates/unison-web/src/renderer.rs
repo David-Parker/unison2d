@@ -6,7 +6,7 @@ use web_sys::{
     WebGlRenderbuffer, WebGlShader, WebGlTexture, WebGlUniformLocation,
     WebGlVertexArrayObject,
 };
-use unison_math::Color;
+use unison_core::Color;
 use unison_render::{
     AntiAliasing, BlendMode, Camera, RenderCommand, RenderTargetId, Renderer,
     TextureDescriptor, TextureFilter, TextureFormat, TextureId, TextureWrap,

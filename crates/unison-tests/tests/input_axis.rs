@@ -5,7 +5,7 @@
 //! coexist with other input types like touch.
 
 use unison_input::{InputBuffer, InputState};
-use unison_math::Vec2;
+use unison_core::Vec2;
 
 /// Set axis on shared, transfer, verify engine reads it.
 #[test]

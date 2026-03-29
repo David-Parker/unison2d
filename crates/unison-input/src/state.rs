@@ -1,7 +1,7 @@
 //! Raw input state — platform crates feed events into this
 
 use std::collections::{HashMap, HashSet};
-use unison_math::Vec2;
+use unison_core::Vec2;
 use crate::types::{KeyCode, MouseButton, Touch, TouchPhase};
 
 /// Raw input state for all input devices.

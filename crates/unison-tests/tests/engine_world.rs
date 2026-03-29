@@ -5,7 +5,7 @@
 use unison2d::{World, SoftBodyDesc};
 use unison_physics::Material;
 use unison_physics::mesh::create_ring_mesh;
-use unison_math::{Vec2, Color};
+use unison_core::{Vec2, Color};
 use unison_render::TextureId;
 
 #[test]

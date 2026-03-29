@@ -20,7 +20,7 @@ use std::collections::HashMap;
 use unison_lighting::gradient::generate_radial_gradient;
 use unison_lighting::shadow::{project_directional_shadows, project_point_shadows};
 use unison_lighting::{DirectionalLight, LightingSystem, Occluder, PointLight, ShadowFilter, ShadowSettings};
-use unison_math::{Color, Vec2};
+use unison_core::{Color, Vec2};
 use unison_render::{
     BlendMode, Camera, RenderCommand, RenderTargetId, Renderer, TextureDescriptor, TextureId,
 };

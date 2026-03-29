@@ -61,9 +61,9 @@ pub use mesh::Mesh;
 
 pub use rigid::{RigidBody, RigidBodyConfig, Collider};
 
-// === Shared types (re-exported from unison-math) ===
+// === Shared types (re-exported from unison-core) ===
 
-pub use unison_math;
+pub use unison_core;
 
 // === Forensics (testing) ===
 

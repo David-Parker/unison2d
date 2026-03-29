@@ -6,7 +6,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-unison-math = { workspace = true }
+unison-core = { workspace = true }
 unison-render = { workspace = true }
 unison-input = { workspace = true }
 ab_glyph = { workspace = true }

@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 
-use unison_math::{Color, Vec2};
+use unison_core::{Color, Vec2};
 use unison_physics::{BodyHandle, PhysicsWorld};
 use unison_render::{DrawMesh, DrawSprite, RenderCommand};
 use unison_lighting::Occluder;

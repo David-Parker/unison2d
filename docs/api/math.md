@@ -1,8 +1,8 @@
-# unison-math
+# unison-core
 
 Shared math and color types used across all Unison 2D engine crates. Zero dependencies.
 
-Accessible via `unison2d::math` or directly as `unison_math`.
+Accessible via `unison2d::math` or directly as `unison_core`.
 
 ## Types
 
@@ -11,7 +11,7 @@ Accessible via `unison2d::math` or directly as `unison_math`.
 2D vector with `f32` components.
 
 ```rust
-use unison_math::Vec2;
+use unison_core::Vec2;
 
 let v = Vec2::new(3.0, 4.0);
 let v = Vec2::splat(1.0);        // both components set to 1.0
@@ -48,7 +48,7 @@ let v = Vec2::splat(1.0);        // both components set to 1.0
 RGBA color with `f32` components (0.0–1.0).
 
 ```rust
-use unison_math::Color;
+use unison_core::Color;
 
 Color::rgb(1.0, 0.5, 0.0);           // orange, alpha=1
 Color::new(1.0, 0.5, 0.0, 0.8);      // with alpha
@@ -82,7 +82,7 @@ Color::from_rgba8(255, 128, 0, 255);  // from u8
 Axis-aligned rectangle defined by `min` and `max` corners (both `Vec2`).
 
 ```rust
-use unison_math::{Rect, Vec2};
+use unison_core::{Rect, Vec2};
 
 Rect::new(Vec2::ZERO, Vec2::new(10.0, 8.0));              // from min/max corners
 Rect::from_center(Vec2::new(5.0, 5.0), Vec2::new(10.0, 8.0));
@@ -116,7 +116,7 @@ Linear interpolation between two f32 values. `t=0` returns `a`, `t=1` returns `b
 Hermite smoothstep: smooth ease-in/ease-out for `t` in [0, 1]. Returns 0 at `t=0`, 1 at `t=1`, with zero derivative at both endpoints.
 
 ```rust
-use unison_math::{lerp, smoothstep};
+use unison_core::{lerp, smoothstep};
 
 lerp(0.0, 10.0, 0.5);    // 5.0
 smoothstep(0.5);          // 0.5 (but non-linear)
@@ -127,7 +127,7 @@ smoothstep(0.5);          // 0.5 (but non-linear)
 Deterministic xorshift32 pseudo-random number generator. Zero dependencies, suitable for procedural content, particle effects, and reproducible randomness.
 
 ```rust
-use unison_math::Rng;
+use unison_core::Rng;
 
 let mut rng = Rng::new(42);
 rng.next();                    // raw u32
