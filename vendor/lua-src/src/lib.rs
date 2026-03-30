@@ -115,9 +115,7 @@ impl Build {
                 config
                     .define("LUA_USE_LONGJMP", None)
                     .define("LUA_32BITS", None)
-                    .include(&wasm_sysroot)
-                    .flag("-mllvm")
-                    .flag("-wasm-enable-sjlj");
+                    .include(&wasm_sysroot);
             }
             _ if target.ends_with("emscripten") => {
                 config

@@ -88,6 +88,21 @@ struct lua_longjmp {
 };
 
 
+/*
+** WASM: setjmp/longjmp cannot work in wasm32-unknown-unknown because there is
+** no way to save/restore the native call stack.  Instead we use a pair of
+** extern helpers implemented in Rust that throw/catch JS exceptions across the
+** WASM→JS boundary.  `wasm_lua_throw` calls wasm_bindgen::throw_str which
+** throws a JS exception; `wasm_protected_call` invokes the protected function
+** through a JS wrapper whose try/catch converts the exception into a return
+** value.
+*/
+#if defined(__wasm__)
+extern void wasm_lua_throw(void) __attribute__((noreturn));
+extern int  wasm_protected_call(void (*f)(void*, void*), void *L, void *ud);
+#endif
+
+
 void luaD_seterrorobj (lua_State *L, int errcode, StkId oldtop) {
   switch (errcode) {
     case LUA_ERRMEM: {  /* memory error? */
@@ -112,22 +127,11 @@ void luaD_seterrorobj (lua_State *L, int errcode, StkId oldtop) {
 }
 
 
-#if defined(__wasm__)
-/*
-** WASM: use external Rust functions (panic/catch_unwind) instead of
-** setjmp/longjmp, which cannot be implemented on wasm32-unknown-unknown.
-** Requires Rust panic = "unwind" (uses the WASM exception handling proposal).
-*/
-extern void wasm_lua_throw(void) __attribute__((noreturn));
-extern int  wasm_protected_call(void (*f)(void*, void*), void *L, void *ud);
-#endif
-
-
 l_noret luaD_throw (lua_State *L, int errcode) {
   if (L->errorJmp) {  /* thread has an error handler? */
     L->errorJmp->status = errcode;  /* set status */
 #if defined(__wasm__)
-    wasm_lua_throw();  /* Rust panic — caught by wasm_protected_call */
+    wasm_lua_throw();  /* throw JS exception — caught by wasm_protected_call */
 #else
     LUAI_THROW(L, L->errorJmp);  /* jump to it */
 #endif
