@@ -31,4 +31,4 @@ mod store;
 #[cfg(feature = "build")]
 pub mod build;
 
-pub use store::AssetStore;
+pub use store::{AssetStore, EmbeddedAsset};

@@ -31,26 +31,49 @@ mod bridge;
 
 use mlua::prelude::*;
 use unison2d::{Engine, Game};
+use unison2d::assets::EmbeddedAsset;
 use unison2d::render::Camera;
 
 /// Unit action type — scripted games don't use Rust action mapping.
 #[derive(Copy, Clone, Eq, PartialEq, Hash)]
 pub enum NoAction {}
 
+/// How the Lua script source is provided.
+enum ScriptSource {
+    /// Inline source code (e.g. from tests).
+    Source(String),
+    /// Asset path resolved via [`Engine::assets`] during [`Game::init`].
+    AssetPath(String),
+}
+
 /// Top-level scripted game. Holds the Lua VM and the loaded script table.
 pub struct ScriptedGame {
     /// The Lua VM. `None` before [`Game::init`] is called.
     lua: Option<Lua>,
-    /// The script source to execute (typically loaded from assets).
-    script_src: String,
+    /// Where to get the script source.
+    source: ScriptSource,
+    /// Optional embedded asset table to load during init.
+    embedded_assets: Option<&'static [EmbeddedAsset]>,
 }
 
 impl ScriptedGame {
-    /// Create a new `ScriptedGame` with the given Lua source code.
+    /// Create a new `ScriptedGame` with inline Lua source code.
     pub fn new(script_src: impl Into<String>) -> Self {
         Self {
             lua: None,
-            script_src: script_src.into(),
+            source: ScriptSource::Source(script_src.into()),
+            embedded_assets: None,
+        }
+    }
+
+    /// Create a new `ScriptedGame` that loads its script from embedded assets
+    /// during [`Game::init`]. Pass the build-generated `assets::ASSETS` table
+    /// so the engine can decompress them.
+    pub fn from_asset(path: impl Into<String>, assets: &'static [EmbeddedAsset]) -> Self {
+        Self {
+            lua: None,
+            source: ScriptSource::AssetPath(path.into()),
+            embedded_assets: Some(assets),
         }
     }
 
@@ -79,6 +102,31 @@ impl Game for ScriptedGame {
     type Action = NoAction;
 
     fn init(&mut self, engine: &mut Engine<NoAction>) {
+        // Load embedded assets if provided.
+        if let Some(assets) = self.embedded_assets {
+            engine.assets_mut().load_embedded(assets);
+        }
+
+        // Resolve script source.
+        let script_src = match &self.source {
+            ScriptSource::Source(s) => s.clone(),
+            ScriptSource::AssetPath(path) => {
+                match engine.assets().get(path) {
+                    Some(bytes) => match std::str::from_utf8(bytes) {
+                        Ok(s) => s.to_string(),
+                        Err(e) => {
+                            eprintln!("[unison-scripting] Script '{path}' is not valid UTF-8: {e}");
+                            return;
+                        }
+                    },
+                    None => {
+                        eprintln!("[unison-scripting] Script asset not found: '{path}'");
+                        return;
+                    }
+                }
+            }
+        };
+
         let lua = Lua::new();
 
         // Register engine globals before running the script.
@@ -94,7 +142,7 @@ impl Game for ScriptedGame {
         }
 
         // Execute the script. It must return a table.
-        let game_table: LuaTable = match lua.load(&self.script_src).eval() {
+        let game_table: LuaTable = match lua.load(&script_src).eval() {
             Ok(t) => t,
             Err(e) => {
                 eprintln!("[unison-scripting] Script error: {e}");
