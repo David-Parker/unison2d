@@ -16,9 +16,8 @@ struct MyLevel {
     ui: Ui<Action>,
 }
 
-// In update():
-let ui_input = self.ui.begin_frame(ctx.input, screen_size, ctx.dt);
-self.ui.describe(ui! {
+// In render() — ui.frame() handles input, layout, and overlay commands in one call:
+let tree = ui! {
     column(anchor = Anchor::TopLeft, padding = 8.0, gap = 4.0) [
         label("Score: {}", self.score),
         label("HP: {}/{}", self.hp, self.max_hp),
@@ -30,22 +29,26 @@ self.ui.describe(ui! {
             button("Quit", on_click = Action::Quit),
         ]
     }
-}, &mut renderer);
+};
+let ui_input = self.ui.frame(tree, ctx.input, screen_size, ctx.dt, &mut self.world, ctx.renderer);
 
 // Events flow through EventSink → EventBus automatically.
 // Use ctx.events.drain::<Action>() or register handlers.
 if !ui_input.consumed_click { /* game input */ }
 
-// In render():
-self.ui.render(&mut self.world, &mut renderer);
-self.world.auto_render(&mut renderer);
+// world.auto_render() is called automatically by run_render() — no manual call needed.
 ```
+
+For advanced use cases where you need to split input processing and rendering (e.g. to check
+`consumed_click` during update), the individual `begin_frame`, `describe`, and `render` methods
+are still available.
 
 ## `Ui<E>` Facade
 
 | Method | Description |
 |--------|-------------|
 | `Ui::new(font_bytes, renderer, sink) -> Result<Self, String>` | Create UI with TTF/OTF font data and an `EventSink`. Scale factor derived from renderer's drawable/screen size. Click events are emitted into the sink. |
+| `frame(tree, input, screen_size, dt, world, renderer) -> UiInputResult` | **Convenience**: process input + describe tree + render overlays in one call. Use this in `render()`. |
 | `begin_frame(input, screen_size, dt) -> UiInputResult` | Process input against previous frame's layout, advance animations. Click events are emitted into the `EventSink`. Returns `UiInputResult`. |
 | `describe(tree, renderer)` | Diff against previous tree, update widget state, compute layout. Also re-checks scale factor. |
 | `render(world, renderer)` | Emit overlay render commands via `OverlayTarget`. Call before `world.auto_render()`. |

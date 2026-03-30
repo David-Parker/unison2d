@@ -20,7 +20,7 @@
 //!         // Shared state
 //!         ctx.shared.score += 1;
 //!
-//!         self.world.step(dt);
+//!         // world.step() is called automatically — don't call it here
 //!     }
 //! }
 //! ```

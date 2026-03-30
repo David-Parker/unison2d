@@ -1,19 +1,15 @@
 //! `Ui<E>` facade — the public API that wires all UI subsystems together.
 //!
-//! Game code creates a `Ui<E>` once and calls it each frame:
+//! Game code creates a `Ui<E>` once and calls [`Ui::frame()`] each frame:
 //!
 //! ```ignore
 //! // Create with an EventSink (events route through the EventBus)
 //! let ui = Ui::new(font_bytes, renderer, bus.create_sink())?;
 //! // Or use the factory: ctx.create_ui::<Action>(font_bytes)?
 //!
-//! // In update():
-//! let ui_input = self.ui.begin_frame(ctx.input, screen_size, ctx.dt);
-//! self.ui.describe(ui! { ... }, &mut ctx.renderer);
+//! // In render() — one call handles input, layout, and overlay commands:
+//! let ui_input = self.ui.frame(tree, ctx.input, screen, ctx.dt, &mut self.world, ctx.renderer);
 //! if !ui_input.consumed_click { /* game input */ }
-//!
-//! // In render():
-//! self.ui.render(&mut self.world, &mut ctx.renderer);
 //! ```
 
 use unison_input::InputState;
@@ -163,6 +159,27 @@ impl<E: Clone + 'static> Ui<E> {
         for cmd in commands {
             world.draw_overlay(cmd.command, cmd.z_order);
         }
+    }
+
+    /// Convenience: process input, describe the tree, and render overlays in one call.
+    ///
+    /// Combines `begin_frame` + `describe` + `render` so levels don't need to
+    /// manage the pending-tree pattern or split work across update/render.
+    ///
+    /// Call this once per frame in your `render()` method.
+    pub fn frame(
+        &mut self,
+        tree: UiTree<E>,
+        input: &InputState,
+        screen_size: Vec2,
+        dt: f32,
+        world: &mut dyn OverlayTarget,
+        renderer: &mut dyn Renderer<Error = String>,
+    ) -> UiInputResult {
+        let result = self.begin_frame(input, screen_size, dt);
+        self.describe(tree, renderer);
+        self.render(world, renderer);
+        result
     }
 
     /// Access the text renderer (e.g., for custom text measurement).

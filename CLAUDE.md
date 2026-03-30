@@ -36,6 +36,7 @@ Each crate has a per-crate deep dive in `docs/api/`. Read the relevant doc befor
 | `unison-ios` | [ios.md](docs/api/ios.md) | iOS platform (Metal renderer, touch input, frame loop) |
 | `unison-android` | [android.md](docs/api/android.md) | Android platform (GLES 3.0 renderer, touch input, JNI frame loop) |
 | `unison-profiler` | [profiler.md](docs/api/profiler.md) | Function-level profiling |
+| `unison-scripting` | [scripting.md](docs/api/scripting.md) | Lua 5.4 scripting — ScriptedGame implementing Game trait |
 | `unison-tests` | — | Headless e2e / simulation tests (physics, rendering, etc.) |
 
 All crates are re-exported from `unison2d::{math, physics, render, lighting, profiler, input, assets, ui}`.

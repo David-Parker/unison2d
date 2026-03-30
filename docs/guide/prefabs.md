@@ -149,7 +149,7 @@ Then each level's update is just:
 fn update(&mut self, ctx: &mut Ctx<SharedState>) {
     drive_donut(&mut self.world, self.donut, ctx.input, ctx.dt);
     // Level-specific logic...
-    self.world.step(ctx.dt);
+    // world.step() is called automatically by run_update()
 }
 ```
 

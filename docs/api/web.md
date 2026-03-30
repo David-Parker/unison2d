@@ -78,7 +78,7 @@ Fixed timestep accumulator pattern:
 - Calls `Profiler::end_frame()` to accumulate frame statistics
 - Every 120 frames, logs profiler stats to the browser console via `web_sys::console::log_1` and resets
 
-The game loop does NOT auto-render or auto-step physics — the game controls both via `world.step(dt)` and `world.auto_render(renderer)` in its `update()` and `render()` callbacks.
+The platform loop calls `game.update()` and `game.render()`. When using the `Level` trait, `world.step()` and `world.auto_render()` are handled automatically by the provided `run_update` / `run_render` methods. When using the `Game` trait directly, the game controls both manually.
 
 ## Dependencies
 

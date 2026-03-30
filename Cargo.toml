@@ -14,6 +14,7 @@ members = [
     "crates/unison-web",
     "crates/unison-ios",
     "crates/unison-android",
+    "crates/unison-scripting",
     "crates/unison-tests",
 ]
 
@@ -38,6 +39,7 @@ unison-assets = { path = "crates/unison-assets" }
 unison-web = { path = "crates/unison-web" }
 unison-ios = { path = "crates/unison-ios" }
 unison-android = { path = "crates/unison-android" }
+unison-scripting = { path = "crates/unison-scripting" }
 
 # External dependencies
 flate2 = "1.0"
@@ -71,3 +73,11 @@ web-sys = { version = "0.3", features = [
     "DomRect",
     "console",
 ] }
+
+# Patch lua-src to add wasm32-unknown-unknown build support.
+# The vanilla lua-src rejects this target; our fork adds a minimal C11 build
+# with a bundled libc sysroot (wasm-sysroot/) and uses LLVM clang.
+# Requires: CC_wasm32_unknown_unknown=/opt/homebrew/opt/llvm/bin/clang
+# (set in the root .cargo/config.toml)
+[patch.crates-io]
+lua-src = { path = "vendor/lua-src" }

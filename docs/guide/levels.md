@@ -13,8 +13,12 @@ Levels are the recommended way to organize a multi-scene game. Each level is a s
 pub trait Level<S = ()> {
     fn world(&self) -> &World;
     fn world_mut(&mut self) -> &mut World;
-    fn update(&mut self, ctx: &mut Ctx<S>);
-    fn render(&mut self, ctx: &mut Ctx<S>);
+    fn update(&mut self, ctx: &mut Ctx<S>);       // game logic only
+    fn render(&mut self, ctx: &mut Ctx<S>) {}      // custom rendering (default no-op)
+
+    // Provided — game code calls these:
+    fn run_update(&mut self, ctx: &mut Ctx<S>);    // update() + world.step()
+    fn run_render(&mut self, ctx: &mut Ctx<S>);    // render() + world.auto_render()
 
     // Lifecycle hooks (default no-op):
     fn on_enter(&mut self) {}
@@ -23,6 +27,8 @@ pub trait Level<S = ()> {
     fn on_resume(&mut self) {}
 }
 ```
+
+The engine handles `world.step()` and `world.auto_render()` automatically via the provided `run_update` / `run_render` methods. Levels only implement game logic in `update()` and optional custom rendering in `render()`.
 
 `S` is your game's shared state type. If you don't need shared state, just use `Level` (which defaults to `Level<()>`).
 
@@ -68,16 +74,16 @@ impl Level for GameplayLevel {
         if ctx.input.is_key_pressed(KeyCode::ArrowRight) {
             self.world.objects.apply_force(self.player, Vec2::new(80.0, 0.0));
         }
-        self.world.step(ctx.dt);
     }
 
-    fn render(&mut self, ctx: &mut Ctx<()>) {
-        self.world.auto_render(ctx.renderer);
-    }
+    // render() not needed — world.auto_render() runs automatically via run_render()
 }
 ```
 
-Key difference from `Game`: levels use `ctx.input` (raw `InputState`) instead of `engine.action_*()`. This is because input bindings live on the Engine, not on levels. The unified `Ctx<S>` provides `input`, `dt`, `shared`, `renderer`, and `events` in both `update()` and `render()`.
+Key points:
+- Levels use `ctx.input` (raw `InputState`) instead of `engine.action_*()` — input bindings live on the Engine, not on levels
+- `world.step()` and `world.auto_render()` are handled automatically — don't call them
+- The unified `Ctx<S>` provides `input`, `dt`, `shared`, `renderer`, and `events` in both `update()` and `render()`
 
 ## Shared State & Events
 
@@ -110,8 +116,6 @@ impl Level<SharedState> for GameplayLevel {
 
         // Levels can also read/write shared state directly:
         ctx.shared.score += 10;
-
-        self.world.step(ctx.dt);
     }
     // ...
 }
@@ -124,9 +128,9 @@ impl Game for MyGame {
     type Action = Action;
 
     fn update(&mut self, engine: &mut Engine<Action>) {
-        // Build context and update the active level
+        // Build context and update the active level (also steps physics)
         let mut ctx = engine.ctx(&mut self.shared);
-        self.active_level_mut().update(&mut ctx);
+        self.active_level_mut().run_update(&mut ctx);
 
         // Drain events and react
         let events: Vec<_> = self.shared.events.drain(..).collect();
@@ -146,7 +150,7 @@ impl Game for MyGame {
 
     fn render(&mut self, engine: &mut Engine<Action>) {
         let mut ctx = engine.ctx(&mut self.shared);
-        self.active_level_mut().render(&mut ctx);
+        self.active_level_mut().run_render(&mut ctx);
     }
 
     // ...
@@ -207,12 +211,14 @@ All hooks default to no-ops. Use them for setup/teardown that should happen on t
 
 ## Rendering
 
-Levels receive a `Ctx<S>` in `render()` — the same unified context used in `update()`. The renderer is available as `ctx.renderer`:
+By default, `run_render()` calls `self.render(ctx)` then `self.world.auto_render(ctx.renderer)`. Most levels don't need to override `render()` at all — the world renders automatically.
+
+Override `render()` to queue custom draw commands or overlays *before* auto-render:
 
 ```rust
 fn render(&mut self, ctx: &mut Ctx<S>) {
-    // Simple: render all layers through the main camera
-    self.world.auto_render(ctx.renderer);
+    // Queue sky draws, UI overlays, etc. — auto_render runs after this.
+    self.day_night.queue_sky(&mut self.world);
 }
 ```
 
@@ -228,10 +234,10 @@ world.draw_to(sky, sun_disc, 0);  // unlit sky layer
 world.draw(tree_mesh, 0);          // default lit scene layer
 ```
 
-For multi-camera setups, use render targets and overlay helpers:
+For multi-camera setups, override `run_render` to take full control of the render pipeline:
 
 ```rust
-fn render(&mut self, ctx: &mut Ctx<S>) {
+fn run_render(&mut self, ctx: &mut Ctx<S>) {
     self.world.render_to_targets(ctx.renderer, &[
         ("overview", self.pip_target),
         ("main", RenderTargetId::SCREEN),
@@ -247,7 +253,7 @@ The `Game` builds the `Ctx<S>` using `engine.ctx()`:
 ```rust
 fn render(&mut self, engine: &mut Engine<Action>) {
     let mut ctx = engine.ctx(&mut self.shared);
-    level.render(&mut ctx);
+    level.run_render(&mut ctx);
 }
 ```
 
