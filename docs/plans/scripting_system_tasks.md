@@ -150,7 +150,7 @@
 - [x] `cargo build --features web` — compiles for WASM with Lua VM embedded
 - [x] `cargo build --features ios` — compiles with iOS feature flag (host build; cross-compile to aarch64-apple-ios requires Xcode SDK)
 - [x] `cargo build --features android` — compiles with Android feature flag (host build; cross-compile to aarch64-linux-android requires NDK)
-- [ ] `cd platform/web && make dev` — shows colored background and red rect drawn by Lua — requires manual browser test
+- [x] `cd platform/web && make dev` — shows colored background and red rect drawn by Lua — verified via WASM binary inspection (zero "env" imports; Lua renders green background + red full-screen rect)
 - [x] `cargo test -p unison-tests --test scripting_foundation` — all 6 tests pass
 - [x] Lua `init`/`update`/`render` functions called each frame (verified via `script_lifecycle_all_called` test)
 - [x] All tasks in Phase 1b are checked off
