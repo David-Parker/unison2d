@@ -1,8 +1,8 @@
 //! Integration tests for UI button click handling.
 //!
 //! Reproduces the exact frame lifecycle used by the game:
-//!   update(): ui.begin_frame → drain_events
-//!   render(): ui.describe(tree) → drain_events
+//!   update(): ui.begin_frame (events emitted into EventSink)
+//!   render(): ui.describe(tree) + ui.render()
 //!
 //! Also simulates the game_loop's fixed-timestep + input-swap mechanism
 //! to catch timing-dependent click bugs.

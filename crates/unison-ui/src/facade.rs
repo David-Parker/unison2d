@@ -3,10 +3,13 @@
 //! Game code creates a `Ui<E>` once and calls it each frame:
 //!
 //! ```ignore
+//! // Create with an EventSink (events route through the EventBus)
+//! let ui = Ui::new(font_bytes, renderer, bus.create_sink())?;
+//! // Or use the factory: ctx.create_ui::<Action>(font_bytes)?
+//!
 //! // In update():
 //! let ui_input = self.ui.begin_frame(ctx.input, screen_size, ctx.dt);
 //! self.ui.describe(ui! { ... }, &mut ctx.renderer);
-//! for event in self.ui.drain_events() { ... }
 //! if !ui_input.consumed_click { /* game input */ }
 //!
 //! // In render():
@@ -26,6 +29,10 @@ use crate::state::UiState;
 use crate::text::TextRenderer;
 
 /// The main UI facade. Generic over the game's event/action type `E`.
+///
+/// Events from button clicks are emitted into an [`EventSink`] which routes
+/// them through the engine's [`EventBus`]. Use `ctx.create_ui()` or pass a
+/// sink from `bus.create_sink()` to the constructor.
 pub struct Ui<E: Clone + 'static> {
     /// Previous frame's tree (for diffing).
     prev_tree: UiTree<E>,
@@ -37,10 +44,8 @@ pub struct Ui<E: Clone + 'static> {
     state: UiState,
     /// Text renderer (font + glyph atlas).
     text_renderer: TextRenderer,
-    /// Events triggered this frame (click actions etc.).
-    events: Vec<E>,
-    /// Optional event sink — when set, events are emitted here instead of the internal vec.
-    event_sink: Option<EventSink>,
+    /// Event sink — click events are emitted here, routed to the EventBus on flush.
+    event_sink: EventSink,
     /// Screen size (cached from last begin_frame).
     screen_size: Vec2,
     /// Whether `describe` has been called this frame.
@@ -48,13 +53,17 @@ pub struct Ui<E: Clone + 'static> {
 }
 
 impl<E: Clone + 'static> Ui<E> {
-    /// Create a new UI system with the given font.
+    /// Create a new UI system with the given font and event sink.
     ///
     /// `font_bytes` should be raw TTF/OTF data. The device scale factor is
     /// derived from the renderer's `drawable_size / screen_size`.
+    ///
+    /// Click events are emitted into `sink`, which routes them to the `EventBus`.
+    /// Use `ctx.create_ui()` or `engine.create_ui()` for automatic wiring.
     pub fn new(
         font_bytes: Vec<u8>,
         renderer: &mut dyn Renderer<Error = String>,
+        sink: EventSink,
     ) -> Result<Self, String> {
         let scale_factor = compute_scale_factor(renderer);
         let text_renderer = TextRenderer::new(font_bytes, scale_factor, renderer)?;
@@ -64,20 +73,10 @@ impl<E: Clone + 'static> Ui<E> {
             layout: Layout { rects: Vec::new() },
             state: UiState::new(),
             text_renderer,
-            events: Vec::new(),
-            event_sink: None,
+            event_sink: sink,
             screen_size: Vec2::new(960.0, 540.0),
             described: false,
         })
-    }
-
-    /// Connect this UI to an event sink.
-    ///
-    /// When set, click events are emitted directly into the sink (routed to the
-    /// `EventBus` on flush) instead of accumulating in the internal buffer.
-    /// Call `drain_events()` still works but returns an empty vec when a sink is set.
-    pub fn set_event_sink(&mut self, sink: EventSink) {
-        self.event_sink = Some(sink);
     }
 
     /// Start a new frame. Processes input against the *previous* frame's layout,
@@ -92,7 +91,6 @@ impl<E: Clone + 'static> Ui<E> {
     ) -> UiInputResult {
         self.screen_size = screen_size;
         self.described = false;
-        self.events.clear();
 
         // Advance animation timers
         self.state.update(dt);
@@ -106,13 +104,9 @@ impl<E: Clone + 'static> Ui<E> {
             screen_size,
         );
 
-        // Route events: sink (→ EventBus) if wired, otherwise internal vec
-        if let Some(ref sink) = self.event_sink {
-            for event in events {
-                sink.emit(event);
-            }
-        } else {
-            self.events = events;
+        // Emit events into the sink (routed to EventBus on flush)
+        for event in events {
+            self.event_sink.emit(event);
         }
         result
     }
@@ -145,14 +139,6 @@ impl<E: Clone + 'static> Ui<E> {
         self.prev_tree = self.curr_tree.clone();
         self.curr_tree = tree;
         self.described = true;
-    }
-
-    /// Drain triggered events (button clicks, etc.).
-    ///
-    /// Returns all events accumulated since `begin_frame`. Calling this
-    /// clears the event buffer — a second call returns an empty vec.
-    pub fn drain_events(&mut self) -> Vec<E> {
-        std::mem::take(&mut self.events)
     }
 
     /// Render the UI into the world's overlay system.

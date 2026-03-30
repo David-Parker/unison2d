@@ -164,9 +164,7 @@ impl<'a, S> Ctx<'a, S> {
     /// ```
     pub fn create_ui<E: Clone + 'static>(&mut self, font_bytes: Vec<u8>) -> Result<unison_ui::facade::Ui<E>, String> {
         let sink = self.events.create_sink();
-        let mut ui = unison_ui::facade::Ui::new(font_bytes, self.renderer)?;
-        ui.set_event_sink(sink);
-        Ok(ui)
+        unison_ui::facade::Ui::new(font_bytes, self.renderer, sink)
     }
 
     // ── Event system ──
@@ -185,9 +183,10 @@ impl<'a, S> Ctx<'a, S> {
     /// 2. Translates `BodyHandle` → `ObjectId` and emits `CollisionEvent`s
     /// 3. Drains all event sinks and fires registered handlers
     pub fn flush_events(&mut self, world: &mut World) {
-        // 1. Translate raw collision events (physics BodyHandle → game ObjectId)
-        let sink = self.events.create_sink();
-        world.objects.translate_collision_events(&sink);
+        // 1. Translate raw collision events and emit directly into bus
+        for event in world.objects.translate_collision_events() {
+            self.events.emit(event);
+        }
 
         // 2. Flush all sinks and fire handlers
         let mut bus = std::mem::take(self.events);

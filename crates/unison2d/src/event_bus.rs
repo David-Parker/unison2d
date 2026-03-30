@@ -32,6 +32,9 @@ pub struct EventBus<C: 'static> {
     channels: HashMap<TypeId, Box<dyn AnyChannel<C>>>,
     /// Sinks created by `create_sink()` — drained on flush.
     sinks: Vec<EventSink>,
+    /// Sink events whose type had no channel when routed.
+    /// Checked by `drain()` so pull-based consumers always find their events.
+    pending_boxed: Vec<Box<dyn Any>>,
     /// Next handler ID.
     next_id: u64,
 }
@@ -42,6 +45,7 @@ impl<C: 'static> EventBus<C> {
         Self {
             channels: HashMap::new(),
             sinks: Vec::new(),
+            pending_boxed: Vec::new(),
             next_id: 0,
         }
     }
@@ -72,6 +76,44 @@ impl<C: 'static> EventBus<C> {
         self.channel_mut::<T>().events.push(event);
     }
 
+    /// Drain all queued events of type `T`, returning them without firing handlers.
+    ///
+    /// Automatically ingests any pending sink events before draining.
+    /// Use this for pull-based event consumption when you need access to state
+    /// that handlers don't provide (e.g., shared game state, level transitions).
+    ///
+    /// ```ignore
+    /// for event in bus.drain::<GameEvent>() {
+    ///     // handle with full game context
+    /// }
+    /// ```
+    pub fn drain<T: 'static>(&mut self) -> Vec<T> {
+        self.ingest_sinks();
+        let type_id = TypeId::of::<T>();
+        let mut result = Vec::new();
+
+        // Check typed channel first
+        if let Some(channel) = self.channels.get_mut(&type_id) {
+            if let Some(typed) = channel.as_any_mut().downcast_mut::<TypedChannel<T, C>>() {
+                result = std::mem::take(&mut typed.events);
+            }
+        }
+
+        // Also check pending boxed events (sink events whose type had no channel)
+        if !self.pending_boxed.is_empty() {
+            let mut remaining = Vec::new();
+            for event in self.pending_boxed.drain(..) {
+                match event.downcast::<T>() {
+                    Ok(typed) => result.push(*typed),
+                    Err(event) => remaining.push(event),
+                }
+            }
+            self.pending_boxed = remaining;
+        }
+
+        result
+    }
+
     /// Create a new `EventSink` linked to this bus.
     ///
     /// The sink can be cloned and given to subsystems (UI, physics, etc.).
@@ -82,23 +124,26 @@ impl<C: 'static> EventBus<C> {
         sink
     }
 
-    /// Drain all sinks and queues, fire handlers, and clear.
-    ///
-    /// Events emitted by handlers during this flush are NOT processed in this
-    /// flush — they stay queued for the next `flush()` call (prevents infinite loops).
-    pub fn flush(&mut self, ctx: &mut C) {
-        // 1. Collect type-erased events from all sinks
+    /// Drain all event sinks into typed channels without firing handlers.
+    /// Called automatically by `drain()` and `flush()`.
+    fn ingest_sinks(&mut self) {
         let mut sink_events: Vec<Box<dyn Any>> = Vec::new();
         for sink in &self.sinks {
             sink_events.extend(sink.drain());
         }
-
-        // 2. Route sink events into typed channels
         for event in sink_events {
             self.route_boxed_event(event);
         }
+    }
 
-        // 3. Fire handlers for each channel that has queued events
+    /// Drain all sinks and queues, fire handlers, and clear.
+    ///
+    /// Events emitted by handlers during this flush are NOT processed in this
+    /// flush — they stay queued for the next `flush()` call (prevents infinite loops).
+    ///
+    /// Events in channels with no registered handlers are preserved for `drain()`.
+    pub fn flush(&mut self, ctx: &mut C) {
+        self.ingest_sinks();
         for channel in self.channels.values_mut() {
             channel.flush(ctx);
         }
@@ -137,15 +182,15 @@ impl<C: 'static> EventBus<C> {
             .unwrap()
     }
 
-    /// Try to route a Box<dyn Any> event into the matching channel.
-    fn route_boxed_event(&mut self, mut event: Box<dyn Any>) {
-        for channel in self.channels.values_mut() {
-            match channel.try_push_boxed(event) {
-                Ok(()) => return,
-                Err(returned) => event = returned,
-            }
+    /// Route a Box<dyn Any> event into the matching channel via TypeId lookup.
+    /// Events with no channel are stored in `pending_boxed` for later `drain()`.
+    fn route_boxed_event(&mut self, event: Box<dyn Any>) {
+        let type_id = (*event).type_id();
+        if let Some(channel) = self.channels.get_mut(&type_id) {
+            channel.push_boxed(event);
+        } else {
+            self.pending_boxed.push(event);
         }
-        // Event type has no channel — silently dropped (no handler registered)
     }
 }
 
@@ -164,7 +209,7 @@ trait AnyChannel<C> {
     fn event_count(&self) -> usize;
     fn absorb_from(&mut self, other: &mut dyn AnyChannel<C>);
     fn take_events(&mut self) -> Box<dyn AnyChannel<C>>;
-    fn try_push_boxed(&mut self, event: Box<dyn Any>) -> Result<(), Box<dyn Any>>;
+    fn push_boxed(&mut self, event: Box<dyn Any>);
 }
 
 struct TypedChannel<T: 'static, C: 'static> {
@@ -193,7 +238,7 @@ impl<T: 'static, C: 'static> AnyChannel<C> for TypedChannel<T, C> {
     }
 
     fn flush(&mut self, ctx: &mut C) {
-        if self.events.is_empty() {
+        if self.events.is_empty() || self.handlers.is_empty() {
             return;
         }
         let events = std::mem::take(&mut self.events);
@@ -220,13 +265,9 @@ impl<T: 'static, C: 'static> AnyChannel<C> for TypedChannel<T, C> {
         Box::new(new_channel)
     }
 
-    fn try_push_boxed(&mut self, event: Box<dyn Any>) -> Result<(), Box<dyn Any>> {
-        match event.downcast::<T>() {
-            Ok(typed) => {
-                self.events.push(*typed);
-                Ok(())
-            }
-            Err(event) => Err(event),
+    fn push_boxed(&mut self, event: Box<dyn Any>) {
+        if let Ok(typed) = event.downcast::<T>() {
+            self.events.push(*typed);
         }
     }
 }

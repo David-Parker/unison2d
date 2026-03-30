@@ -591,6 +591,15 @@ ctx.events.off(id);  // unsubscribe
 ctx.events.emit(MyEvent { score: 100 });
 ```
 
+### Pull-Based Consumption
+
+```rust
+// Drain events of a specific type without firing handlers
+for action in ctx.events.drain::<MenuAction>() {
+    ctx.shared.selected_level = action.level;
+}
+```
+
 ### Collision Events
 
 Auto-enabled when registering collision handlers:

@@ -174,7 +174,7 @@ impl<A: Copy + Eq + Hash> Engine<A> {
     /// Create a UI system pre-wired to the event bus.
     ///
     /// Events from button clicks are automatically routed through the
-    /// `EventBus` instead of requiring manual `drain_events()` calls.
+    /// `EventBus` via an `EventSink`.
     ///
     /// ```ignore
     /// let ui = engine.create_ui::<MenuAction>(font_bytes)?;
@@ -184,9 +184,7 @@ impl<A: Copy + Eq + Hash> Engine<A> {
         let renderer = self.renderer.as_mut()
             .ok_or("No renderer available")?
             .as_mut();
-        let mut ui = unison_ui::facade::Ui::new(font_bytes, renderer)?;
-        ui.set_event_sink(sink);
-        Ok(ui)
+        unison_ui::facade::Ui::new(font_bytes, renderer, sink)
     }
 
     // ── Render targets ──

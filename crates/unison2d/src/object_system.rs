@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 
-use unison_core::{Color, EventSink, Vec2};
+use unison_core::{Color, Vec2};
 use unison_physics::{BodyHandle, PhysicsWorld};
 use unison_render::{DrawMesh, DrawSprite, RenderCommand};
 use unison_lighting::Occluder;
@@ -360,14 +360,15 @@ impl ObjectSystem {
     }
 
     /// Drain raw collision events from physics, translate BodyHandle → ObjectId,
-    /// and emit `CollisionEvent` into the given sink.
-    pub fn translate_collision_events(&mut self, sink: &EventSink) {
+    /// and return `CollisionEvent`s.
+    pub fn translate_collision_events(&mut self) -> Vec<CollisionEvent> {
         let raw_events = self.physics.drain_collision_events();
+        let mut result = Vec::with_capacity(raw_events.len());
         for raw in raw_events {
             let obj_a = self.handle_map.get(&raw.handle_a).copied();
             let obj_b = self.handle_map.get(&raw.handle_b).copied();
             if let (Some(a), Some(b)) = (obj_a, obj_b) {
-                sink.emit(CollisionEvent {
+                result.push(CollisionEvent {
                     object_a: a,
                     object_b: b,
                     normal: raw.normal,
@@ -376,6 +377,7 @@ impl ObjectSystem {
                 });
             }
         }
+        result
     }
 
     /// Snapshot physics state for interpolated rendering.

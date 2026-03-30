@@ -333,7 +333,7 @@ The `EventBus<World>` provides type-erased pub/sub messaging. Subsystems (UI, ph
 ### EventBus
 
 ```rust
-// Register handlers
+// Register handlers (push-based)
 let id = ctx.events.on::<MyEvent>(|event, world| { /* ... */ });
 ctx.events.off(id);  // unsubscribe
 
@@ -342,6 +342,11 @@ ctx.events.emit(MyEvent { score: 100 });
 
 // Flush: drains all sinks, fires handlers
 ctx.flush_events(&mut self.world);
+
+// Pull-based: drain events of a specific type without firing handlers
+for action in ctx.events.drain::<MenuAction>() {
+    ctx.shared.selected_level = action.level;
+}
 ```
 
 ### Collision Events
