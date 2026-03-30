@@ -106,13 +106,18 @@ impl Build {
             }
             _ if target.contains("wasm32") => {
                 // WASM32: no POSIX, no Windows — minimal C11 build.
-                // mlua provides the allocator; setjmp/longjmp come from Clang builtins.
+                // mlua provides the allocator.
                 // We supply a minimal libc header sysroot bundled alongside this crate.
+                //
+                // -mllvm -wasm-enable-sjlj: transforms setjmp/longjmp into WASM
+                // exception handling instructions so Lua's error recovery works.
                 let wasm_sysroot = Path::new(env!("CARGO_MANIFEST_DIR")).join("wasm-sysroot/include");
                 config
                     .define("LUA_USE_LONGJMP", None)
                     .define("LUA_32BITS", None)
-                    .include(&wasm_sysroot);
+                    .include(&wasm_sysroot)
+                    .flag("-mllvm")
+                    .flag("-wasm-enable-sjlj");
             }
             _ if target.ends_with("emscripten") => {
                 config
