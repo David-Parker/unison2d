@@ -100,10 +100,25 @@ static void seterrorobj (lua_State *L, int errcode, StkId oldtop) {
 }
 
 
+#if defined(__wasm__)
+/*
+** WASM: use external Rust functions (panic/catch_unwind) instead of
+** setjmp/longjmp, which cannot be implemented on wasm32-unknown-unknown.
+** Requires Rust panic = "unwind" (uses the WASM exception handling proposal).
+*/
+extern void wasm_lua_throw(void) __attribute__((noreturn));
+extern int  wasm_protected_call(void (*f)(void*, void*), void *L, void *ud);
+#endif
+
+
 l_noret luaD_throw (lua_State *L, int errcode) {
   if (L->errorJmp) {  /* thread has an error handler? */
     L->errorJmp->status = errcode;  /* set status */
+#if defined(__wasm__)
+    wasm_lua_throw();  /* Rust panic — caught by wasm_protected_call */
+#else
     LUAI_THROW(L, L->errorJmp);  /* jump to it */
+#endif
   }
   else {  /* thread has no error handler */
     L->status = cast_byte(errcode);  /* mark it as dead */
@@ -128,9 +143,13 @@ int luaD_rawrunprotected (lua_State *L, Pfunc f, void *ud) {
   lj.status = LUA_OK;
   lj.previous = L->errorJmp;  /* chain new error handler */
   L->errorJmp = &lj;
+#if defined(__wasm__)
+  wasm_protected_call((void(*)(void*,void*))f, (void*)L, ud);
+#else
   LUAI_TRY(L, &lj,
     (*f)(L, ud);
   );
+#endif
   L->errorJmp = lj.previous;  /* restore old error handler */
   L->nCcalls = oldnCcalls;
   return lj.status;
