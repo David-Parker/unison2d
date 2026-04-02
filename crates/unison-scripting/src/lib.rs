@@ -215,6 +215,12 @@ impl Game for ScriptedGame {
     }
 
     fn render(&mut self, engine: &mut Engine<NoAction>) {
+        // Call Lua render() first — it may call world:auto_render() which
+        // sets a request, or it may buffer Phase 1-style draw_rect commands.
+        if let Err(e) = self.call_lifecycle("render", ()) {
+            eprintln!("[unison-scripting] render() error: {e}");
+        }
+
         if let Some(r) = engine.renderer_mut() {
             // Check if Lua called world:auto_render().
             if let Some(world_rc) = bindings::engine::take_auto_render_world() {
@@ -227,23 +233,9 @@ impl Game for ScriptedGame {
                 let cam = unison2d::render::Camera::new(2.0, 2.0);
                 r.begin_frame(&cam);
                 r.clear(clear);
+                bridge::flush_commands(r);
+                r.end_frame();
             }
-
-            // Lua render() may also buffer Phase 1-style draw commands.
-            if let Err(e) = self.call_lifecycle("render", ()) {
-                eprintln!("[unison-scripting] render() error: {e}");
-            }
-
-            // Flush any Phase 1-style buffered commands.
-            bridge::flush_commands(r);
-
-            // If we used the fallback path, end the frame.
-            if bindings::engine::take_auto_render_world().is_none() {
-                // auto_render already called end_frame internally,
-                // but flush_commands may have added more. The renderer
-                // handles redundant end_frame calls gracefully.
-            }
-            r.end_frame();
         }
     }
 }
