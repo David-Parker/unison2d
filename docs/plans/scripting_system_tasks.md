@@ -28,7 +28,7 @@
 | Phase 1a | WASM Spike — validate mlua + WASM compatibility | [x] Complete |
 | Phase 1b | Create Crate — `unison-scripting` with ScriptedGame | [x] Complete |
 | Phase 2 | Core API Bindings — World, Objects, Input, Camera, Textures | [x] Complete |
-| Phase 3 | Full API Bindings — Lighting, Events, UI, Render, Scenes, Math | [ ] In Progress |
+| Phase 3 | Full API Bindings — Lighting, Events, UI, Render, Scenes, Math | [x] Complete |
 | Phase 4 | TypeScript Support — TSTL pipeline + type definitions | [ ] Not Started |
 | Phase 5 | Developer Experience & Cleanup — Hot reload, errors, debug, docs | [ ] Not Started |
 
@@ -284,146 +284,146 @@
 
 ### Tasks
 
-- [ ] **3.1 — Lighting bindings**
+- [x] **3.1 — Lighting bindings**
   - Files: `unison-scripting/src/bindings/lighting.rs` (create)
-  - [ ] Implement `world:lighting_set_enabled(bool)` — enable/disable lighting system
-  - [ ] Implement `world:lighting_set_ambient(r, g, b, a)` — set ambient light color
-  - [ ] Implement `world:lighting_set_ground_shadow(params)` — configure ground shadow
-  - [ ] Implement `world:add_point_light(desc)` — create point light from descriptor table, return handle
-  - [ ] Implement `world:add_directional_light(desc)` — create directional light, return handle
-  - [ ] Implement `world:set_light_intensity(handle, intensity)` — update light intensity
-  - [ ] Implement `world:set_directional_light_direction(handle, dx, dy)` — update direction
-  - [ ] Implement `world:light_follow(handle, object_id)` — make light track an object
-  - [ ] Implement `world:light_follow_with_offset(handle, object_id, ox, oy)` — track with offset
-  - [ ] Implement `world:light_unfollow(handle)` — stop tracking
+  - [x] Implement `world:lighting_set_enabled(bool)` — enable/disable lighting system
+  - [x] Implement `world:lighting_set_ambient(r, g, b, a)` — set ambient light color
+  - [x] Implement `world:lighting_set_ground_shadow(params)` — configure ground shadow
+  - [x] Implement `world:add_point_light(desc)` — create point light from descriptor table, return handle
+  - [x] Implement `world:add_directional_light(desc)` — create directional light, return handle
+  - [x] Implement `world:set_light_intensity(handle, intensity)` — update light intensity
+  - [x] Implement `world:set_directional_light_direction(handle, dx, dy)` — update direction
+  - [x] Implement `world:light_follow(handle, object_id)` — make light track an object
+  - [x] Implement `world:light_follow_with_offset(handle, object_id, ox, oy)` — track with offset
+  - [x] Implement `world:light_unfollow(handle)` — stop tracking
 
-- [ ] **3.2 — Event system bindings**
+- [x] **3.2 — Event system bindings**
   - Files: `unison-scripting/src/bindings/events.rs` (create)
-  - [ ] Implement string-keyed event system as `HashMap<String, Vec<RegistryKey>>` in Rust
-  - [ ] Implement `events:emit("name", data_table)` — emit an event with optional data
-  - [ ] Implement `events:on("name", callback)` — register a Lua callback for an event
-  - [ ] Implement `events:on_collision(fn)` — register a callback for any collision
-  - [ ] Implement `events:on_collision_for(id, fn)` — collision callback for specific object
-  - [ ] Implement `events:on_collision_between(a, b, fn)` — collision callback for specific pair
-  - [ ] Auto-translate engine collision events into Lua event callbacks
-  - [ ] Implement event dispatch/flush per frame (process pending events, call callbacks)
+  - [x] Implement string-keyed event system as `HashMap<String, Vec<RegistryKey>>` in Rust
+  - [x] Implement `events:emit("name", data_table)` — emit an event with optional data
+  - [x] Implement `events:on("name", callback)` — register a Lua callback for an event
+  - [x] Implement `events:on_collision(fn)` — register a callback for any collision
+  - [x] Implement `events:on_collision_for(id, fn)` — collision callback for specific object
+  - [x] Implement `events:on_collision_between(a, b, fn)` — collision callback for specific pair
+  - [x] Auto-translate engine collision events into Lua event callbacks
+  - [x] Implement event dispatch/flush per frame (process pending events, call callbacks)
 
-- [ ] **3.3 — Scene management bindings**
+- [x] **3.3 — Scene management bindings**
   - Files: `unison-scripting/src/bindings/scene.rs` (create)
-  - [ ] Implement `engine:set_scene(scene_table)` — set initial scene (calls `on_enter`)
-  - [ ] Implement `engine:switch_scene(scene_table)` — transition: call `on_exit` on old, `on_enter` on new
-  - [ ] Scene table format: `{ on_enter, update, render, on_exit }` functions
-  - [ ] Rust bridge auto-calls `world:step(dt)` after `scene.update(dt)` and `world:auto_render()` after `scene.render()` unless scene called them manually
+  - [x] Implement `engine:set_scene(scene_table)` — set initial scene (calls `on_enter`)
+  - [x] Implement `engine:switch_scene(scene_table)` — transition: call `on_exit` on old, `on_enter` on new
+  - [x] Scene table format: `{ on_enter, update, render, on_exit }` functions
+  - [x] Rust bridge auto-calls `world:step(dt)` after `scene.update(dt)` and `world:auto_render()` after `scene.render()` unless scene called them manually
 
-- [ ] **3.4 — Render layers bindings**
+- [x] **3.4 — Render layers bindings**
   - Files: `unison-scripting/src/bindings/render_layers.rs` (create)
-  - [ ] Implement `world:create_render_layer("name", {lit=false, clear_color=0x020206})` — create a named layer
-  - [ ] Implement `world:create_render_layer_before("name", "before_name", desc)` — insert layer at position
-  - [ ] Implement `world:set_layer_clear_color("name", color)` — update layer clear color
-  - [ ] Implement `world:draw_to(layer, "circle", params, z)` — draw shape to specific layer
-  - [ ] Implement `world:draw_to(layer, "gradient_circle", params, z)` — draw gradient circle to layer
+  - [x] Implement `world:create_render_layer("name", {lit=false, clear_color=0x020206})` — create a named layer
+  - [x] Implement `world:create_render_layer_before("name", "before_name", desc)` — insert layer at position
+  - [x] Implement `world:set_layer_clear_color("name", color)` — update layer clear color
+  - [x] Implement `world:draw_to(layer, "circle", params, z)` — draw shape to specific layer
+  - [x] Implement `world:draw_to(layer, "gradient_circle", params, z)` — draw gradient circle to layer
 
-- [ ] **3.5 — Render targets & compositing bindings**
+- [x] **3.5 — Render targets & compositing bindings**
   - Files: `unison-scripting/src/bindings/render_targets.rs` (create)
-  - [ ] Implement `engine:create_render_target(w, h)` — create off-screen render target, return (target, texture) pair
-  - [ ] Implement `world:render_to_targets({{"main", SCREEN}, {"overview", target}})` — render cameras to targets
-  - [ ] Implement `engine:draw_overlay(texture, x, y, w, h)` — draw overlay from render target texture
-  - [ ] Implement `engine:draw_overlay_bordered(texture, x, y, w, h, border)` — overlay with border
+  - [x] Implement `engine:create_render_target(w, h)` — create off-screen render target, return (target, texture) pair
+  - [x] Implement `world:render_to_targets({{"main", SCREEN}, {"overview", target}})` — render cameras to targets
+  - [x] Implement `engine:draw_overlay(texture, x, y, w, h)` — draw overlay from render target texture
+  - [x] Implement `engine:draw_overlay_bordered(texture, x, y, w, h, border)` — overlay with border
 
-- [ ] **3.6 — UI bindings**
+- [x] **3.6 — UI bindings**
   - Files: `unison-scripting/src/bindings/ui.rs` (create)
-  - [ ] Implement `engine:create_ui("fonts/DejaVuSans-Bold.ttf")` — create UI handle from font asset
-  - [ ] Implement `ui:frame(tree_table, world)` — build and render UI tree from nested Lua tables
-  - [ ] Support button elements with Lua function callbacks
-  - [ ] Route button callbacks through the event system internally
+  - [x] Implement `engine:create_ui("fonts/DejaVuSans-Bold.ttf")` — create UI handle from font asset
+  - [x] Implement `ui:frame(tree_table, world)` — build and render UI tree from nested Lua tables
+  - [x] Support button elements with Lua function callbacks
+  - [x] Route button callbacks through the event system internally
 
-- [ ] **3.7 — Math utilities bindings**
+- [x] **3.7 — Math utilities bindings**
   - Files: `unison-scripting/src/bindings/math.rs` (create)
-  - [ ] Implement `Color.hex(hex_int)` — create color from hex integer
-  - [ ] Implement `Color.rgba(r, g, b, a)` — create color from RGBA components
-  - [ ] Implement `Color:lerp(other, t)` — interpolate between colors
-  - [ ] Implement `Rng.new(seed)` — create deterministic RNG with seed
-  - [ ] Implement `rng:range(min, max)` — random float in range
-  - [ ] Implement `rng:range_int(min, max)` — random integer in range
-  - [ ] Implement `math.lerp(a, b, t)` — linear interpolation
-  - [ ] Implement `math.smoothstep(a, b, t)` — smooth interpolation
-  - [ ] Implement `math.clamp(x, min, max)` — clamp value
+  - [x] Implement `Color.hex(hex_int)` — create color from hex integer
+  - [x] Implement `Color.rgba(r, g, b, a)` — create color from RGBA components
+  - [x] Implement `Color:lerp(other, t)` — interpolate between colors
+  - [x] Implement `Rng.new(seed)` — create deterministic RNG with seed
+  - [x] Implement `rng:range(min, max)` — random float in range
+  - [x] Implement `rng:range_int(min, max)` — random integer in range
+  - [x] Implement `math.lerp(a, b, t)` — linear interpolation
+  - [x] Implement `math.smoothstep(a, b, t)` — smooth interpolation
+  - [x] Implement `math.clamp(x, min, max)` — clamp value
 
-- [ ] **3.8 — Update bindings module**
+- [x] **3.8 — Update bindings module**
   - Files: `unison-scripting/src/bindings/mod.rs` (modify)
-  - [ ] Add all new binding modules (lighting, events, scene, render_layers, render_targets, ui, math)
-  - [ ] Wire registration functions into `ScriptedGame` initialization
+  - [x] Add all new binding modules (lighting, events, scene, render_layers, render_targets, ui, math)
+  - [x] Wire registration functions into `ScriptedGame` initialization
 
-- [ ] **3.9 — Port menu level to Lua**
+- [x] **3.9 — Port menu level to Lua**
   - Files: `project/assets/scripts/scenes/menu.lua` (create)
-  - [ ] Create UI-based menu with level selection buttons
-  - [ ] Emit scene-switch events on button press
-  - [ ] Match visual appearance of Rust `MenuLevel`
+  - [x] Create UI-based menu with level selection buttons
+  - [x] Emit scene-switch events on button press
+  - [x] Match visual appearance of Rust `MenuLevel`
 
-- [ ] **3.10 — Port main level to Lua**
+- [x] **3.10 — Port main level to Lua**
   - Files: `project/assets/scripts/scenes/main_level.lua` (create)
-  - [ ] Port full main level logic: donut spawning, platforms, trigger box, collision detection
-  - [ ] Match visual appearance and gameplay of Rust `MainLevel`
+  - [x] Port full main level logic: donut spawning, platforms, trigger box, collision detection
+  - [x] Match visual appearance and gameplay of Rust `MainLevel`
 
-- [ ] **3.11 — Port lighting level to Lua**
+- [x] **3.11 — Port lighting level to Lua**
   - Files: `project/assets/scripts/scenes/lighting.lua` (create), `project/assets/scripts/scenes/day_night_cycle.lua` (create)
-  - [ ] Port lighting level with point lights, directional lights, shadows
-  - [ ] Implement day/night cycle with directional light rotation
-  - [ ] Match visual appearance of Rust `LightingLevel`
+  - [x] Port lighting level with point lights, directional lights, shadows
+  - [x] Implement day/night cycle with directional light rotation
+  - [x] Match visual appearance of Rust `LightingLevel`
 
-- [ ] **3.12 — Port random spawns level to Lua**
+- [x] **3.12 — Port random spawns level to Lua**
   - Files: `project/assets/scripts/scenes/random_spawns.lua` (create)
-  - [ ] Port random spawns level with PiP camera (render target + overlay)
-  - [ ] Random object spawning logic
-  - [ ] Match visual appearance of Rust `RandomSpawnsLevel`
+  - [x] Port random spawns level with PiP camera (render target + overlay)
+  - [x] Random object spawning logic
+  - [x] Match visual appearance of Rust `RandomSpawnsLevel`
 
-- [ ] **3.13 — Create shared utilities**
+- [x] **3.13 — Create shared utilities**
   - Files: `project/assets/scripts/scenes/shared.lua` (create)
-  - [ ] Implement `drive_donut(world, donut, input, dt)` — shared donut movement logic
-  - [ ] Implement `new_world(opts)` — shared world creation with common settings
+  - [x] Implement `drive_donut(world, donut, input, dt)` — shared donut movement logic
+  - [x] Implement `new_world(opts)` — shared world creation with common settings
 
-- [ ] **3.14 — Update main.lua to use scene management**
+- [x] **3.14 — Update main.lua to use scene management**
   - Files: `project/assets/scripts/main.lua` (modify)
-  - [ ] Replace single-scene hello world with scene-managed multi-level game
-  - [ ] Set initial scene to menu
-  - [ ] Handle level-complete events to return to menu
+  - [x] Replace single-scene hello world with scene-managed multi-level game
+  - [x] Set initial scene to menu
+  - [x] Handle level-complete events to return to menu
 
 ### Tests
 
-- [ ] **3.T1 — Create `scripting_full_api.rs` test file**
+- [x] **3.T1 — Create `scripting_full_api.rs` test file**
   - File: `unison2d/crates/unison-tests/tests/scripting_full_api.rs`
-  - [ ] Test: Lighting — create point/directional lights from Lua, set intensity/direction, verify LightingSystem state; light_follow updates position after step
-  - [ ] Test: Events (string-keyed) — emit event from Lua, register callback via `events:on()`, flush, verify callback was invoked with correct data table
-  - [ ] Test: Collision events — spawn two overlapping bodies, step, verify `events:on_collision()` callback fires with correct object IDs
-  - [ ] Test: Collision filtering — `on_collision_for(id)` only fires for specified object; `on_collision_between(a, b)` only fires for that pair
-  - [ ] Test: Scene management — `engine:set_scene()` calls `on_enter`; `engine:switch_scene()` calls `on_exit` on old, `on_enter` on new; verify `update`/`render` called each frame
-  - [ ] Test: Render layers — create lit/unlit layers from Lua, draw commands via `world:draw_to()`, verify render commands appear in correct layer (mock renderer)
-  - [ ] Test: Render targets — create render target, call `world:render_to_targets()` with multiple cameras, verify mock renderer receives correct target bindings
-  - [ ] Test: UI — build UI tree from Lua tables, simulate click via injected input, verify button callback fires and event reaches event system
-  - [ ] Test: Math utilities — `Color.hex()`, `Color:lerp()`, `Rng` determinism (same seed → same sequence), `math.lerp`/`math.smoothstep`/`math.clamp` correctness
+  - [x] Test: Lighting — create point/directional lights from Lua, set intensity/direction, verify LightingSystem state; light_follow updates position after step
+  - [x] Test: Events (string-keyed) — emit event from Lua, register callback via `events:on()`, flush, verify callback was invoked with correct data table
+  - [x] Test: Collision events — spawn two overlapping bodies, step, verify `events:on_collision()` callback fires with correct object IDs
+  - [x] Test: Collision filtering — `on_collision_for(id)` only fires for specified object; `on_collision_between(a, b)` only fires for that pair
+  - [x] Test: Scene management — `engine:set_scene()` calls `on_enter`; `engine:switch_scene()` calls `on_exit` on old, `on_enter` on new; verify `update`/`render` called each frame
+  - [x] Test: Render layers — create lit/unlit layers from Lua, draw commands via `world:draw_to()`, verify render commands appear in correct layer (mock renderer)
+  - [x] Test: Render targets — create render target, call `world:render_to_targets()` with multiple cameras, verify mock renderer receives correct target bindings
+  - [x] Test: UI — build UI tree from Lua tables, simulate click via injected input, verify button callback fires and event reaches event system
+  - [x] Test: Math utilities — `Color.hex()`, `Color:lerp()`, `Rng` determinism (same seed → same sequence), `math.lerp`/`math.smoothstep`/`math.clamp` correctness
 
 ### Documentation
 
-- [ ] **3.D1 — Update `scripting.md` with Full API reference**
+- [x] **3.D1 — Update `scripting.md` with Full API reference**
   - File: `unison2d/docs/api/scripting.md` (update)
-  - [ ] Add Lighting binding API reference
-  - [ ] Add Events binding API reference (string-keyed events + collision events)
-  - [ ] Add Scene management API reference
-  - [ ] Add Render Layer/Target API reference
-  - [ ] Add UI binding API reference
-  - [ ] Add Math utilities API reference
-  - [ ] Document engine simplifications table — what each Rust abstraction was, why it existed, and what replaces it in Lua
+  - [x] Add Lighting binding API reference
+  - [x] Add Events binding API reference (string-keyed events + collision events)
+  - [x] Add Scene management API reference
+  - [x] Add Render Layer/Target API reference
+  - [x] Add UI binding API reference
+  - [x] Add Math utilities API reference
+  - [x] Document engine simplifications table — what each Rust abstraction was, why it existed, and what replaces it in Lua
 
-- [ ] **3.D2 — Create `scripting-scenes.md` guide**
+- [x] **3.D2 — Create `scripting-scenes.md` guide**
   - File: `unison2d/docs/guide/scripting-scenes.md` (create)
-  - [ ] Document patterns for multi-scene games in Lua
-  - [ ] Scene table format and lifecycle (`on_enter`, `update`, `render`, `on_exit`)
-  - [ ] Scene switching patterns
-  - [ ] This replaces `levels.md` for scripted games
+  - [x] Document patterns for multi-scene games in Lua
+  - [x] Scene table format and lifecycle (`on_enter`, `update`, `render`, `on_exit`)
+  - [x] Scene switching patterns
+  - [x] This replaces `levels.md` for scripted games
 
-- [ ] **3.D3 — Document engine simplifications in `scripting.md`**
+- [x] **3.D3 — Document engine simplifications in `scripting.md`**
   - File: `unison2d/docs/api/scripting.md` (update)
-  - [ ] Document the Rust-to-Lua simplification mapping: EventBus → string-keyed events, Level → scene tables, Ctx → individual globals, Engine\<A\> → NoAction, Prefab → factory functions, SharedState → global state
+  - [x] Document the Rust-to-Lua simplification mapping: EventBus → string-keyed events, Level → scene tables, Ctx → individual globals, Engine\<A\> → NoAction, Prefab → factory functions, SharedState → global state
 
 ### Phase 3 Verification
 
