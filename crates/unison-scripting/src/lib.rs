@@ -146,6 +146,11 @@ impl Game for ScriptedGame {
             return;
         }
 
+        // Pre-load all .lua script assets into package.preload so require() works.
+        if let Err(e) = Self::setup_require(&lua, engine) {
+            eprintln!("[unison-scripting] Failed to setup require: {e}");
+        }
+
         // Update screen size before script runs.
         if let Some(r) = engine.renderer_mut() {
             let (w, h) = r.screen_size();
@@ -287,5 +292,45 @@ impl Game for ScriptedGame {
                 r.end_frame();
             }
         }
+    }
+}
+
+impl ScriptedGame {
+    /// Set up Lua `require()` to load scripts from embedded assets.
+    ///
+    /// Iterates all `.lua` asset paths and registers them in `package.preload`
+    /// so that `require("scenes/shared")` loads `scripts/scenes/shared.lua`.
+    fn setup_require(lua: &Lua, engine: &Engine<NoAction>) -> LuaResult<()> {
+        let preload: LuaTable = lua.globals()
+            .get::<LuaTable>("package")?
+            .get::<LuaTable>("preload")?;
+
+        for path in engine.assets().paths() {
+            if !path.starts_with("scripts/") || !path.ends_with(".lua") {
+                continue;
+            }
+
+            // Convert "scripts/scenes/shared.lua" → "scenes/shared"
+            let module_name = path
+                .strip_prefix("scripts/").unwrap()
+                .strip_suffix(".lua").unwrap()
+                .to_string();
+
+            let bytes = match engine.assets().get(path) {
+                Some(b) => b,
+                None => continue,
+            };
+
+            let source = match std::str::from_utf8(bytes) {
+                Ok(s) => s.to_string(),
+                Err(_) => continue,
+            };
+
+            let chunk_name = format!("@{path}");
+            let func = lua.load(&source).set_name(&chunk_name).into_function()?;
+            preload.set(module_name, func)?;
+        }
+
+        Ok(())
     }
 }
