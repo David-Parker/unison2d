@@ -63,6 +63,11 @@ pub fn take_auto_render_world() -> Option<Rc<RefCell<World>>> {
     AUTO_RENDER_WORLD.with(|cell| cell.borrow_mut().take())
 }
 
+/// Non-consuming peek at the auto-render world (for collision event flushing).
+pub fn peek_auto_render_world() -> Option<Rc<RefCell<World>>> {
+    AUTO_RENDER_WORLD.with(|cell| cell.borrow().clone())
+}
+
 pub fn take_aa_request() -> Option<String> {
     AA_REQUEST.with(|cell| cell.borrow_mut().take())
 }

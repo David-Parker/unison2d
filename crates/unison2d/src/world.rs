@@ -46,6 +46,18 @@ impl Default for Environment {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct RenderLayerId(usize);
 
+impl RenderLayerId {
+    /// Create from a raw integer (for scripting bridges).
+    pub fn from_raw(id: usize) -> Self {
+        Self(id)
+    }
+
+    /// Get the raw integer handle.
+    pub fn raw(self) -> usize {
+        self.0
+    }
+}
+
 /// Configuration for a render layer.
 pub struct RenderLayerConfig {
     /// Whether this layer is affected by the lighting/shadow system.

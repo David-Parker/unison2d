@@ -8,6 +8,18 @@ use crate::occluder::ShadowFilter;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct LightId(pub(crate) u32);
 
+impl LightId {
+    /// Create from a raw integer (for scripting bridges).
+    pub fn from_raw(id: u32) -> Self {
+        Self(id)
+    }
+
+    /// Get the raw integer handle.
+    pub fn raw(self) -> u32 {
+        self.0
+    }
+}
+
 /// Shadow casting configuration shared by all light types.
 ///
 /// Controls the appearance of shadows cast by a light. The light must also

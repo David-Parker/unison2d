@@ -125,6 +125,16 @@ pub struct RenderTargetId(pub u32);
 impl RenderTargetId {
     /// The default framebuffer (screen).
     pub const SCREEN: Self = Self(0);
+
+    /// Create from a raw integer (for scripting bridges).
+    pub fn from_raw(id: u32) -> Self {
+        Self(id)
+    }
+
+    /// Get the raw integer handle.
+    pub fn raw(self) -> u32 {
+        self.0
+    }
 }
 
 /// Blend mode for draw operations.

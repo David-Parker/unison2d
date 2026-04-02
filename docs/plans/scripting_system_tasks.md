@@ -28,7 +28,7 @@
 | Phase 1a | WASM Spike — validate mlua + WASM compatibility | [x] Complete |
 | Phase 1b | Create Crate — `unison-scripting` with ScriptedGame | [x] Complete |
 | Phase 2 | Core API Bindings — World, Objects, Input, Camera, Textures | [x] Complete |
-| Phase 3 | Full API Bindings — Lighting, Events, UI, Render, Scenes, Math | [ ] Not Started |
+| Phase 3 | Full API Bindings — Lighting, Events, UI, Render, Scenes, Math | [ ] In Progress |
 | Phase 4 | TypeScript Support — TSTL pipeline + type definitions | [ ] Not Started |
 | Phase 5 | Developer Experience & Cleanup — Hot reload, errors, debug, docs | [ ] Not Started |
 
@@ -267,7 +267,7 @@
 
 - [x] Lua script spawns soft-body donut, ground, moves with keyboard/joystick, jumps
 - [x] Camera follows donut with damping
-- [ ] Touch input works on iOS/Android
+- [x] Touch input works on iOS/Android
 - [x] `cargo test -p unison-tests --test scripting_core_api` — all 24 tests pass
 - [x] Runs at 60fps (Lua overhead negligible)
 - [x] All tasks in Phase 2 are checked off

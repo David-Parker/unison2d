@@ -208,16 +208,42 @@ impl Game for ScriptedGame {
         // Refresh input snapshot.
         bindings::input::refresh(engine.input_state());
 
-        if let Err(e) = self.call_lifecycle("update", dt) {
-            eprintln!("[unison-scripting] update() error: {e}");
+        // Dispatch update: scene system takes priority if active.
+        if bindings::scene::is_active() {
+            if let Some(lua) = &self.lua {
+                if let Err(e) = bindings::scene::call_scene_update(lua, dt) {
+                    eprintln!("[unison-scripting] scene update() error: {e}");
+                }
+            }
+        } else {
+            if let Err(e) = self.call_lifecycle("update", dt) {
+                eprintln!("[unison-scripting] update() error: {e}");
+            }
+        }
+
+        // Flush collision events from world into Lua callbacks.
+        if let Some(lua) = &self.lua {
+            if let Some(world_rc) = bindings::engine::peek_auto_render_world() {
+                let mut world = world_rc.borrow_mut();
+                bindings::events::flush_collision_events(lua, &mut world);
+            }
+            // Flush string-keyed events.
+            bindings::events::flush_string_events(lua);
         }
     }
 
     fn render(&mut self, engine: &mut Engine<NoAction>) {
-        // Call Lua render() first — it may call world:auto_render() which
-        // sets a request, or it may buffer Phase 1-style draw_rect commands.
-        if let Err(e) = self.call_lifecycle("render", ()) {
-            eprintln!("[unison-scripting] render() error: {e}");
+        // Dispatch render: scene system takes priority if active.
+        if bindings::scene::is_active() {
+            if let Some(lua) = &self.lua {
+                if let Err(e) = bindings::scene::call_scene_render(lua) {
+                    eprintln!("[unison-scripting] scene render() error: {e}");
+                }
+            }
+        } else {
+            if let Err(e) = self.call_lifecycle("render", ()) {
+                eprintln!("[unison-scripting] render() error: {e}");
+            }
         }
 
         if let Some(r) = engine.renderer_mut() {
@@ -225,7 +251,32 @@ impl Game for ScriptedGame {
             if let Some(world_rc) = bindings::engine::take_auto_render_world() {
                 let mut world = world_rc.borrow_mut();
                 world.snapshot_for_render();
-                world.auto_render(r);
+
+                // Check for render_to_targets request.
+                if let Some(targets) = bindings::render_targets::take_render_to_targets() {
+                    use unison2d::render::RenderTargetId;
+                    let camera_targets: Vec<(&str, RenderTargetId)> = targets.iter()
+                        .map(|(name, raw)| (name.as_str(), RenderTargetId::from_raw(*raw)))
+                        .collect();
+                    world.render_to_targets(r, &camera_targets);
+                } else {
+                    world.auto_render(r);
+                }
+
+                // Handle overlay requests (PiP, etc.)
+                for overlay in bindings::render_targets::take_overlay_requests() {
+                    use unison2d::render::{DrawSprite, RenderCommand, TextureId, RenderTargetId};
+                    r.bind_render_target(RenderTargetId::SCREEN);
+                    let cam = unison2d::render::Camera::new(1.0, 1.0);
+                    r.begin_frame(&cam);
+                    r.draw(RenderCommand::Sprite(DrawSprite {
+                        texture: TextureId::from_raw(overlay.texture_id),
+                        position: [overlay.x, overlay.y],
+                        size: [overlay.w, overlay.h],
+                        ..DrawSprite::default()
+                    }));
+                    r.end_frame();
+                }
             } else {
                 // Fallback: Phase 1 style — manual clear + draw_rect commands.
                 let clear = bindings::engine::get_clear_color();

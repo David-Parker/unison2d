@@ -67,6 +67,15 @@ impl LuaUserData for LuaWorld {
 
         // Register camera methods
         super::camera::add_world_methods(methods);
+
+        // Register lighting methods
+        super::lighting::add_world_methods(methods);
+
+        // Register render layer methods
+        super::render_layers::add_world_methods(methods);
+
+        // Register render target methods (render_to_targets)
+        super::render_targets::add_world_methods(methods);
     }
 }
 
