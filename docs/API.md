@@ -39,6 +39,19 @@ pub trait Game {
 - `update()` runs at fixed 60Hz — step your world(s) here
 - `render()` is required — game controls all rendering
 
+### Scripted Games (Lua)
+
+For Lua scripting, use `ScriptedGame` from the `unison-scripting` crate instead of implementing `Game` directly. See [api/scripting.md](api/scripting.md) for the full Lua API reference.
+
+```lua
+local world = World.new()
+world:set_gravity(-9.8)
+local id = world:spawn_soft_body({mesh="ring", mesh_params={1,0.25,24,8}, material="rubber", position={0,5}})
+world:camera_follow("main", id, 0.08)
+```
+
+Key globals: `World`, `engine`, `input` — all documented in the scripting reference.
+
 ## World
 
 Self-contained simulation owning physics, objects, cameras, and environment.

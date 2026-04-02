@@ -6,7 +6,7 @@ Lua 5.4 scripting for Unison 2D. Implements the `Game` trait internally, forward
 
 - Embed a full Lua 5.4 VM in the game binary (vendored C source, no system Lua required)
 - Implement `Game` trait so the scripting layer is a drop-in replacement for Rust game code
-- Expose engine functionality to Lua via registered globals (`engine`, `input`, `world`, etc.)
+- Expose engine functionality to Lua via registered globals (`engine`, `input`, `World`, etc.)
 - Support all three platforms: Web (wasm32), iOS (aarch64-apple-ios), Android
 
 ## Key Types
@@ -18,6 +18,7 @@ pub struct ScriptedGame { /* ... */ }
 
 impl ScriptedGame {
     pub fn new(script_src: impl Into<String>) -> Self;
+    pub fn from_asset(path: impl Into<String>, assets: &'static [EmbeddedAsset]) -> Self;
 }
 
 impl Game for ScriptedGame {
@@ -40,39 +41,210 @@ Unit action enum for scripted games. Scripted games query input directly via the
 
 ## Lua Lifecycle
 
-The script passed to `ScriptedGame::new()` is executed once during `init()`. It **must return a table** with at least `init`, `update`, and `render` keys. Missing functions are silently ignored (no panic).
+The script passed to `ScriptedGame::new()` (or loaded from assets via `from_asset()`) is executed once during `init()`. It **must return a table** with `init`, `update`, and `render` keys. Missing functions are silently ignored (no panic).
 
 ```lua
 local game = {}
+local world, donut
 
 function game.init()
-    -- Called once after engine init. Set up world, load assets.
-    engine.set_background(0.1, 0.1, 0.12)
+    world = World.new()
+    world:set_gravity(-9.8)
+    world:set_ground(-4.5)
+    donut = world:spawn_soft_body({
+        mesh = "ring", mesh_params = {1.0, 0.25, 24, 8},
+        material = "rubber",
+        position = {0, 3.5},
+        texture = engine.load_texture("textures/donut-pink.png"),
+    })
+    world:camera_follow("main", donut, 0.08)
 end
 
 function game.update(dt)
-    -- Called every fixed timestep. dt is the delta in seconds.
+    if input.is_key_pressed("ArrowRight") then
+        world:apply_force(donut, 80, 0)
+    end
+    if input.is_key_just_pressed("Space") and world:is_grounded(donut) then
+        world:apply_impulse(donut, 0, 10)
+    end
+    world:step(dt)
 end
 
 function game.render()
-    -- Called every frame. Draw calls are buffered and submitted after return.
-    engine.draw_rect(0, 0, 2, 2, 1, 0.2, 0.2)
+    world:auto_render()
 end
 
 return game
 ```
 
-## Engine Globals (Phase 1b — minimal bridge)
+---
 
-These are registered before the script runs:
+## World
 
-| Global | Signature | Description |
+Create and manage a physics world with objects, cameras, and rendering.
+
+### Constructor
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `World.new` | `() → World` | Create a new World with default settings (main camera, -9.8 gravity) |
+
+### Configuration
+
+| Method | Signature | Description |
 |--------|-----------|-------------|
-| `engine.set_background` | `(r, g, b: number)` | Set the clear color (0–1 per channel) |
-| `engine.draw_rect` | `(x, y, w, h, r, g, b: number)` | Draw a colored rectangle in world space |
-| `engine.screen_size` | `() → (width, height: number)` | Get current screen dimensions |
+| `world:set_background` | `(hex: integer)` | Set background color from hex (e.g. `0x1a1a2e`) |
+| `world:set_gravity` | `(g: number)` | Set gravity strength (negative = downward) |
+| `world:set_ground` | `(y: number)` | Set flat ground plane at Y position |
+| `world:set_ground_restitution` | `(r: number)` | Set ground bounce factor (0=no bounce, 1=perfect) |
+| `world:set_ground_friction` | `(f: number)` | Set ground friction (0=ice, 1=sticky) |
 
-Additional globals (`World`, `input`, `camera`, textures, events, scenes) are added in Phase 2+.
+### Simulation & Rendering
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `world:step` | `(dt: number)` | Advance physics simulation by `dt` seconds |
+| `world:auto_render` | `()` | Render all objects through the main camera |
+
+---
+
+## Objects
+
+Spawn, despawn, and interact with physics objects. All spawn functions return an integer **object ID**.
+
+### Spawning
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `world:spawn_soft_body` | `(desc: table) → id` | Spawn a soft body from descriptor table |
+| `world:spawn_rigid_body` | `(desc: table) → id` | Spawn a rigid body from descriptor table |
+| `world:spawn_static_rect` | `(pos, size, color) → id` | Spawn a static rectangle (`pos`/`size` are `{x,y}` tables, `color` is hex) |
+| `world:spawn_sprite` | `(desc: table) → id` | Spawn a sprite (visual only, no physics) |
+| `world:despawn` | `(id: integer)` | Remove an object from the world |
+
+### Soft Body Descriptor
+
+```lua
+{
+    mesh = "ring",                 -- "ring", "square", "ellipse", "star", "blob", "rounded_box"
+    mesh_params = {1.0, 0.25, 24, 8},  -- depends on mesh type (see below)
+    material = "rubber",           -- preset string or custom table
+    position = {x, y},
+    color = 0xFFFFFF,              -- hex integer (optional, default white)
+    texture = texture_id,          -- from engine.load_texture (optional)
+}
+```
+
+**Mesh types and params:**
+
+| Mesh | Params |
+|------|--------|
+| `"ring"` | `{outer_radius, inner_radius, segments, radial_divisions}` |
+| `"square"` | `{size, divisions}` |
+| `"ellipse"` | `{radius_x, radius_y, segments, rings}` |
+| `"star"` | `{outer_radius, inner_radius, points, divisions}` |
+| `"blob"` | `{radius, variation, segments, rings, seed}` |
+| `"rounded_box"` | `{width, height, corner_radius, corner_segments}` |
+
+**Material presets:** `"rubber"`, `"jello"`, `"wood"`, `"metal"`, `"slime"`
+
+**Custom material:** `{density = 900, edge_compliance = 5e-6, area_compliance = 2e-5}`
+
+### Rigid Body Descriptor
+
+```lua
+{
+    collider = "aabb",       -- "aabb" or "circle"
+    half_width = 2,          -- for "aabb"
+    half_height = 0.5,       -- for "aabb"
+    radius = 1.0,            -- for "circle"
+    position = {x, y},
+    color = 0x00FF00,
+    is_static = true,        -- optional, default false
+}
+```
+
+### Sprite Descriptor
+
+```lua
+{
+    texture = texture_id,    -- optional
+    position = {x, y},
+    size = {w, h},           -- optional, default {1,1}
+    rotation = 0,            -- radians, optional
+    color = 0xFFFFFF,        -- optional
+}
+```
+
+### Physics Interaction
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `world:apply_force` | `(id, fx, fy)` | Apply a continuous force (use in update) |
+| `world:apply_impulse` | `(id, ix, iy)` | Apply an instant velocity change |
+| `world:apply_torque` | `(id, torque, dt)` | Apply rotational torque |
+
+### Queries
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `world:get_position` | `(id) → x, y` | Get object center position |
+| `world:get_velocity` | `(id) → vx, vy` | Get object velocity |
+| `world:is_grounded` | `(id) → bool` | True if object is resting on ground |
+| `world:is_touching` | `(a, b) → bool` | True if two objects are in contact |
+
+### Display Properties
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `world:set_z_order` | `(id, z: integer)` | Set draw order (higher = on top) |
+| `world:set_casts_shadow` | `(id, bool)` | Enable/disable shadow casting |
+| `world:set_position` | `(id, x, y)` | Teleport object to position |
+
+---
+
+## Input
+
+Global `input` table, refreshed each frame automatically.
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `input.is_key_pressed` | `(key: string) → bool` | True while key is held down |
+| `input.is_key_just_pressed` | `(key: string) → bool` | True only on the frame the key was pressed |
+| `input.axis_x` | `() → number` | Horizontal axis (-1 to 1, from joystick/touch) |
+| `input.axis_y` | `() → number` | Vertical axis (-1 to 1) |
+| `input.touches_just_began` | `() → [{x, y}, ...]` | Array of new touch positions this frame |
+
+**Key names:** `"ArrowUp"`, `"ArrowDown"`, `"ArrowLeft"`, `"ArrowRight"`, `"Space"`, `"Enter"`, `"Escape"`, `"Tab"`, `"Backspace"`, `"ShiftLeft"`, `"ShiftRight"`, `"ControlLeft"`, `"ControlRight"`, `"AltLeft"`, `"AltRight"`, single letters `"A"`–`"Z"`, digits `"0"`–`"9"` or `"Digit0"`–`"Digit9"`.
+
+---
+
+## Camera
+
+Camera methods are on the World object. A default `"main"` camera is created automatically.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `world:camera_follow` | `(name, id, smoothing)` | Make camera follow an object (0=frozen, 1=instant) |
+| `world:camera_follow_with_offset` | `(name, id, smoothing, ox, oy)` | Follow with world-space offset |
+| `world:camera_add` | `(name, width, height)` | Add a named camera with viewport size |
+| `world:camera_get_position` | `(name) → x, y` | Get camera center position |
+
+---
+
+## Engine
+
+Global `engine` table for texture loading, screen info, and configuration.
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `engine.load_texture` | `(path: string) → integer` | Load texture from embedded assets, returns texture ID |
+| `engine.screen_size` | `() → width, height` | Get screen dimensions in logical points |
+| `engine.set_anti_aliasing` | `(mode: string)` | Set AA mode: `"none"`, `"msaa2x"`, `"msaa4x"`, `"msaa8x"` |
+| `engine.set_background` | `(hex)` or `(r, g, b)` | Set clear color (fallback path, prefer `world:set_background`) |
+| `engine.draw_rect` | `(x, y, w, h, r, g, b)` | Draw a colored rectangle (fallback path, prefer `world:auto_render`) |
+
+---
 
 ## Error Handling
 
@@ -90,15 +262,14 @@ brew install llvm
 
 The `CC_wasm32_unknown_unknown` env var is pre-configured in the root `.cargo/config.toml`. A patched `lua-src` (at `vendor/lua-src/`) adds `wasm32` build support and includes a minimal libc sysroot (`vendor/lua-src/wasm-sysroot/`).
 
+Lua's `setjmp`/`longjmp` error handling is replaced with a JS exception bridge (`wasm_lua_throw` / `wasm_protected_call` in `project/wasm_libc.rs`), patched in `vendor/lua-src/lua-5.4.7/ldo.c`.
+
 ## Script Loading
 
 Scripts are loaded from embedded assets at runtime. Place Lua scripts in `project/assets/scripts/` — they are embedded at build time by `build.rs`. The entry point is `scripts/main.lua`.
 
 ```rust
 // In project/lib.rs:
-let script = assets::ASSETS.iter()
-    .find(|(path, _)| *path == "scripts/main.lua")
-    .map(|(_, bytes)| std::str::from_utf8(bytes).unwrap().to_string())
-    .unwrap_or_default();
-let game = ScriptedGame::new(script);
+use unison_scripting::ScriptedGame;
+let game = ScriptedGame::from_asset("scripts/main.lua", assets::ASSETS);
 ```
