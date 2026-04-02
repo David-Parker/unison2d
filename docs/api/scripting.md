@@ -246,6 +246,192 @@ Global `engine` table for texture loading, screen info, and configuration.
 
 ---
 
+## Lighting
+
+Control the lighting system through World methods.
+
+### System Configuration
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `world:lighting_set_enabled` | `(bool)` | Enable/disable the lighting system |
+| `world:lighting_set_ambient` | `(r, g, b, a)` | Set ambient light color |
+| `world:lighting_set_ground_shadow` | `(y)` or `(nil)` | Set ground shadow plane, or nil to disable |
+
+### Point Lights
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `world:add_point_light` | `(desc) → handle` | Add point light from descriptor table |
+| `world:set_light_intensity` | `(handle, intensity)` | Update light intensity |
+| `world:light_follow` | `(handle, object_id)` | Make light track an object |
+| `world:light_follow_with_offset` | `(handle, id, ox, oy)` | Track with offset |
+| `world:light_unfollow` | `(handle)` | Stop tracking |
+
+**Point light descriptor:**
+```lua
+{
+    position = {x, y},
+    color = 0xFFDD44,        -- hex color (optional, default white)
+    intensity = 2.0,         -- multiplier (optional, default 1.0)
+    radius = 8.0,            -- world units (optional, default 5.0)
+    casts_shadows = true,    -- optional, default false
+    shadow = "soft",         -- "hard", "soft", or custom table
+}
+```
+
+### Directional Lights
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `world:add_directional_light` | `(desc) → handle` | Add directional light |
+| `world:set_directional_light_direction` | `(handle, dx, dy)` | Update direction |
+
+**Directional light descriptor:**
+```lua
+{
+    direction = {-0.5, -1.0},
+    color = 0xFFFFFF,
+    intensity = 0.8,
+    casts_shadows = true,
+    shadow = { filter = "pcf5", distance = 6.0, strength = 0.7 },
+}
+```
+
+---
+
+## Events
+
+Global `events` table for string-keyed events and collision callbacks.
+
+### String Events
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `events.on` | `(name, callback)` | Register a callback for named event |
+| `events.emit` | `(name, data?)` | Emit event with optional data table |
+
+### Collision Events
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `events.on_collision` | `(fn(a, b, info))` | Callback for any collision |
+| `events.on_collision_for` | `(id, fn(other, info))` | Callback for specific object |
+| `events.on_collision_between` | `(a, b, fn(info))` | Callback for specific pair |
+
+**Collision info table:** `{ normal_x, normal_y, penetration, contact_x, contact_y }`
+
+---
+
+## Scenes
+
+Scene management replaces the Rust Level trait. A scene is a Lua table with lifecycle functions.
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `engine.set_scene` | `(scene_table)` | Set initial scene, calls `on_enter` |
+| `engine.switch_scene` | `(scene_table)` | Transition: `on_exit` old, `on_enter` new |
+
+**Scene table format:**
+```lua
+local scene = {
+    on_enter = function() ... end,   -- called when scene starts
+    update = function(dt) ... end,   -- called each frame
+    render = function() ... end,     -- called each frame
+    on_exit = function() ... end,    -- called when switching away
+}
+```
+
+When scenes are active, the scene's `update`/`render` are called instead of `game.update`/`game.render`.
+
+---
+
+## Render Layers
+
+Create named render layers with different lighting/clear settings.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `world:create_render_layer` | `(name, desc) → handle` | Create a named layer |
+| `world:create_render_layer_before` | `(name, before, desc) → handle` | Insert before existing layer |
+| `world:set_layer_clear_color` | `(handle, hex)` | Update layer clear color |
+| `world:default_layer` | `() → handle` | Get the default scene layer |
+| `world:draw_to` | `(layer, shape, params, z)` | Draw shape to specific layer |
+| `world:draw` | `(shape, params, z)` | Draw to default layer |
+| `world:draw_unlit` | `(shape, params, z)` | Draw unlit (not affected by lightmap) |
+
+**Layer descriptor:** `{ lit = false, clear_color = 0x020206 }`
+
+**Shape types:** `"rect"` `{ x, y, width, height, color }`, `"line"` `{ x1, y1, x2, y2, color, width }`, `"circle"` `{ x, y, radius, color }`
+
+---
+
+## Math Utilities
+
+### Color
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `Color.hex` | `(hex) → Color` | Create color from hex integer |
+| `Color.rgba` | `(r, g, b, a) → Color` | Create from RGBA components |
+| `color:lerp` | `(other, t) → Color` | Interpolate between colors |
+
+Color fields: `color.r`, `color.g`, `color.b`, `color.a`
+
+### Rng
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `Rng.new` | `(seed) → Rng` | Create deterministic RNG |
+| `rng:range` | `(min, max) → number` | Random float in [min, max) |
+| `rng:range_int` | `(min, max) → integer` | Random integer in [min, max] |
+
+### Math Extensions
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `math.lerp` | `(a, b, t) → number` | Linear interpolation |
+| `math.smoothstep` | `(edge0, edge1, x) → number` | Smooth Hermite interpolation |
+| `math.clamp` | `(x, min, max) → number` | Clamp value to range |
+
+---
+
+## UI
+
+Declarative UI built from Lua tables.
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `engine.create_ui` | `(font_path) → UI` | Create UI handle from font asset |
+| `ui:frame` | `(tree_table)` | Render a UI frame from nested table tree |
+
+**Node types:** `"column"`, `"row"`, `"panel"`, `"label"`, `"button"`, `"spacer"`
+
+Button `on_click` values are emitted as string events. Listen with `events.on("click_name", callback)`.
+
+```lua
+ui:frame({
+    { type = "column", anchor = "center", gap = 10, children = {
+        { type = "label", text = "Title", font_size = 32 },
+        { type = "button", text = "Play", on_click = "start_game",
+          width = 200, height = 60, font_size = 24 },
+    }},
+})
+```
+
+---
+
+## Modules & require()
+
+Scripts can use `require()` to load other Lua modules from embedded assets. All `.lua` files under `project/assets/scripts/` are automatically registered as modules.
+
+```lua
+-- Loads scripts/scenes/shared.lua
+local shared = require("scenes/shared")
+```
+
+---
+
 ## Error Handling
 
 - **Syntax errors** in the script: logged to stderr, `init`/`update`/`render` become no-ops.
