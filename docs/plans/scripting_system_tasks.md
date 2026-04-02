@@ -27,7 +27,7 @@
 |-------|-------------|--------|
 | Phase 1a | WASM Spike — validate mlua + WASM compatibility | [x] Complete |
 | Phase 1b | Create Crate — `unison-scripting` with ScriptedGame | [x] Complete |
-| Phase 2 | Core API Bindings — World, Objects, Input, Camera, Textures | [ ] Not Started |
+| Phase 2 | Core API Bindings — World, Objects, Input, Camera, Textures | [~] In Progress (tasks done, tests/docs remaining) |
 | Phase 3 | Full API Bindings — Lighting, Events, UI, Render, Scenes, Math | [ ] Not Started |
 | Phase 4 | TypeScript Support — TSTL pipeline + type definitions | [ ] Not Started |
 | Phase 5 | Developer Experience & Cleanup — Hot reload, errors, debug, docs | [ ] Not Started |
@@ -167,72 +167,73 @@
 
 ### Tasks
 
-- [ ] **2.1 — Create bindings module structure**
+- [x] **2.1 — Create bindings module structure**
   - Files: `unison-scripting/src/bindings/mod.rs` (create)
-  - [ ] Create `unison-scripting/src/bindings/` directory
-  - [ ] Create `mod.rs` that re-exports all binding submodules
-  - [ ] Wire bindings module into `unison-scripting/src/lib.rs`
+  - [x] Create `unison-scripting/src/bindings/` directory
+  - [x] Create `mod.rs` that re-exports all binding submodules
+  - [x] Wire bindings module into `unison-scripting/src/lib.rs`
 
-- [ ] **2.2 — World bindings**
+- [x] **2.2 — World bindings**
   - Files: `unison-scripting/src/bindings/world.rs` (create)
-  - [ ] Implement `World.new()` — creates a World, returns userdata wrapping `Rc<RefCell<World>>`
-  - [ ] Implement `world:set_background(color)` — sets world background color
-  - [ ] Implement `world:set_gravity(g)` — sets world gravity
-  - [ ] Implement `world:set_ground(y)` — sets ground plane Y position
-  - [ ] Implement `world:set_ground_restitution(r)` — sets ground bounce factor
-  - [ ] Implement `world:step(dt)` — advances physics simulation
-  - [ ] Implement `world:auto_render()` — renders all objects through the camera system
-  - [ ] Register `World` as a Lua userdata type with all methods
+  - [x] Implement `World.new()` — creates a World, returns userdata wrapping `Rc<RefCell<World>>`
+  - [x] Implement `world:set_background(color)` — sets world background color
+  - [x] Implement `world:set_gravity(g)` — sets world gravity
+  - [x] Implement `world:set_ground(y)` — sets ground plane Y position
+  - [x] Implement `world:set_ground_restitution(r)` — sets ground bounce factor
+  - [x] Implement `world:step(dt)` — advances physics simulation
+  - [x] Implement `world:auto_render()` — renders all objects through the camera system
+  - [x] Register `World` as a Lua userdata type with all methods
 
-- [ ] **2.3 — Object bindings**
+- [x] **2.3 — Object bindings**
   - Files: `unison-scripting/src/bindings/objects.rs` (create)
-  - [ ] Implement `world:spawn_soft_body(desc_table)` — mesh presets resolved in Rust (`"ring"` → `create_ring_mesh(...)`)
-  - [ ] Implement `world:spawn_rigid_body(desc_table)` — spawns a rigid body from descriptor table
-  - [ ] Implement `world:spawn_static_rect(pos, size, color)` — spawns a static rectangular body
-  - [ ] Implement `world:spawn_sprite(desc_table)` — spawns a sprite object
-  - [ ] Implement `world:despawn(id)` — removes an object from the world
-  - [ ] Implement physics methods: `world:apply_force(id, fx, fy)`, `world:apply_impulse(id, ix, iy)`, `world:apply_torque(id, torque, dt)`
-  - [ ] Implement query methods: `world:get_position(id)`, `world:get_velocity(id)`, `world:is_grounded(id)`, `world:is_touching(id)`
-  - [ ] Implement display methods: `world:set_z_order(id, z)`, `world:set_casts_shadow(id, bool)`, `world:set_position(id, x, y)`
+  - [x] Implement `world:spawn_soft_body(desc_table)` — mesh presets resolved in Rust (`"ring"` → `create_ring_mesh(...)`)
+  - [x] Implement `world:spawn_rigid_body(desc_table)` — spawns a rigid body from descriptor table
+  - [x] Implement `world:spawn_static_rect(pos, size, color)` — spawns a static rectangular body
+  - [x] Implement `world:spawn_sprite(desc_table)` — spawns a sprite object
+  - [x] Implement `world:despawn(id)` — removes an object from the world
+  - [x] Implement physics methods: `world:apply_force(id, fx, fy)`, `world:apply_impulse(id, ix, iy)`, `world:apply_torque(id, torque, dt)`
+  - [x] Implement query methods: `world:get_position(id)`, `world:get_velocity(id)`, `world:is_grounded(id)`, `world:is_touching(id)`
+  - [x] Implement display methods: `world:set_z_order(id, z)`, `world:set_casts_shadow(id, bool)`, `world:set_position(id, x, y)`
 
-- [ ] **2.4 — Input bindings**
+- [x] **2.4 — Input bindings**
   - Files: `unison-scripting/src/bindings/input.rs` (create)
-  - [ ] Create global `input` table refreshed each frame from `InputState`
-  - [ ] Implement `input:is_key_pressed("Space")` — returns true if key is currently held
-  - [ ] Implement `input:is_key_just_pressed("W")` — returns true if key was pressed this frame
-  - [ ] Implement `input:axis_x()`, `input:axis_y()` — returns analog axis values (-1..1)
-  - [ ] Implement `input:touches_just_began()` — returns array of touch tables with x, y positions
-  - [ ] Map KeyCode strings to `unison_input::KeyCode` variants in Rust
+  - [x] Create global `input` table refreshed each frame from `InputState`
+  - [x] Implement `input:is_key_pressed("Space")` — returns true if key is currently held
+  - [x] Implement `input:is_key_just_pressed("W")` — returns true if key was pressed this frame
+  - [x] Implement `input:axis_x()`, `input:axis_y()` — returns analog axis values (-1..1)
+  - [x] Implement `input:touches_just_began()` — returns array of touch tables with x, y positions
+  - [x] Map KeyCode strings to `unison_input::KeyCode` variants in Rust
 
-- [ ] **2.5 — Camera bindings**
+- [x] **2.5 — Camera bindings**
   - Files: `unison-scripting/src/bindings/camera.rs` (create)
-  - [ ] Implement `world:camera_follow("name", id, damping)` — makes a named camera follow an object
-  - [ ] Implement `world:camera_follow_with_offset("name", id, damping, offset_x, offset_y)` — follow with offset
-  - [ ] Implement `world:camera_add("name", w, h)` — adds a new named camera
-  - [ ] Implement `world:camera_get_position("name")` — returns camera x, y
+  - [x] Implement `world:camera_follow("name", id, damping)` — makes a named camera follow an object
+  - [x] Implement `world:camera_follow_with_offset("name", id, damping, offset_x, offset_y)` — follow with offset
+  - [x] Implement `world:camera_add("name", w, h)` — adds a new named camera
+  - [x] Implement `world:camera_get_position("name")` — returns camera x, y
 
-- [ ] **2.6 — Engine/Texture bindings**
+- [x] **2.6 — Engine/Texture bindings**
   - Files: `unison-scripting/src/bindings/engine.rs` (create)
-  - [ ] Implement `engine.load_texture("textures/donut-pink.png")` — returns integer TextureId handle
-  - [ ] Implement `engine:screen_size()` — returns width, height
-  - [ ] Implement `engine:set_anti_aliasing("msaa8x")` — sets AA mode from string
-  - [ ] Update the minimal bridge from Phase 1b to use this new engine bindings module
+  - [x] Implement `engine.load_texture("textures/donut-pink.png")` — returns integer TextureId handle
+  - [x] Implement `engine:screen_size()` — returns width, height
+  - [x] Implement `engine:set_anti_aliasing("msaa8x")` — sets AA mode from string
+  - [x] Update the minimal bridge from Phase 1b to use this new engine bindings module
 
-- [ ] **2.7 — Ownership model**
+- [x] **2.7 — Ownership model**
   - Files: `unison-scripting/src/lib.rs` (modify)
-  - [ ] Implement `Rc<RefCell<World>>` shared between Lua userdata and `ScriptedGame`
-  - [ ] Implement renderer access via thread-local during render phase
-  - [ ] Ensure Lua can hold World references safely across frames
+  - [x] Implement `Rc<RefCell<World>>` shared between Lua userdata and `ScriptedGame`
+  - [x] Implement renderer access via thread-local during render phase
+  - [x] Ensure Lua can hold World references safely across frames
+  > **Note:** Removed mlua `send` feature since `Rc<RefCell<World>>` is not `Send`. This is fine — the game engine is single-threaded. Auto-render uses a thread-local request: Lua's `world:auto_render()` stores an `Rc<RefCell<World>>` clone, and `ScriptedGame::render()` consumes it with the real renderer.
 
-- [ ] **2.8 — Port minimal donut platformer to Lua**
+- [x] **2.8 — Port minimal donut platformer to Lua**
   - Files: `project/assets/scripts/main.lua` (modify — replace hello-world with playable game)
-  - [ ] Load donut texture, create world with gravity and ground
-  - [ ] Spawn soft-body donut with ring mesh, ground platform
-  - [ ] Handle keyboard input (arrow keys for movement, Space for jump) and joystick axis
-  - [ ] Apply forces for movement, impulse for jump, torque for rolling
-  - [ ] Camera follow with offset
-  - [ ] World step and auto-render
-  - Use the example Lua from the master plan (see Phase 2 "Example Lua" section)
+  - [x] Load donut texture, create world with gravity and ground
+  - [x] Spawn soft-body donut with ring mesh, ground platform
+  - [x] Handle keyboard input (arrow keys for movement, Space for jump) and joystick axis
+  - [x] Apply forces for movement, impulse for jump, torque for rolling
+  - [x] Camera follow with offset
+  - [x] World step and auto-render
+  - Used the example Lua from the master plan (see Phase 2 "Example Lua" section)
 
 ### Tests
 
