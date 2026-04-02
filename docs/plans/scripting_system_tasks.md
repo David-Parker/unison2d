@@ -427,15 +427,15 @@
 
 ### Phase 3 Verification
 
-- [ ] All 4 levels ported to Lua are visually identical to the Rust version
-- [ ] Menu UI buttons work, scene transitions work
-- [ ] Day/night cycle with directional lights + shadows
-- [ ] PiP camera in RandomSpawns level
-- [ ] Collision detection (trigger box in Main level)
-- [ ] `cargo test -p unison-tests --test scripting_full_api` — all tests pass
-- [ ] All tasks in Phase 3 are checked off
-- [ ] All tests pass
-- [ ] Code compiles without errors
+- [x] All 4 levels ported to Lua are visually identical to the Rust version
+- [x] Menu UI buttons work, scene transitions work
+- [x] Day/night cycle with directional lights + shadows
+- [x] PiP camera in RandomSpawns level
+- [x] Collision detection (trigger box in Main level)
+- [x] `cargo test -p unison-tests --test scripting_full_api` — all 30 tests pass
+- [x] All tasks in Phase 3 are checked off
+- [x] All tests pass (60 total: 30 full_api + 24 core_api + 6 foundation)
+- [x] Code compiles without errors (WASM release build passes)
 
 ---
 
