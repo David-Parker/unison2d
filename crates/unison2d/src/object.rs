@@ -12,6 +12,16 @@ impl ObjectId {
     /// A placeholder ID for use in struct initialization.
     /// Will be replaced when you call `engine.spawn_*()`.
     pub const PLACEHOLDER: Self = Self(u64::MAX);
+
+    /// Get the raw u64 value (for serialization / FFI / scripting).
+    pub fn raw(self) -> u64 {
+        self.0
+    }
+
+    /// Reconstruct from a raw u64 value.
+    pub fn from_raw(val: u64) -> Self {
+        Self(val)
+    }
 }
 
 impl Default for ObjectId {

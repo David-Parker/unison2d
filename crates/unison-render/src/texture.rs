@@ -12,6 +12,16 @@ impl TextureId {
     pub fn is_valid(self) -> bool {
         self.0 != u32::MAX
     }
+
+    /// Get the raw u32 value (for serialization / FFI / scripting).
+    pub fn raw(self) -> u32 {
+        self.0
+    }
+
+    /// Reconstruct from a raw u32 value.
+    pub fn from_raw(val: u32) -> Self {
+        Self(val)
+    }
 }
 
 /// Texture pixel format

@@ -9,30 +9,41 @@
 //!
 //! ```lua
 //! local game = {}
+//! local world, donut
 //!
 //! function game.init()
-//!     engine.set_background(0.1, 0.1, 0.12)
+//!     world = World.new()
+//!     world:set_gravity(-9.8)
+//!     world:set_ground(-4.5)
+//!     donut = world:spawn_soft_body({
+//!         mesh = "ring", mesh_params = {1.0, 0.25, 24, 8},
+//!         material = "rubber",
+//!         position = {0, 3.5}, color = 0xFFFFFF,
+//!         texture = engine.load_texture("textures/donut-pink.png"),
+//!     })
+//!     world:camera_follow("main", donut, 0.08)
 //! end
 //!
-//! function game.update(dt) end
+//! function game.update(dt)
+//!     if input.is_key_pressed("ArrowRight") then
+//!         world:apply_force(donut, 80, 0)
+//!     end
+//!     world:step(dt)
+//! end
 //!
 //! function game.render()
-//!     engine.draw_rect(0, 0, 2, 2, 1, 0.2, 0.2)
+//!     world:auto_render()
 //! end
 //!
 //! return game
 //! ```
-//!
-//! The `engine` global is pre-registered before the script runs.
-//! Missing lifecycle functions are silently ignored (no panic).
-//! Script errors are logged and do not crash the process.
 
-mod bridge;
+pub mod bridge;
+pub mod bindings;
 
 use mlua::prelude::*;
-use unison2d::{Engine, Game};
+use unison2d::{AntiAliasing, Engine, Game};
 use unison2d::assets::EmbeddedAsset;
-use unison2d::render::Camera;
 
 /// Unit action type — scripted games don't use Rust action mapping.
 #[derive(Copy, Clone, Eq, PartialEq, Hash)]
@@ -129,16 +140,16 @@ impl Game for ScriptedGame {
 
         let lua = Lua::new();
 
-        // Register engine globals before running the script.
-        if let Err(e) = bridge::register_engine_globals(&lua) {
-            eprintln!("[unison-scripting] Failed to register engine globals: {e}");
+        // Register all bindings (World, input, engine globals).
+        if let Err(e) = bindings::register_all(&lua) {
+            eprintln!("[unison-scripting] Failed to register bindings: {e}");
             return;
         }
 
-        // Update screen size cache.
+        // Update screen size before script runs.
         if let Some(r) = engine.renderer_mut() {
             let (w, h) = r.screen_size();
-            bridge::set_screen_size(w, h);
+            bindings::engine::set_screen_size(w, h);
         }
 
         // Execute the script. It must return a table.
@@ -158,20 +169,45 @@ impl Game for ScriptedGame {
 
         self.lua = Some(lua);
 
+        // Resolve texture load requests that happened during script evaluation
+        // (i.e. `engine.load_texture()` calls at the top level of the script).
+        self.resolve_texture_requests(engine);
+
+        // Apply anti-aliasing request if set.
+        if let Some(aa) = bindings::engine::take_aa_request() {
+            let mode = match aa.as_str() {
+                "none" => AntiAliasing::None,
+                "msaa2x" | "MSAAx2" => AntiAliasing::MSAAx2,
+                "msaa4x" | "MSAAx4" => AntiAliasing::MSAAx4,
+                "msaa8x" | "MSAAx8" => AntiAliasing::MSAAx8,
+                _ => {
+                    eprintln!("[unison-scripting] Unknown AA mode: '{aa}'");
+                    AntiAliasing::None
+                }
+            };
+            engine.set_anti_aliasing(mode);
+        }
+
         // Call the script's init().
         if let Err(e) = self.call_lifecycle("init", ()) {
             eprintln!("[unison-scripting] init() error: {e}");
         }
+
+        // Resolve any texture requests made inside init().
+        self.resolve_texture_requests(engine);
     }
 
     fn update(&mut self, engine: &mut Engine<NoAction>) {
         let dt = engine.dt();
 
-        // Refresh screen size each frame.
+        // Refresh screen size.
         if let Some(r) = engine.renderer_mut() {
             let (w, h) = r.screen_size();
-            bridge::set_screen_size(w, h);
+            bindings::engine::set_screen_size(w, h);
         }
+
+        // Refresh input snapshot.
+        bindings::input::refresh(engine.input_state());
 
         if let Err(e) = self.call_lifecycle("update", dt) {
             eprintln!("[unison-scripting] update() error: {e}");
@@ -180,19 +216,52 @@ impl Game for ScriptedGame {
 
     fn render(&mut self, engine: &mut Engine<NoAction>) {
         if let Some(r) = engine.renderer_mut() {
-            let clear = bridge::get_clear_color();
-            let cam = Camera::new(2.0, 2.0);
-            r.begin_frame(&cam);
-            r.clear(clear);
+            // Check if Lua called world:auto_render().
+            if let Some(world_rc) = bindings::engine::take_auto_render_world() {
+                let mut world = world_rc.borrow_mut();
+                world.snapshot_for_render();
+                world.auto_render(r);
+            } else {
+                // Fallback: Phase 1 style — manual clear + draw_rect commands.
+                let clear = bindings::engine::get_clear_color();
+                let cam = unison2d::render::Camera::new(2.0, 2.0);
+                r.begin_frame(&cam);
+                r.clear(clear);
+            }
 
-            // Lua render() call buffers RenderCommands via bridge globals.
+            // Lua render() may also buffer Phase 1-style draw commands.
             if let Err(e) = self.call_lifecycle("render", ()) {
                 eprintln!("[unison-scripting] render() error: {e}");
             }
 
-            // Submit buffered commands to the renderer.
+            // Flush any Phase 1-style buffered commands.
             bridge::flush_commands(r);
+
+            // If we used the fallback path, end the frame.
+            if bindings::engine::take_auto_render_world().is_none() {
+                // auto_render already called end_frame internally,
+                // but flush_commands may have added more. The renderer
+                // handles redundant end_frame calls gracefully.
+            }
             r.end_frame();
+        }
+    }
+}
+
+impl ScriptedGame {
+    /// Resolve any pending texture load requests from Lua and push results back.
+    fn resolve_texture_requests(&mut self, engine: &mut Engine<NoAction>) {
+        let requests = bindings::engine::take_texture_requests();
+        for path in requests {
+            match engine.load_texture(&path) {
+                Ok(tid) => {
+                    bindings::engine::push_texture_result(tid.raw());
+                }
+                Err(e) => {
+                    eprintln!("[unison-scripting] Failed to load texture '{path}': {e}");
+                    bindings::engine::push_texture_result(0);
+                }
+            }
         }
     }
 }
