@@ -169,9 +169,16 @@ impl Game for ScriptedGame {
 
         self.lua = Some(lua);
 
-        // Resolve texture load requests that happened during script evaluation
-        // (i.e. `engine.load_texture()` calls at the top level of the script).
-        self.resolve_texture_requests(engine);
+        // Set engine pointer so Lua closures can call load_texture synchronously.
+        bindings::engine::set_engine_ptr(engine);
+
+        // Call the script's init().
+        if let Err(e) = self.call_lifecycle("init", ()) {
+            eprintln!("[unison-scripting] init() error: {e}");
+        }
+
+        // Clear engine pointer — it's only valid during init.
+        bindings::engine::clear_engine_ptr();
 
         // Apply anti-aliasing request if set.
         if let Some(aa) = bindings::engine::take_aa_request() {
@@ -187,14 +194,6 @@ impl Game for ScriptedGame {
             };
             engine.set_anti_aliasing(mode);
         }
-
-        // Call the script's init().
-        if let Err(e) = self.call_lifecycle("init", ()) {
-            eprintln!("[unison-scripting] init() error: {e}");
-        }
-
-        // Resolve any texture requests made inside init().
-        self.resolve_texture_requests(engine);
     }
 
     fn update(&mut self, engine: &mut Engine<NoAction>) {
@@ -235,24 +234,6 @@ impl Game for ScriptedGame {
                 r.clear(clear);
                 bridge::flush_commands(r);
                 r.end_frame();
-            }
-        }
-    }
-}
-
-impl ScriptedGame {
-    /// Resolve any pending texture load requests from Lua and push results back.
-    fn resolve_texture_requests(&mut self, engine: &mut Engine<NoAction>) {
-        let requests = bindings::engine::take_texture_requests();
-        for path in requests {
-            match engine.load_texture(&path) {
-                Ok(tid) => {
-                    bindings::engine::push_texture_result(tid.raw());
-                }
-                Err(e) => {
-                    eprintln!("[unison-scripting] Failed to load texture '{path}': {e}");
-                    bindings::engine::push_texture_result(0);
-                }
             }
         }
     }

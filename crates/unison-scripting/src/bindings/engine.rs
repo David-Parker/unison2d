@@ -15,7 +15,9 @@ use std::rc::Rc;
 
 use mlua::prelude::*;
 use unison2d::render::Color;
-use unison2d::World;
+use unison2d::{Engine, World};
+
+use super::super::NoAction;
 
 // ===================================================================
 // Thread-local bridge state
@@ -28,18 +30,16 @@ thread_local! {
     /// Background clear color — set by the old Phase 1 `engine.set_background(r,g,b)`.
     static CLEAR_COLOR: std::cell::Cell<[f32; 3]> = const { std::cell::Cell::new([0.1, 0.1, 0.12]) };
 
-    /// Texture load requests queued during `init()`. Each entry is an asset path.
-    /// Resolved by ScriptedGame after the Lua init() call returns.
-    static TEXTURE_REQUESTS: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
-
-    /// Texture IDs resulting from load requests, indexed in the same order.
-    static TEXTURE_RESULTS: RefCell<Vec<u32>> = const { RefCell::new(Vec::new()) };
-
     /// World to auto-render, set by `world:auto_render()`, consumed by `ScriptedGame::render`.
     static AUTO_RENDER_WORLD: RefCell<Option<Rc<RefCell<World>>>> = const { RefCell::new(None) };
 
     /// Anti-aliasing mode request (string), consumed during init.
     static AA_REQUEST: RefCell<Option<String>> = const { RefCell::new(None) };
+
+    /// Raw pointer to the Engine, set during init() so Lua closures can call
+    /// engine methods (like load_texture) synchronously. Only valid while
+    /// the ScriptedGame::init() call is on the stack.
+    static ENGINE_PTR: std::cell::Cell<Option<*mut Engine<NoAction>>> = const { std::cell::Cell::new(None) };
 }
 
 // -- Public accessors for ScriptedGame --
@@ -63,19 +63,21 @@ pub fn take_auto_render_world() -> Option<Rc<RefCell<World>>> {
     AUTO_RENDER_WORLD.with(|cell| cell.borrow_mut().take())
 }
 
-pub fn take_texture_requests() -> Vec<String> {
-    TEXTURE_REQUESTS.with(|cell| {
-        let mut v = cell.borrow_mut();
-        std::mem::take(&mut *v)
-    })
-}
-
-pub fn push_texture_result(id: u32) {
-    TEXTURE_RESULTS.with(|cell| cell.borrow_mut().push(id));
-}
-
 pub fn take_aa_request() -> Option<String> {
     AA_REQUEST.with(|cell| cell.borrow_mut().take())
+}
+
+/// Set the engine pointer for synchronous texture loading during init().
+/// # Safety
+/// The pointer must remain valid for the duration it is set. Call
+/// `clear_engine_ptr()` before the Engine reference goes out of scope.
+pub fn set_engine_ptr(engine: &mut Engine<NoAction>) {
+    ENGINE_PTR.with(|c| c.set(Some(engine as *mut Engine<NoAction>)));
+}
+
+/// Clear the engine pointer after init() completes.
+pub fn clear_engine_ptr() {
+    ENGINE_PTR.with(|c| c.set(None));
 }
 
 // ===================================================================
@@ -113,31 +115,25 @@ pub fn register(lua: &Lua) -> LuaResult<()> {
     })?)?;
 
     // engine.load_texture("path") → integer texture ID
-    // During init: queues the request; the ID is assigned after Lua returns.
-    // We use a synchronous two-phase approach: the Rust side resolves requests
-    // between the script load and the init() call.
+    // Loads synchronously via the thread-local engine pointer (set during init).
     engine.set("load_texture", lua.create_function(|_, path: String| {
-        // Queue the request.
-        let idx = TEXTURE_REQUESTS.with(|cell| {
-            let mut v = cell.borrow_mut();
-            let idx = v.len();
-            v.push(path);
-            idx
-        });
-        // Return a "pending" index. The ScriptedGame will resolve this
-        // after Lua init() by populating TEXTURE_RESULTS, and we patch
-        // the Lua global with real IDs. For now, return the index directly;
-        // the actual engine.load_texture will be resolved synchronously
-        // by calling the closure *within* init, so the result is available.
-        TEXTURE_RESULTS.with(|cell| {
-            let results = cell.borrow();
-            // If already resolved (during init replay), return the real ID.
-            if idx < results.len() {
-                Ok(results[idx])
-            } else {
-                // Not yet resolved — return the index as a placeholder.
-                // This shouldn't happen in normal flow since we resolve inline.
-                Ok(idx as u32)
+        ENGINE_PTR.with(|c| {
+            match c.get() {
+                Some(ptr) => {
+                    // Safety: ptr is valid while ScriptedGame::init() is on the stack.
+                    let engine = unsafe { &mut *ptr };
+                    match engine.load_texture(&path) {
+                        Ok(tid) => Ok(tid.raw()),
+                        Err(e) => {
+                            eprintln!("[unison-scripting] Failed to load texture '{path}': {e}");
+                            Ok(0)
+                        }
+                    }
+                }
+                None => {
+                    eprintln!("[unison-scripting] engine.load_texture() called outside init — engine not available");
+                    Ok(0)
+                }
             }
         })
     })?)?;
