@@ -150,7 +150,8 @@
 - [x] `cargo build --features web` — compiles for WASM with Lua VM embedded
 - [x] `cargo build --features ios` — compiles with iOS feature flag (host build; cross-compile to aarch64-apple-ios requires Xcode SDK)
 - [x] `cargo build --features android` — compiles with Android feature flag (host build; cross-compile to aarch64-linux-android requires NDK)
-- [x] `cd platform/web && make dev` — shows colored background and red rect drawn by Lua — verified via WASM binary inspection (zero "env" imports; Lua renders green background + red full-screen rect)
+- [x] `cd platform/web && make dev` — shows green background and red rect drawn by Lua in the browser
+  > **Note:** Required fixing three runtime issues beyond the initial compilation: (1) UTF-8 panic from loading gzip-compressed Lua script — fixed by adding `ScriptedGame::from_asset()` that loads via `AssetStore` decompression during `init()`. (2) `longjmp` panic — `setjmp`/`longjmp` cannot work in `wasm32-unknown-unknown` (no stack save/restore). Three approaches failed (Rust `catch_unwind`, WASM `+exception-handling`, clang `-mllvm -wasm-enable-sjlj`) due to wasm-bindgen 0.2 incompatibility. Fixed by patching `ldo.c` to call `wasm_lua_throw` (`wasm_bindgen::throw_str`) and `wasm_protected_call` (`js_sys::Function::call3` try/catch) — a JS exception bridge that routes Lua error recovery through the JS→WASM boundary. (3) Stale C build cache — `cc` crate cached old `ldo.c` objects; required full `cargo clean --target wasm32-unknown-unknown`.
 - [x] `cargo test -p unison-tests --test scripting_foundation` — all 6 tests pass
 - [x] Lua `init`/`update`/`render` functions called each frame (verified via `script_lifecycle_all_called` test)
 - [x] All tasks in Phase 1b are checked off
