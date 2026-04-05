@@ -7,8 +7,9 @@
 //! ```
 
 use mlua::prelude::*;
-use unison2d::core::Color;
+use unison2d::core::{Color, Vec2};
 use unison2d::render::RenderCommand;
+use unison2d::render::primitives::{circle, gradient_circle};
 use unison2d::{RenderLayerConfig, RenderLayerId};
 
 use super::world::LuaWorld;
@@ -112,18 +113,19 @@ fn build_render_command(shape: &str, params: &LuaTable) -> LuaResult<RenderComma
                 width,
             })
         }
-        "circle" | "gradient_circle" => {
-            // Circles are drawn as rects with the gradient texture
-            // For now, approximate as a rect at the position
+        "circle" => {
             let x: f32 = params.get("x")?;
             let y: f32 = params.get("y")?;
             let radius: f32 = params.get("radius")?;
             let color = read_param_color(params)?;
-            Ok(RenderCommand::Rect {
-                position: [x - radius, y - radius],
-                size: [radius * 2.0, radius * 2.0],
-                color,
-            })
+            Ok(circle(Vec2::new(x, y), radius, color))
+        }
+        "gradient_circle" => {
+            let x: f32 = params.get("x")?;
+            let y: f32 = params.get("y")?;
+            let radius: f32 = params.get("radius")?;
+            let color = read_param_color(params)?;
+            Ok(gradient_circle(Vec2::new(x, y), radius, color))
         }
         other => Err(LuaError::RuntimeError(format!("Unknown shape type: '{other}'"))),
     }

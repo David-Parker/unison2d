@@ -213,6 +213,10 @@ impl Game for ScriptedGame {
         // Refresh input snapshot.
         bindings::input::refresh(engine.input_state());
 
+        // Make engine available to Lua closures (so load_texture works in
+        // scene on_enter when scenes are switched mid-game).
+        bindings::engine::set_engine_ptr(engine);
+
         // Dispatch update: scene system takes priority if active.
         if bindings::scene::is_active() {
             if let Some(lua) = &self.lua {
@@ -226,6 +230,8 @@ impl Game for ScriptedGame {
             }
         }
 
+        bindings::engine::clear_engine_ptr();
+
         // Flush collision events from world into Lua callbacks.
         if let Some(lua) = &self.lua {
             if let Some(world_rc) = bindings::engine::peek_auto_render_world() {
@@ -238,6 +244,9 @@ impl Game for ScriptedGame {
     }
 
     fn render(&mut self, engine: &mut Engine<NoAction>) {
+        // Make engine available to Lua closures during render.
+        bindings::engine::set_engine_ptr(engine);
+
         // Dispatch render: scene system takes priority if active.
         if bindings::scene::is_active() {
             if let Some(lua) = &self.lua {
@@ -250,6 +259,8 @@ impl Game for ScriptedGame {
                 eprintln!("[unison-scripting] render() error: {e}");
             }
         }
+
+        bindings::engine::clear_engine_ptr();
 
         if let Some(r) = engine.renderer_mut() {
             // Check if Lua called world:auto_render().
