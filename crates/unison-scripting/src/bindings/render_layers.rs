@@ -136,10 +136,18 @@ fn read_param_color(params: &LuaTable) -> LuaResult<Color> {
         LuaValue::Integer(n) => Ok(Color::from_hex(n as u32)),
         LuaValue::Number(n) => Ok(Color::from_hex(n as u32)),
         LuaValue::Nil => Ok(Color::WHITE),
+        // Allow {r, g, b} or {r, g, b, a} float tables for dynamic colors.
+        LuaValue::Table(t) => {
+            let r: f32 = t.get(1)?;
+            let g: f32 = t.get(2)?;
+            let b: f32 = t.get(3)?;
+            let a: f32 = t.get(4).unwrap_or(1.0);
+            Ok(Color::new(r, g, b, a))
+        }
         other => Err(LuaError::FromLuaConversionError {
             from: other.type_name(),
             to: "color".into(),
-            message: Some("expected hex integer".into()),
+            message: Some("expected hex integer or {r,g,b,a} table".into()),
         }),
     }
 }

@@ -214,7 +214,9 @@ impl Game for ScriptedGame {
         bindings::input::refresh(engine.input_state());
 
         // Make engine available to Lua closures (so load_texture works in
-        // scene on_enter when scenes are switched mid-game).
+        // scene on_enter when scenes are switched mid-game). Kept set until
+        // after event flushing so that event handlers (e.g. level_complete
+        // → switch_scene → on_enter → load_texture) can still reach the engine.
         bindings::engine::set_engine_ptr(engine);
 
         // Dispatch update: scene system takes priority if active.
@@ -230,8 +232,6 @@ impl Game for ScriptedGame {
             }
         }
 
-        bindings::engine::clear_engine_ptr();
-
         // Flush collision events from world into Lua callbacks.
         if let Some(lua) = &self.lua {
             if let Some(world_rc) = bindings::engine::peek_auto_render_world() {
@@ -241,6 +241,8 @@ impl Game for ScriptedGame {
             // Flush string-keyed events.
             bindings::events::flush_string_events(lua);
         }
+
+        bindings::engine::clear_engine_ptr();
     }
 
     fn render(&mut self, engine: &mut Engine<NoAction>) {
