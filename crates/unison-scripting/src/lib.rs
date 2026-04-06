@@ -41,6 +41,7 @@
 pub mod bridge;
 pub mod bindings;
 pub mod error_overlay;
+pub mod hot_reload;
 
 use mlua::prelude::*;
 use unison2d::{AntiAliasing, Engine, Game};
@@ -357,6 +358,95 @@ impl Game for ScriptedGame {
 }
 
 impl ScriptedGame {
+    /// Hot-reload the script from new source (debug builds only).
+    ///
+    /// Two levels are attempted in order:
+    ///
+    /// - **Level 2 (default) — VM-preserving:** Re-execute the new source inside
+    ///   the existing Lua VM and replace the `__game` table. World objects, physics
+    ///   state, and all other Lua globals from `init()` are preserved. New `update`
+    ///   and `render` definitions take effect on the very next frame.
+    ///
+    /// - **Level 1 (fallback) — Full restart:** If Level 2 fails (e.g. the script
+    ///   structure changed fundamentally), destroy the VM, create a fresh one,
+    ///   re-register all bindings, re-execute the script, and call `init()` again.
+    ///   World state is lost.
+    ///
+    /// In release builds this is a no-op.
+    #[cfg(debug_assertions)]
+    pub fn reload(&mut self, new_source: &str) {
+        // Always update the stored source so future reloads and crash recovery
+        // use the new text.
+        self.source = ScriptSource::Source(new_source.to_string());
+
+        // --- Level 2: re-evaluate in the existing VM ---
+        if let Some(lua) = &self.lua {
+            match lua.load(new_source).eval::<LuaTable>() {
+                Ok(new_table) => {
+                    // Replace the __game global with the freshly returned table.
+                    if lua.globals().set("__game", new_table).is_ok() {
+                        self.overlay.clear();
+                        return; // Level 2 succeeded — done.
+                    }
+                    // If set failed, fall through to Level 1.
+                }
+                Err(_) => {
+                    // Level 2 failed — fall through to Level 1.
+                }
+            }
+        }
+
+        // --- Level 1: full VM restart ---
+        // Tear down the existing VM and create a fresh one.
+        self.lua = None;
+
+        let lua = Lua::new();
+
+        // Re-register all bindings.
+        if let Err(e) = bindings::register_all(&lua) {
+            let msg = format!("[unison-scripting] reload: failed to register bindings: {e}");
+            eprintln!("{msg}");
+            self.overlay.set(msg);
+            return;
+        }
+
+        // Execute the script — it must return a table.
+        let game_table: LuaTable = match lua.load(new_source).eval() {
+            Ok(t) => t,
+            Err(e) => {
+                let msg = format!("[unison-scripting] reload: script error: {e}");
+                eprintln!("{msg}");
+                self.overlay.set(msg);
+                // Keep the VM so render() can draw the overlay.
+                self.lua = Some(lua);
+                return;
+            }
+        };
+
+        if let Err(e) = lua.globals().set("__game", game_table) {
+            let msg = format!("[unison-scripting] reload: failed to store game table: {e}");
+            eprintln!("{msg}");
+            self.overlay.set(msg);
+            self.lua = Some(lua);
+            return;
+        }
+
+        self.lua = Some(lua);
+
+        // Call init() on the fresh VM.
+        if let Err(e) = self.call_lifecycle("init", ()) {
+            let msg = format!("[unison-scripting] reload: init() error: {e}");
+            eprintln!("{msg}");
+            self.overlay.set(msg);
+        } else {
+            self.overlay.clear();
+        }
+    }
+
+    /// No-op in release builds.
+    #[cfg(not(debug_assertions))]
+    pub fn reload(&mut self, _new_source: &str) {}
+
     /// Set up Lua `require()` to load scripts from embedded assets.
     ///
     /// Iterates all `.lua` asset paths and registers them in `package.preload`
