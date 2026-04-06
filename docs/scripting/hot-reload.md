@@ -1,0 +1,114 @@
+# Hot Reload
+
+Edit Lua scripts and see changes take effect immediately — without restarting the
+process or losing physics state.
+
+> **Debug builds only.** Hot reload is a `#[cfg(debug_assertions)]` feature. In release
+> builds `ScriptedGame::reload()` is a no-op and `ScriptWatcher` is not compiled.
+
+---
+
+## Two Levels
+
+`ScriptedGame::reload()` attempts two levels in order, falling back from Level 2 to
+Level 1 if needed.
+
+### Level 2 — VM-preserving rebind (default)
+
+Re-execute the new script source inside the **existing Lua VM**. The `__game` table is
+replaced with the freshly returned one, so `update` and `render` pick up new definitions
+on the very next frame.
+
+**Preserved:** World objects, physics state, event subscriptions, all other Lua globals
+created during `init()`.
+
+Use Level 2 for the common case: tweaking `update` logic, changing constants, adjusting
+rendering. Changes to `init()` itself are not re-run — the world state stays as-is.
+
+### Level 1 — Full VM restart (fallback)
+
+If Level 2 fails (e.g. the script's top-level structure changed in a way that breaks
+re-evaluation), the VM is torn down entirely:
+
+1. Destroy the existing Lua VM.
+2. Create a fresh VM and re-register all bindings.
+3. Re-execute the script.
+4. Call `init()` again.
+
+**Lost:** All world state — objects, lights, physics, camera targets. The game restarts
+from a clean slate.
+
+Level 1 is triggered automatically when Level 2 fails. You do not choose which level to
+use; `reload()` always tries Level 2 first.
+
+---
+
+## Native Debug Build: ScriptWatcher
+
+For desktop/native builds, use `ScriptWatcher` to poll the filesystem each frame.
+
+```rust
+use unison_scripting::hot_reload::ScriptWatcher;
+
+// In your platform main (or game struct):
+let mut watcher = ScriptWatcher::new("project/assets/scripts/main.lua");
+
+// Each frame, before game.update():
+if let Some(new_src) = watcher.check() {
+    game.reload(&new_src);
+}
+```
+
+`ScriptWatcher` polls `fs::metadata` for the file's modification time. On change it
+reads the file and returns `Some(source)`. If the file hasn't changed — or can't be
+read — it returns `None`.
+
+The first call to `check()` always returns the file contents (it starts with no recorded
+timestamp, so it treats the file as "newly changed"). This ensures the watcher
+bootstraps cleanly even if the binary was started after the scripts were last edited.
+
+`ScriptWatcher` is **not** compiled for `wasm32` or release builds.
+
+---
+
+## Web: Trunk Handles It
+
+On the web platform, the Trunk dev server (`make dev` from `platform/web/`) watches the
+entire project directory, including `.lua` files. When any file changes, Trunk triggers
+a full page reload — re-running `main()`, which re-initializes `ScriptedGame`.
+
+**No in-process file watching is needed for web.** Do not add a `ScriptWatcher` to your
+web build. The full-page reload is equivalent to a Level 1 reload (full restart).
+
+```bash
+cd platform/web
+make dev   # starts Trunk with --watch, auto-reloads on any file change
+```
+
+---
+
+## Error Overlay
+
+When a script error occurs — syntax error, runtime panic in `init`/`update`/`render` —
+the error is captured and displayed as a **red bar** at the top of the screen. The full
+error message is also printed to stderr.
+
+The overlay stays visible until the script is reloaded successfully (e.g. after you fix
+the bug and save). After a successful reload, `reload()` calls `overlay.clear()` and
+the bar disappears.
+
+The error overlay is rendered as a separate compositing pass after all other rendering,
+so it always appears regardless of which render path was taken.
+
+**Release builds:** The overlay is compiled out entirely. Errors continue to go to
+stderr only.
+
+---
+
+## Summary
+
+| Platform | Strategy | Level |
+|----------|----------|-------|
+| Native debug | `ScriptWatcher` + `game.reload()` | Level 2 (→ Level 1 fallback) |
+| Web debug | Trunk full-page reload | Level 1 equivalent |
+| Release | No-op | — |

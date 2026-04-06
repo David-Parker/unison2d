@@ -421,6 +421,17 @@ ui:frame({
 
 ---
 
+## debug Global
+
+Global `debug` table for development utilities.
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `debug.log` | `(...)` | Print varargs to stderr, joined with tabs (uses `tostring` on each value) |
+| `debug.draw_point` | `(x, y, color: integer)` | Draw a 0.1-unit point at world position; color is hex |
+| `debug.show_physics` | `(enabled: bool)` | Toggle physics debug visualization (stub — not yet wired) |
+| `debug.show_fps` | `(enabled: bool)` | Toggle FPS counter overlay (stub — not yet wired) |
+
 ## Modules & require()
 
 Scripts can use `require()` to load other Lua modules from embedded assets. All `.lua` files under `project/assets/scripts/` are automatically registered as modules.
@@ -432,10 +443,52 @@ local shared = require("scenes/shared")
 
 ---
 
+## Hot Reload
+
+`ScriptedGame::reload(new_source: &str)` — replace the running script at runtime.
+
+Two levels are attempted in order:
+
+- **Level 2 (default) — VM-preserving:** Re-execute the new source in the existing VM,
+  replacing `__game`. World state and all other globals are preserved. New `update`/`render`
+  take effect on the next frame.
+- **Level 1 (fallback) — Full restart:** If Level 2 fails, destroy the VM, create a fresh
+  one, re-register all bindings, re-execute the script, and call `init()`. World state is lost.
+
+In release builds `reload()` is a no-op (`#[cfg(not(debug_assertions))]`).
+
+Use [`hot_reload::ScriptWatcher`] to poll the filesystem on native debug builds:
+
+```rust
+use unison_scripting::hot_reload::ScriptWatcher;
+let mut watcher = ScriptWatcher::new("project/assets/scripts/main.lua");
+// Each frame:
+if let Some(src) = watcher.check() { game.reload(&src); }
+```
+
+`ScriptWatcher` is not compiled for `wasm32` or release. On web, Trunk's dev server
+triggers a full page reload on file change — no in-process watcher needed.
+
+See [docs/scripting/hot-reload.md](../scripting/hot-reload.md) for the full guide.
+
+## Error Overlay
+
+`ErrorOverlay` (in `unison_scripting::error_overlay`) captures Lua runtime errors
+and renders a visible indicator in debug builds.
+
+In **debug builds**: when any lifecycle call (`init`, `update`, `render`) returns a Lua
+error, the message is stored and a red bar is drawn at the top of the screen on every
+frame until the error is cleared. The full message is also printed to stderr.
+
+In **release builds**: the overlay is compiled out entirely; errors go to stderr only.
+
+No script code is needed to use the error overlay — it is always active in `ScriptedGame`
+debug builds.
+
 ## Error Handling
 
-- **Syntax errors** in the script: logged to stderr, `init`/`update`/`render` become no-ops.
-- **Runtime errors** in lifecycle functions: logged to stderr, game continues.
+- **Syntax errors** in the script: logged to stderr + error overlay, `init`/`update`/`render` become no-ops.
+- **Runtime errors** in lifecycle functions: logged to stderr + error overlay, game continues.
 - Neither type causes a panic.
 
 ## WASM Notes

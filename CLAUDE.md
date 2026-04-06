@@ -2,21 +2,35 @@
 
 A Rust game engine built for the LLM agent era. No GUIs — everything is controlled through code and configuration. Platform-agnostic: compile for Web, iOS, and Android from the same codebase.
 
+Game code is written in **Lua** using `unison-scripting` (`ScriptedGame`). The Rust
+`Game` trait is available for advanced use cases, but scripting is the canonical
+approach.
+
 ## Architecture
 
 ```
-Game (your struct, implements Game trait)
-├── Engine<A>        — input/actions, renderer access, compositing
-├── World            — self-contained simulation
-│   ├── ObjectSystem   — physics world + object registry
-│   ├── CameraSystem   — named cameras + follow targets
-│   └── LightingSystem — point lights, directional lights, + lightmap compositing
-└── Level (trait)    — optional scene abstraction
+ScriptedGame (Lua VM, implements Game trait)  ← canonical for game code
+├── engine global  — texture loading, screen size, scenes, UI, AA
+├── input global   — raw key/touch state
+├── events global  — string-keyed pub/sub + collision callbacks
+└── World global   — self-contained simulation
+    ├── ObjectSystem   — physics world + object registry
+    ├── CameraSystem   — named cameras + follow targets
+    └── LightingSystem — point lights, directional lights, + lightmap compositing
+```
+
+Underlying Rust layer (used by `ScriptedGame` internally, available for advanced use):
+
+```
+Game trait (implement directly for Rust game code)
+├── Engine<A>      — input/actions, renderer access, compositing
+├── World          — self-contained simulation
+└── Level (trait)  — optional scene abstraction
 ```
 
 - **Engine** is a thin shell — only input mapping, renderer access, asset loading, and compositing
 - **World** owns all simulation — games create and manage their own World(s)
-- **Level** is an optional trait for organizing self-contained scenes
+- **Level** is an optional trait for organizing self-contained scenes in Rust
 
 ## Crates & Docs
 
@@ -47,18 +61,26 @@ All crates are re-exported from `unison2d::{math, physics, render, lighting, pro
 docs/
 ├── API.md            # Quick reference — all engine types & methods in one file
 ├── api/              # Per-crate deep dives (linked in table above)
-└── guide/            # Patterns & best practices
-    ├── README.md         # Guide overview — start here for tutorials
-    ├── getting-started.md
-    ├── levels.md
-    ├── prefabs.md
-    └── patterns.md
+├── guide/            # Patterns & best practices (Rust game code)
+│   ├── README.md         # Guide overview — start here for tutorials
+│   ├── getting-started.md
+│   ├── levels.md
+│   ├── prefabs.md
+│   └── patterns.md
+└── scripting/        # Lua scripting guides (canonical way to write games)
+    ├── getting-started.md  # Setup, lifecycle, minimal example, require()
+    ├── api-reference.md    # All Lua globals: engine, input, events, World, …
+    ├── migration-guide.md  # Port a Rust game to Lua — before/after examples
+    └── hot-reload.md       # Level 1/2 reload, ScriptWatcher, web strategy
 ```
 
 **How to navigate:**
-- **Need a type signature or method?** → [API.md](docs/API.md)
+- **Starting a new game?** → [scripting/getting-started.md](docs/scripting/getting-started.md)
+- **Need a Lua method signature?** → [scripting/api-reference.md](docs/scripting/api-reference.md)
+- **Porting from Rust?** → [scripting/migration-guide.md](docs/scripting/migration-guide.md)
+- **Need a type signature or method (Rust)?** → [API.md](docs/API.md)
 - **Need to understand a subsystem?** → per-crate doc (table above)
-- **Need patterns or how-to?** → [guide/README.md](docs/guide/README.md)
+- **Need patterns or how-to (Rust)?** → [guide/README.md](docs/guide/README.md)
 
 ## Rules
 
