@@ -21,6 +21,23 @@ use unison_render::{AntiAliasing, Renderer, RenderCommand, DrawSprite, TextureId
 /// Games receive `&mut Engine<A>` in their `init()`, `update()`, and `render()`
 /// callbacks. Use it for input bindings and action queries. For physics, objects,
 /// and cameras, use your `World` directly.
+///
+/// ## Action generics
+///
+/// `A` is the game's action enum, used for type-safe input mapping.
+/// Scripted games (`ScriptedGame`) use `NoAction` (from `unison-scripting`) because
+/// input is handled in Lua rather than through Rust action enums. Rust-native games
+/// can define their own action enum and bind keys/buttons to it.
+///
+/// As of Phase 5, the only active consumer is `ScriptedGame<NoAction>`. The generic
+/// is retained because:
+/// - The action API (`bind_key`, `action_active`, `action_axis`, etc.) provides real
+///   value for future Rust-native game code
+/// - The platform crates (`unison-web`, `unison-ios`, `unison-android`) are correctly
+///   generic over `G::Action`, enabling non-scripted games without changes
+/// - Removing it would be a breaking API change with no current technical benefit
+///
+/// // TODO: re-evaluate Action generics once there are more game consumers (scripted and native)
 pub struct Engine<A: Copy + Eq + Hash> {
     #[doc(hidden)]
     pub input: InputState,

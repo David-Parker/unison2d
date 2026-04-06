@@ -30,6 +30,30 @@ pub trait Game {
 - `update()` — called per fixed timestep (60Hz). Read input, apply forces, game logic, step world(s).
 - `render()` — called once per frame. Game controls all rendering (no auto-render).
 
+### Scripted games and NoAction
+
+`ScriptedGame` (from `unison-scripting`) implements `Game` with `type Action = NoAction`. Input is handled in Lua rather than through Rust action enums, so the action API on `Engine` is not used. `NoAction` is an uninhabited enum — it cannot be instantiated and satisfies the bound at zero cost.
+
+```rust
+// Rust-native game: define an action enum
+#[derive(Copy, Clone, Eq, PartialEq, Hash)]
+enum MyAction { Jump, Left, Right }
+
+impl Game for MyGame {
+    type Action = MyAction;
+    fn init(&mut self, engine: &mut Engine<MyAction>) {
+        engine.bind_key(KeyCode::Space, MyAction::Jump);
+    }
+    // ...
+}
+
+// Scripted game: use NoAction
+impl Game for ScriptedGame {
+    type Action = NoAction;  // input handled in Lua
+    // ...
+}
+```
+
 ## Engine\<A\>
 
 Thin shell for input, actions, renderer access, and compositing. Does NOT own a world.
