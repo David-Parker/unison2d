@@ -48,6 +48,10 @@ pub fn set_screen_size(w: f32, h: f32) {
     SCREEN_SIZE.with(|c| c.set((w, h)));
 }
 
+pub fn get_screen_size() -> (f32, f32) {
+    SCREEN_SIZE.with(|c| c.get())
+}
+
 pub fn get_clear_color() -> Color {
     let [r, g, b] = CLEAR_COLOR.with(|c| c.get());
     Color::new(r, g, b, 1.0)

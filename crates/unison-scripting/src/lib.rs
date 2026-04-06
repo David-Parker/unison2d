@@ -264,6 +264,19 @@ impl Game for ScriptedGame {
 
         bindings::engine::clear_engine_ptr();
 
+        // If a UI frame was requested, render it into the world's overlays
+        // before the main render pass. This needs the engine (renderer +
+        // assets + input), so it has to happen before we take the renderer
+        // borrow below.
+        if let Some(world_rc) = bindings::engine::peek_auto_render_world() {
+            let mut world = world_rc.borrow_mut();
+            let click_events = bindings::ui::render_pending_ui(engine, &mut world);
+            drop(world);
+            for name in click_events {
+                bindings::events::queue_string_event(&name);
+            }
+        }
+
         if let Some(r) = engine.renderer_mut() {
             // Check if Lua called world:auto_render().
             if let Some(world_rc) = bindings::engine::take_auto_render_world() {

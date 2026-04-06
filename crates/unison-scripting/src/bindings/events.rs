@@ -153,6 +153,15 @@ pub fn flush_collision_events(lua: &Lua, world: &mut World) {
     }
 }
 
+/// Queue a string-keyed event with no data. Used by native subsystems (e.g. the
+/// UI binding) to route events into the Lua event system.
+pub fn queue_string_event(name: &str) {
+    let sys = EVENT_SYSTEM.with(|cell| cell.borrow().clone());
+    if let Some(sys) = sys {
+        sys.borrow_mut().pending.push((name.to_string(), None));
+    }
+}
+
 /// Flush string-keyed events. Called by ScriptedGame::update() after collision flush.
 pub fn flush_string_events(lua: &Lua) {
     let sys = EVENT_SYSTEM.with(|cell| cell.borrow().clone());
