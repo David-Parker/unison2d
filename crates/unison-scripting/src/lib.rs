@@ -40,10 +40,12 @@
 
 pub mod bridge;
 pub mod bindings;
+pub mod error_overlay;
 
 use mlua::prelude::*;
 use unison2d::{AntiAliasing, Engine, Game};
 use unison2d::assets::EmbeddedAsset;
+use error_overlay::ErrorOverlay;
 
 /// Unit action type — scripted games don't use Rust action mapping.
 #[derive(Copy, Clone, Eq, PartialEq, Hash)]
@@ -65,6 +67,8 @@ pub struct ScriptedGame {
     source: ScriptSource,
     /// Optional embedded asset table to load during init.
     embedded_assets: Option<&'static [EmbeddedAsset]>,
+    /// On-screen error overlay (captures Lua errors for display in debug builds).
+    overlay: ErrorOverlay,
 }
 
 impl ScriptedGame {
@@ -74,6 +78,7 @@ impl ScriptedGame {
             lua: None,
             source: ScriptSource::Source(script_src.into()),
             embedded_assets: None,
+            overlay: ErrorOverlay::new(),
         }
     }
 
@@ -85,6 +90,7 @@ impl ScriptedGame {
             lua: None,
             source: ScriptSource::AssetPath(path.into()),
             embedded_assets: Some(assets),
+            overlay: ErrorOverlay::new(),
         }
     }
 
@@ -126,12 +132,16 @@ impl Game for ScriptedGame {
                     Some(bytes) => match std::str::from_utf8(bytes) {
                         Ok(s) => s.to_string(),
                         Err(e) => {
-                            eprintln!("[unison-scripting] Script '{path}' is not valid UTF-8: {e}");
+                            let msg = format!("[unison-scripting] Script '{path}' is not valid UTF-8: {e}");
+                            eprintln!("{msg}");
+                            self.overlay.set(msg);
                             return;
                         }
                     },
                     None => {
-                        eprintln!("[unison-scripting] Script asset not found: '{path}'");
+                        let msg = format!("[unison-scripting] Script asset not found: '{path}'");
+                        eprintln!("{msg}");
+                        self.overlay.set(msg);
                         return;
                     }
                 }
@@ -142,13 +152,17 @@ impl Game for ScriptedGame {
 
         // Register all bindings (World, input, engine globals).
         if let Err(e) = bindings::register_all(&lua) {
-            eprintln!("[unison-scripting] Failed to register bindings: {e}");
+            let msg = format!("[unison-scripting] Failed to register bindings: {e}");
+            eprintln!("{msg}");
+            self.overlay.set(msg);
             return;
         }
 
         // Pre-load all .lua script assets into package.preload so require() works.
         if let Err(e) = Self::setup_require(&lua, engine) {
-            eprintln!("[unison-scripting] Failed to setup require: {e}");
+            let msg = format!("[unison-scripting] Failed to setup require: {e}");
+            eprintln!("{msg}");
+            // Non-fatal: log but continue (require may not be used).
         }
 
         // Update screen size before script runs.
@@ -161,7 +175,10 @@ impl Game for ScriptedGame {
         let game_table: LuaTable = match lua.load(&script_src).eval() {
             Ok(t) => t,
             Err(e) => {
-                eprintln!("[unison-scripting] Script error: {e}");
+                let msg = format!("[unison-scripting] Script error: {e}");
+                eprintln!("{msg}");
+                self.overlay.set(msg);
+                // Store the Lua VM so render() can draw the overlay.
                 self.lua = Some(lua);
                 return;
             }
@@ -169,7 +186,9 @@ impl Game for ScriptedGame {
 
         // Store the returned game table as a global for lifecycle dispatch.
         if let Err(e) = lua.globals().set("__game", game_table) {
-            eprintln!("[unison-scripting] Failed to store game table: {e}");
+            let msg = format!("[unison-scripting] Failed to store game table: {e}");
+            eprintln!("{msg}");
+            self.overlay.set(msg);
         }
 
         self.lua = Some(lua);
@@ -179,7 +198,9 @@ impl Game for ScriptedGame {
 
         // Call the script's init().
         if let Err(e) = self.call_lifecycle("init", ()) {
-            eprintln!("[unison-scripting] init() error: {e}");
+            let msg = format!("[unison-scripting] init() error: {e}");
+            eprintln!("{msg}");
+            self.overlay.set(msg);
         }
 
         // Clear engine pointer — it's only valid during init.
@@ -223,12 +244,16 @@ impl Game for ScriptedGame {
         if bindings::scene::is_active() {
             if let Some(lua) = &self.lua {
                 if let Err(e) = bindings::scene::call_scene_update(lua, dt) {
-                    eprintln!("[unison-scripting] scene update() error: {e}");
+                    let msg = format!("[unison-scripting] scene update() error: {e}");
+                    eprintln!("{msg}");
+                    self.overlay.set(msg);
                 }
             }
         } else {
             if let Err(e) = self.call_lifecycle("update", dt) {
-                eprintln!("[unison-scripting] update() error: {e}");
+                let msg = format!("[unison-scripting] update() error: {e}");
+                eprintln!("{msg}");
+                self.overlay.set(msg);
             }
         }
 
@@ -253,12 +278,16 @@ impl Game for ScriptedGame {
         if bindings::scene::is_active() {
             if let Some(lua) = &self.lua {
                 if let Err(e) = bindings::scene::call_scene_render(lua) {
-                    eprintln!("[unison-scripting] scene render() error: {e}");
+                    let msg = format!("[unison-scripting] scene render() error: {e}");
+                    eprintln!("{msg}");
+                    self.overlay.set(msg);
                 }
             }
         } else {
             if let Err(e) = self.call_lifecycle("render", ()) {
-                eprintln!("[unison-scripting] render() error: {e}");
+                let msg = format!("[unison-scripting] render() error: {e}");
+                eprintln!("{msg}");
+                self.overlay.set(msg);
             }
         }
 
@@ -318,6 +347,12 @@ impl Game for ScriptedGame {
                 r.end_frame();
             }
         }
+
+        // Draw the error overlay on top of everything else (debug builds only).
+        // This is a separate compositing pass so it always appears regardless of
+        // which render path was taken above.
+        #[cfg(debug_assertions)]
+        self.overlay.render(engine);
     }
 }
 

@@ -15,6 +15,7 @@ pub mod render_layers;
 pub mod render_targets;
 pub mod ui;
 pub mod math;
+pub mod debug;
 
 use mlua::prelude::*;
 
@@ -33,6 +34,9 @@ pub fn register_all(lua: &Lua) -> LuaResult<()> {
     scene::register(lua)?;
     render_targets::register(lua)?;
     ui::register(lua)?;
+
+    // Debug utilities
+    debug::register(lua)?;
 
     Ok(())
 }
