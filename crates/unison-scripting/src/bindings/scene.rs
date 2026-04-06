@@ -81,6 +81,17 @@ pub fn call_scene_render(lua: &Lua) -> LuaResult<bool> {
     })
 }
 
+/// Reset the scene system — clears current scene and deactivates scene management.
+/// Called from `ScriptedGame::drop()` to avoid leaking thread-local state.
+pub fn reset() {
+    CURRENT_SCENE.with(|cell| {
+        // We cannot call lua.remove_registry_value here without a Lua reference,
+        // but the Lua VM is being dropped anyway, so just clear the Option.
+        *cell.borrow_mut() = None;
+    });
+    SCENES_ACTIVE.with(|c| c.set(false));
+}
+
 // ===================================================================
 // Registration (on the engine table)
 // ===================================================================

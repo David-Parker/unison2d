@@ -76,15 +76,49 @@ pub fn take_aa_request() -> Option<String> {
     AA_REQUEST.with(|cell| cell.borrow_mut().take())
 }
 
-/// Set the engine pointer for synchronous texture loading during init().
+/// Call a closure with a mutable reference to the engine, if the pointer is set.
+/// Returns `None` when the engine pointer is not live.
+///
 /// # Safety
-/// The pointer must remain valid for the duration it is set. Call
-/// `clear_engine_ptr()` before the Engine reference goes out of scope.
-pub fn set_engine_ptr(engine: &mut Engine<NoAction>) {
-    ENGINE_PTR.with(|c| c.set(Some(engine as *mut Engine<NoAction>)));
+/// The returned reference is only valid while the `ScriptedGame` lifecycle method
+/// that set the pointer is still on the stack.
+pub fn with_engine_ptr<R>(f: impl FnOnce(&mut Engine<NoAction>) -> R) -> Option<R> {
+    ENGINE_PTR.with(|c| {
+        c.get().map(|ptr| {
+            // Safety: ptr is valid while ScriptedGame::init()/update()/render()
+            // is on the stack and the guard has not yet been dropped.
+            let engine = unsafe { &mut *ptr };
+            f(engine)
+        })
+    })
 }
 
-/// Clear the engine pointer after init() completes.
+/// RAII guard that clears the engine pointer when dropped.
+///
+/// Bind the return value of [`set_engine_ptr`] to a named variable (e.g.
+/// `let _guard = set_engine_ptr(engine)`) so the pointer is automatically
+/// cleared when the guard goes out of scope.
+pub struct EngineGuard;
+
+impl Drop for EngineGuard {
+    fn drop(&mut self) {
+        ENGINE_PTR.with(|c| c.set(None));
+    }
+}
+
+/// Set the engine pointer for synchronous texture loading and return an RAII
+/// guard that clears it on drop.
+///
+/// # Safety
+/// The pointer must remain valid for the lifetime of the returned [`EngineGuard`].
+/// Drop the guard before `engine` goes out of scope or is moved.
+pub fn set_engine_ptr(engine: &mut Engine<NoAction>) -> EngineGuard {
+    ENGINE_PTR.with(|c| c.set(Some(engine as *mut Engine<NoAction>)));
+    EngineGuard
+}
+
+/// Explicitly clear the engine pointer without needing the guard.
+/// Used by [`crate::bindings::engine::reset()`].
 pub fn clear_engine_ptr() {
     ENGINE_PTR.with(|c| c.set(None));
 }
@@ -174,6 +208,16 @@ pub fn register(lua: &Lua) -> LuaResult<()> {
 
     lua.globals().set("engine", engine)?;
     Ok(())
+}
+
+/// Reset all thread-local engine state.
+/// Called from `ScriptedGame::drop()` to avoid leaking state between instances.
+pub fn reset() {
+    SCREEN_SIZE.with(|c| c.set((960.0, 540.0)));
+    CLEAR_COLOR.with(|c| c.set([0.1, 0.1, 0.12]));
+    AUTO_RENDER_WORLD.with(|cell| *cell.borrow_mut() = None);
+    AA_REQUEST.with(|cell| *cell.borrow_mut() = None);
+    ENGINE_PTR.with(|c| c.set(None));
 }
 
 fn lua_to_f32(val: &LuaValue) -> LuaResult<f32> {

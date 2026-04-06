@@ -14,9 +14,13 @@
 
 use mlua::prelude::*;
 
-/// Register the `debug` global table.
+/// Register debug utilities into the existing Lua `debug` standard library table.
+///
+/// We extend rather than replace the built-in `debug` table so that Lua's own
+/// `debug.traceback`, `debug.getinfo`, etc. remain available.
 pub fn register(lua: &Lua) -> LuaResult<()> {
-    let debug = lua.create_table()?;
+    // Get the standard `debug` table that Lua already provides.
+    let debug: LuaTable = lua.globals().get("debug")?;
 
     // debug.log(...) — print varargs to platform console, joined with tab.
     debug.set("log", lua.create_function(|lua, args: LuaMultiValue| {
@@ -61,6 +65,7 @@ pub fn register(lua: &Lua) -> LuaResult<()> {
         Ok(())
     })?)?;
 
-    lua.globals().set("debug", debug)?;
+    // NOTE: do NOT call lua.globals().set("debug", ...) — the table is already
+    // there and we mutated it in-place to preserve the standard library.
     Ok(())
 }

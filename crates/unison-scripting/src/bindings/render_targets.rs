@@ -11,9 +11,10 @@
 //! engine.draw_overlay(tex, 0.7, 0.7, 0.25, 0.25)
 //! ```
 //!
-//! Render targets require renderer access, so `create_render_target` and
-//! `draw_overlay` are deferred through thread-local state, resolved by
-//! `ScriptedGame` during the init/render phases.
+//! `create_render_target` is synchronous — it calls the engine directly via
+//! the thread-local engine pointer (same pattern as `load_texture`).
+//! `draw_overlay` and `render_to_targets` are deferred into thread-local queues
+//! that `ScriptedGame` drains during the render phase.
 
 use std::cell::RefCell;
 
@@ -23,12 +24,6 @@ use unison2d::render::RenderTargetId;
 // ===================================================================
 // Thread-local bridge state
 // ===================================================================
-
-/// A pending render-target creation request.
-pub struct RenderTargetRequest {
-    pub width: u32,
-    pub height: u32,
-}
 
 /// A pending overlay draw request.
 pub struct OverlayRequest {
@@ -46,10 +41,6 @@ pub struct OverlayBorder {
 }
 
 thread_local! {
-    /// Pending render target creation requests, resolved during init.
-    static RT_REQUESTS: RefCell<Vec<RenderTargetRequest>> = const { RefCell::new(Vec::new()) };
-    /// Results from render target creation: (target_id_raw, texture_id_raw).
-    static RT_RESULTS: RefCell<Vec<(u32, u32)>> = const { RefCell::new(Vec::new()) };
     /// Pending overlay draw requests, consumed during render.
     static OVERLAY_REQUESTS: RefCell<Vec<OverlayRequest>> = const { RefCell::new(Vec::new()) };
     /// Pending render_to_targets calls: list of (camera_name, target_id_raw).
@@ -58,20 +49,19 @@ thread_local! {
 
 // -- Public accessors for ScriptedGame --
 
-pub fn take_render_target_requests() -> Vec<RenderTargetRequest> {
-    RT_REQUESTS.with(|cell| std::mem::take(&mut *cell.borrow_mut()))
-}
-
-pub fn push_render_target_result(target_id: u32, texture_id: u32) {
-    RT_RESULTS.with(|cell| cell.borrow_mut().push((target_id, texture_id)));
-}
-
 pub fn take_overlay_requests() -> Vec<OverlayRequest> {
     OVERLAY_REQUESTS.with(|cell| std::mem::take(&mut *cell.borrow_mut()))
 }
 
 pub fn take_render_to_targets() -> Option<Vec<(String, u32)>> {
     RENDER_TO_TARGETS.with(|cell| cell.borrow_mut().take())
+}
+
+/// Reset all render-target thread-local state.
+/// Called from `ScriptedGame::drop()`.
+pub fn reset() {
+    OVERLAY_REQUESTS.with(|cell| cell.borrow_mut().clear());
+    RENDER_TO_TARGETS.with(|cell| *cell.borrow_mut() = None);
 }
 
 // ===================================================================
@@ -84,25 +74,21 @@ pub fn register(lua: &Lua) -> LuaResult<()> {
     let engine: LuaTable = lua.globals().get("engine")?;
 
     // engine.create_render_target(w, h) → target_id, texture_id
-    // During init, this is resolved synchronously via the engine pointer.
-    // We queue the request and return the result from the results buffer.
+    // Calls through ENGINE_PTR synchronously, following the same pattern as
+    // load_texture. Must be called during init() or on_enter() when the engine
+    // pointer is live.
     engine.set("create_render_target", lua.create_function(|_, (w, h): (u32, u32)| {
-        let idx = RT_REQUESTS.with(|cell| {
-            let mut v = cell.borrow_mut();
-            let idx = v.len();
-            v.push(RenderTargetRequest { width: w, height: h });
-            idx
-        });
-        // Check if result is already available (synchronous path)
-        RT_RESULTS.with(|cell| {
-            let results = cell.borrow();
-            if idx < results.len() {
-                Ok((results[idx].0, results[idx].1))
-            } else {
-                // Not yet resolved — return placeholders
+        match super::engine::with_engine_ptr(|engine| engine.create_render_target(w, h)) {
+            Some(Ok((target_id, texture_id))) => Ok((target_id.raw(), texture_id.raw())),
+            Some(Err(e)) => {
+                eprintln!("[unison-scripting] create_render_target failed: {e}");
                 Ok((0u32, 0u32))
             }
-        })
+            None => {
+                eprintln!("[unison-scripting] engine.create_render_target() called outside init — engine not available");
+                Ok((0u32, 0u32))
+            }
+        }
     })?)?;
 
     // engine.draw_overlay(texture_id, x, y, w, h)
@@ -135,7 +121,7 @@ pub fn register(lua: &Lua) -> LuaResult<()> {
 /// Register render_to_targets as a method on World userdata.
 pub fn add_world_methods<M: LuaUserDataMethods<super::world::LuaWorld>>(methods: &mut M) {
     // world:render_to_targets({{"main", "screen"}, {"overview", target_id}})
-    methods.add_method("render_to_targets", |_, _this, mapping: LuaTable| {
+    methods.add_method("render_to_targets", |_, this, mapping: LuaTable| {
         let mut targets = Vec::new();
         for pair in mapping.sequence_values::<LuaTable>() {
             let pair = pair?;
@@ -155,6 +141,11 @@ pub fn add_world_methods<M: LuaUserDataMethods<super::world::LuaWorld>>(methods:
         RENDER_TO_TARGETS.with(|cell| {
             *cell.borrow_mut() = Some(targets);
         });
+
+        // Ensure the render pass runs even when the script uses multi-camera
+        // rendering instead of world:auto_render().
+        super::engine::request_auto_render(this.0.clone());
+
         Ok(())
     });
 }

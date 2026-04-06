@@ -195,7 +195,8 @@ impl Game for ScriptedGame {
         self.lua = Some(lua);
 
         // Set engine pointer so Lua closures can call load_texture synchronously.
-        bindings::engine::set_engine_ptr(engine);
+        // The guard clears the pointer automatically when it drops at end of scope.
+        let _engine_guard = bindings::engine::set_engine_ptr(engine);
 
         // Call the script's init().
         if let Err(e) = self.call_lifecycle("init", ()) {
@@ -204,8 +205,8 @@ impl Game for ScriptedGame {
             self.overlay.set(msg);
         }
 
-        // Clear engine pointer — it's only valid during init.
-        bindings::engine::clear_engine_ptr();
+        // Drop the guard explicitly before accessing engine again (AA setup below).
+        drop(_engine_guard);
 
         // Apply anti-aliasing request if set.
         if let Some(aa) = bindings::engine::take_aa_request() {
@@ -239,7 +240,8 @@ impl Game for ScriptedGame {
         // scene on_enter when scenes are switched mid-game). Kept set until
         // after event flushing so that event handlers (e.g. level_complete
         // → switch_scene → on_enter → load_texture) can still reach the engine.
-        bindings::engine::set_engine_ptr(engine);
+        // The guard clears the pointer when it drops at end of this block.
+        let _engine_guard = bindings::engine::set_engine_ptr(engine);
 
         // Dispatch update: scene system takes priority if active.
         if bindings::scene::is_active() {
@@ -268,31 +270,52 @@ impl Game for ScriptedGame {
             bindings::events::flush_string_events(lua);
         }
 
-        bindings::engine::clear_engine_ptr();
+        // Drop guard explicitly so engine is free before AA application below.
+        drop(_engine_guard);
+
+        // Apply any anti-aliasing request made during scene on_enter() callbacks.
+        // Scenes switch during update(), so AA requests from on_enter() arrive
+        // here rather than in init().
+        if let Some(aa) = bindings::engine::take_aa_request() {
+            let mode = match aa.as_str() {
+                "none" => AntiAliasing::None,
+                "msaa2x" | "MSAAx2" => AntiAliasing::MSAAx2,
+                "msaa4x" | "MSAAx4" => AntiAliasing::MSAAx4,
+                "msaa8x" | "MSAAx8" => AntiAliasing::MSAAx8,
+                _ => {
+                    eprintln!("[unison-scripting] Unknown AA mode: '{aa}'");
+                    AntiAliasing::None
+                }
+            };
+            engine.set_anti_aliasing(mode);
+        }
     }
 
     fn render(&mut self, engine: &mut Engine<NoAction>) {
         // Make engine available to Lua closures during render.
-        bindings::engine::set_engine_ptr(engine);
+        // The guard clears the pointer when dropped.
+        {
+            let _engine_guard = bindings::engine::set_engine_ptr(engine);
 
-        // Dispatch render: scene system takes priority if active.
-        if bindings::scene::is_active() {
-            if let Some(lua) = &self.lua {
-                if let Err(e) = bindings::scene::call_scene_render(lua) {
-                    let msg = format!("[unison-scripting] scene render() error: {e}");
+            // Dispatch render: scene system takes priority if active.
+            if bindings::scene::is_active() {
+                if let Some(lua) = &self.lua {
+                    if let Err(e) = bindings::scene::call_scene_render(lua) {
+                        let msg = format!("[unison-scripting] scene render() error: {e}");
+                        eprintln!("{msg}");
+                        self.overlay.set(msg);
+                    }
+                }
+            } else {
+                if let Err(e) = self.call_lifecycle("render", ()) {
+                    let msg = format!("[unison-scripting] render() error: {e}");
                     eprintln!("{msg}");
                     self.overlay.set(msg);
                 }
             }
-        } else {
-            if let Err(e) = self.call_lifecycle("render", ()) {
-                let msg = format!("[unison-scripting] render() error: {e}");
-                eprintln!("{msg}");
-                self.overlay.set(msg);
-            }
+            // _engine_guard drops here, clearing the pointer before we need
+            // to take renderer_mut() below.
         }
-
-        bindings::engine::clear_engine_ptr();
 
         // If a UI frame was requested, render it into the world's overlays
         // before the main render pass. This needs the engine (renderer +
@@ -357,6 +380,22 @@ impl Game for ScriptedGame {
     }
 }
 
+impl Drop for ScriptedGame {
+    fn drop(&mut self) {
+        // Drop the Lua VM first so that any Lua GC finalizers run before we
+        // reset the thread-locals they may reference.
+        self.lua = None;
+
+        // Reset all thread-local state owned by the scripting system so that
+        // a subsequent ScriptedGame constructed on the same thread starts clean.
+        bindings::events::reset();
+        bindings::scene::reset();
+        bindings::engine::reset();
+        bindings::render_targets::reset();
+        bindings::ui::reset();
+    }
+}
+
 impl ScriptedGame {
     /// Hot-reload the script from new source (debug builds only).
     ///
@@ -381,6 +420,9 @@ impl ScriptedGame {
 
         // --- Level 2: re-evaluate in the existing VM ---
         if let Some(lua) = &self.lua {
+            // Clear require() cache so changed dependency modules are re-executed.
+            let _ = lua.load("for k in pairs(package.loaded) do package.loaded[k] = nil end").exec();
+
             match lua.load(new_source).eval::<LuaTable>() {
                 Ok(new_table) => {
                     // Replace the __game global with the freshly returned table.
@@ -397,6 +439,12 @@ impl ScriptedGame {
         }
 
         // --- Level 1: full VM restart ---
+        // Clear require() cache in existing VM (if any) before tearing it down,
+        // so stale modules don't re-execute against a dying Lua state.
+        if let Some(lua) = &self.lua {
+            let _ = lua.load("for k in pairs(package.loaded) do package.loaded[k] = nil end").exec();
+        }
+
         // Tear down the existing VM and create a fresh one.
         self.lua = None;
 

@@ -81,6 +81,13 @@ pub fn take_ui_frame() -> Option<UiFrameRequest> {
     UI_FRAME.with(|cell| cell.borrow_mut().take())
 }
 
+/// Reset all UI thread-local state.
+/// Called from `ScriptedGame::drop()`.
+pub fn reset() {
+    UI_FRAME.with(|cell| *cell.borrow_mut() = None);
+    LUA_UI.with(|cell| *cell.borrow_mut() = None);
+}
+
 // ===================================================================
 // LuaUi userdata
 // ===================================================================

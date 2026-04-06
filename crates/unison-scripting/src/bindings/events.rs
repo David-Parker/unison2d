@@ -254,6 +254,27 @@ pub fn register(lua: &Lua) -> LuaResult<()> {
         Ok(())
     })?)?;
 
+    // events.clear() — remove all string-keyed event handlers.
+    // Call this from scene on_exit() to prevent duplicate handlers when
+    // re-entering a scene. Does NOT clear collision handlers (world-scoped).
+    let sys_ref = sys.clone();
+    events.set("clear", lua.create_function(move |lua, ()| {
+        let mut es = sys_ref.borrow_mut();
+        // Remove all registry values for the string-keyed handlers.
+        for (_, handlers) in es.handlers.drain() {
+            for key in handlers {
+                lua.remove_registry_value(key).ok();
+            }
+        }
+        // Also clear any pending (undelivered) events with data keys.
+        for (_, data_key) in es.pending.drain(..) {
+            if let Some(dk) = data_key {
+                lua.remove_registry_value(dk).ok();
+            }
+        }
+        Ok(())
+    })?)?;
+
     lua.globals().set("events", events)?;
     Ok(())
 }
@@ -265,5 +286,13 @@ pub fn enable_collisions_for_world(world: &mut World) {
         if let Some(sys) = cell.borrow().as_ref() {
             sys.borrow_mut().ensure_collisions(world);
         }
+    });
+}
+
+/// Reset the event system — clears all handlers and pending events.
+/// Called from `ScriptedGame::drop()` to avoid leaking thread-local state.
+pub fn reset() {
+    EVENT_SYSTEM.with(|cell| {
+        *cell.borrow_mut() = None;
     });
 }
