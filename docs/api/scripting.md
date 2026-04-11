@@ -1,6 +1,6 @@
 # unison-scripting
 
-Lua 5.4 scripting for Unison 2D. Implements the `Game` trait internally, forwarding lifecycle calls into an embedded Lua VM. Game code is written in Lua (or TypeScript via [TypeScriptToLua](https://github.com/TypeScriptToLua/TypescriptToLua)) rather than Rust.
+Lua 5.4 scripting for Unison 2D. Implements the `Game` trait internally, forwarding lifecycle calls into an embedded Lua VM. Game code is written in Lua rather than Rust.
 
 ## Purpose
 

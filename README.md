@@ -21,34 +21,38 @@
 
 ## Why Unison?
 
-Traditional game engines are designed for humans clicking through editor panels. **Unison 2D is designed for agents writing code.** Every feature is accessible through a clean Rust API — no project files, no drag-and-drop, no hidden state.
+Traditional game engines are designed for humans clicking through editor panels. **Unison 2D is designed for agents writing code.** Every feature is accessible through a clean API — no project files, no drag-and-drop, no hidden state.
 
-Unison is composed of several crates containing low level sub-systems. A high level API unifies them together. There is no complex ECS, no DSL for your agent to learn, no scripting system. Point your agent to the docs and start building games for every platform.
+Game code is written in **Lua 5.4** via the `unison-scripting` crate, which implements the engine's `Game` trait on top of an embedded Lua VM. The Rust API is still first-class and available for engine work or advanced use cases, but Lua is the canonical way to write a game: fast iteration, hot reload, and no Rust recompile loop. Point your agent at the docs and start building games for every platform.
 
+- **Lua scripting** — Canonical game code path; Rust API available for advanced use
 - **Code-first** — Everything is controlled through code and configuration
 - **Modular** — Use the full engine or pick individual crates
 - **Cross-platform** — Compile for Web, iOS, and Android from one codebase
 - **SIMD-accelerated physics** — XPBD soft body & rigid body simulation
 - **Dynamic lighting** — 2D lights with real-time soft shadows
 - **Declarative UI** — React-like UI system with diffing, layout, and input handling
+- **Hot reload** — Edit Lua, save, see changes without a rebuild
 - **Zero-cost profiling** — Hierarchical function-level profiling behind a feature gate
 
 ## Crates
 
 ```
 unison2d/crates/
-├── unison2d/        # Core engine — Game trait, re-exports everything
-├── unison-core/     # Vec2, Color, Rect — zero dependencies
-├── unison-physics/  # XPBD soft body & rigid body physics
-├── unison-render/   # Platform-agnostic rendering traits
-├── unison-lighting/ # 2D lighting with lightmap compositing and shadows
-├── unison-input/    # Two-layer input (raw → action mapping)
-├── unison-ui/       # Declarative UI (menus, HUDs, buttons, text)
-├── unison-assets/   # Build-time asset embedding & runtime store
-├── unison-profiler/ # Function-level profiling
-├── unison-web/      # Web platform (WebGL2, DOM input, rAF loop)
-├── unison-ios/      # iOS platform (Metal renderer, touch input, frame loop)
-└── unison-tests/    # Headless e2e / simulation tests
+├── unison2d/         # Core engine — World, Engine, Game trait, re-exports
+├── unison-core/      # Vec2, Color, Rect — zero dependencies
+├── unison-physics/   # XPBD soft body & rigid body physics
+├── unison-render/    # Platform-agnostic rendering traits, textures, sprites
+├── unison-lighting/  # 2D lighting with lightmap compositing and shadows
+├── unison-input/     # Two-layer input (raw → action mapping)
+├── unison-ui/        # Declarative UI (menus, HUDs, buttons, text)
+├── unison-assets/    # Build-time asset embedding & runtime store
+├── unison-profiler/  # Function-level profiling
+├── unison-scripting/ # Lua 5.4 scripting — ScriptedGame implementing Game trait
+├── unison-web/       # Web platform (WebGL2, DOM input, rAF loop)
+├── unison-ios/       # iOS platform (Metal renderer, touch input, frame loop)
+├── unison-android/   # Android platform (GLES 3.0 renderer, touch input, JNI loop)
+└── unison-tests/     # Headless e2e / simulation tests
 ```
 
 All subsystems are independent. Use `unison2d` to get everything, or depend on individual crates.
@@ -61,22 +65,68 @@ Add as a git submodule:
 git submodule add https://github.com/David-Parker/unison2d.git
 ```
 
+### Lua game (canonical)
+
+A Lua game needs one Rust file that hands `ScriptedGame` to the platform runner. Everything else lives in `.lua` files under your asset dir.
+
 ```toml
 [dependencies]
-unison2d = { path = "unison2d/crates/unison2d" }
-```
+unison2d          = { path = "unison2d/crates/unison2d" }
+unison-scripting  = { path = "unison2d/crates/unison-scripting" }
+unison-web        = { path = "unison2d/crates/unison-web" }
 
-Then access subsystems:
+[build-dependencies]
+unison-assets = { path = "unison2d/crates/unison-assets", features = ["build"] }
+```
 
 ```rust
-use unison2d::physics::{PhysicsWorld, BodyConfig, Material, Mesh};
-use unison2d::render::{Renderer, Camera, Color};
-use unison2d::lighting::{LightingSystem, PointLight, DirectionalLight, ShadowSettings};
-use unison2d::input::{InputState, KeyCode};
-use unison2d::ui::facade::Ui;
-use unison2d::profiler::{Profiler, profile_scope};
+use wasm_bindgen::prelude::*;
+use unison_scripting::ScriptedGame;
+
+mod assets { include!(concat!(env!("OUT_DIR"), "/assets.rs")); }
+
+#[wasm_bindgen(start)]
+pub fn main() {
+    let game = ScriptedGame::from_asset("scripts/main.lua", assets::ASSETS);
+    unison_web::run(game);
+}
+```
+
+```lua
+-- scripts/main.lua
+local game = {}
+
+function game.init()
+    world = World.new()
+    world:set_background(0x1a1a2e)
+    world:set_gravity(-9.8)
+    world:set_ground(-4.5)
+    box_id = world:spawn_rigid_body({
+        collider = "aabb", half_width = 0.6, half_height = 0.6,
+        position = {0, 2}, color = 0xe74c3c,
+    })
+    world:camera_follow("main", box_id, 0.1)
+end
+
+function game.update(dt) world:step(dt) end
+function game.render()   world:auto_render() end
+
+return game
+```
+
+See [docs/scripting/getting-started.md](docs/scripting/getting-started.md) for the full walkthrough.
+
+### Rust game (advanced)
+
+For engine work, custom rendering, or performance-sensitive code paths, implement the `Game` trait in Rust directly:
+
+```rust
+use unison2d::physics::{Material, mesh::create_ring_mesh};
+use unison2d::render::Color;
 use unison2d::math::Vec2;
 ```
+
+See [docs/guide/getting-started.md](docs/guide/getting-started.md) for the Rust walkthrough.
 
 ### Feature Flags
 
@@ -91,8 +141,9 @@ unison2d = { path = "unison2d/crates/unison2d", features = ["simd", "profiling"]
 
 ## Documentation
 
-- [**User Guide**](docs/guide/README.md) — patterns, best practices, getting started
-- [**API Reference**](docs/API.md) — single-file type and method reference
+- [**Lua Scripting**](docs/scripting/getting-started.md) — canonical path: setup, lifecycle, API reference, hot reload
+- [**User Guide**](docs/guide/README.md) — Rust patterns, best practices, getting started
+- [**API Reference**](docs/API.md) — single-file Rust type and method reference
 - [**Per-Crate Docs**](docs/INDEX.md) — deep dives into each subsystem
 
 ## License

@@ -11,8 +11,10 @@ embeds a Lua 5.4 VM and implements the `Game` trait for you.
 unison2d          = { path = "unison2d/crates/unison2d" }
 unison-scripting  = { path = "unison2d/crates/unison-scripting" }
 unison-web        = { path = "unison2d/crates/unison-web" }
-unison-assets     = { path = "unison2d/crates/unison-assets" }
 wasm-bindgen      = "0.2"
+
+[build-dependencies]
+unison-assets = { path = "unison2d/crates/unison-assets", features = ["build"] }
 ```
 
 **lib.rs (your entire Rust file):**
@@ -32,7 +34,7 @@ pub fn main() {
 **build.rs:**
 ```rust
 fn main() {
-    unison_assets::embed("project/assets");
+    unison_assets::build::embed_assets("project/assets", "assets.rs");
 }
 ```
 

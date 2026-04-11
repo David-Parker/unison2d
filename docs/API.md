@@ -633,13 +633,15 @@ Call `ctx.flush_events(&mut self.world)` after `world.step(dt)` each frame.
 
 ## Project Setup
 
+This section covers **Rust game code** (implementing `Game` directly). For Lua scripting — the canonical path — see [scripting/getting-started.md](scripting/getting-started.md).
+
 ```
 your-game/
-├── project/lib.rs          # Platform entry point (Rust); game code is in Lua
-├── project/assets/         # Game assets + Lua scripts (embedded at build time)
+├── project/lib.rs          # Your Game impl + wasm/ios/android entry points
+├── project/assets/         # Textures, fonts, etc. (embedded at build time)
 ├── build.rs                # Calls unison_assets::build::embed_assets()
 ├── unison2d/               # Engine (git submodule)
-├── Cargo.toml              # depends on unison2d + unison-scripting + unison-web + wasm-bindgen
+├── Cargo.toml
 ├── index.html              # Canvas element with id="canvas"
 ├── Trunk.toml              # Build config
 └── Makefile                # make dev / make build
