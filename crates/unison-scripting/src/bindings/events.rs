@@ -176,20 +176,35 @@ pub fn flush_string_events(lua: &Lua) {
         std::mem::take(&mut es.pending)
     };
 
+    // Iterate handlers by index, re-borrowing `sys` for each lookup and
+    // releasing the borrow before calling into Lua. A handler may invoke
+    // `events.clear()` (directly or via a scene's on_exit during
+    // engine.switch_scene), which needs `sys.borrow_mut()`; holding a borrow
+    // across the call would RefCell-panic. If `clear()` wipes the handler
+    // list mid-dispatch, the next lookup returns None and we break out
+    // cleanly. New handlers appended during dispatch are picked up by the
+    // next iteration, consistent with a "dispatch snapshot via growing vec"
+    // semantics.
     for (name, data_key) in &pending {
-        let es = sys.borrow();
-        if let Some(handlers) = es.handlers.get(name) {
-            for key in handlers {
-                if let Ok(func) = lua.registry_value::<LuaFunction>(key) {
-                    if let Some(dk) = data_key {
-                        if let Ok(data) = lua.registry_value::<LuaValue>(dk) {
-                            let _ = func.call::<()>(data);
-                        }
-                    } else {
-                        let _ = func.call::<()>(());
+        let mut i = 0;
+        loop {
+            let func = {
+                let es = sys.borrow();
+                let Some(key) = es.handlers.get(name).and_then(|v| v.get(i)) else {
+                    break;
+                };
+                lua.registry_value::<LuaFunction>(key).ok()
+            };
+            if let Some(func) = func {
+                if let Some(dk) = data_key {
+                    if let Ok(data) = lua.registry_value::<LuaValue>(dk) {
+                        let _ = func.call::<()>(data);
                     }
+                } else {
+                    let _ = func.call::<()>(());
                 }
             }
+            i += 1;
         }
     }
 
