@@ -559,10 +559,22 @@ impl MetalRenderer {
             &uniforms as *const Uniforms as *const c_void,
         );
 
+        // Look up the texture once — if the id isn't in the map, fall back to
+        // untextured (matches Web/Android). Otherwise the shader would sample
+        // an unbound Metal texture slot, which is undefined and produces
+        // invisible geometry on iOS. This matters for meshes spawned from Lua
+        // without a `texture` field, where the binding defaults to
+        // TextureId(0) — not TextureId::NONE.
+        let bound_texture = if texture != TextureId::NONE {
+            self.textures.get(&texture.0)
+        } else {
+            None
+        };
+
         // Fragment uniforms (buffer index 0)
         let frag_uniforms = FragmentUniforms {
             color: [color.r, color.g, color.b, color.a],
-            use_texture: if texture != TextureId::NONE { 1 } else { 0 },
+            use_texture: if bound_texture.is_some() { 1 } else { 0 },
             _pad: [0; 3],
         };
         encoder.set_fragment_bytes(
@@ -571,11 +583,8 @@ impl MetalRenderer {
             &frag_uniforms as *const FragmentUniforms as *const c_void,
         );
 
-        // Bind texture
-        if texture != TextureId::NONE {
-            if let Some(tex) = self.textures.get(&texture.0) {
-                encoder.set_fragment_texture(0, Some(tex));
-            }
+        if let Some(tex) = bound_texture {
+            encoder.set_fragment_texture(0, Some(tex));
         }
 
         // Set vertex buffer and draw
@@ -652,9 +661,22 @@ impl MetalRenderer {
             &uniforms as *const Uniforms as *const c_void,
         );
 
+        // Same fallback as encode_base_draw: if the id isn't in the map, treat
+        // as untextured so the shader doesn't sample an unbound slot.
+        let bound_texture = if lit.texture != TextureId::NONE {
+            self.textures.get(&lit.texture.0)
+        } else {
+            None
+        };
+        let bound_shadow_mask = if lit.shadow_mask != TextureId::NONE {
+            self.textures.get(&lit.shadow_mask.0)
+        } else {
+            None
+        };
+
         let frag_uniforms = LitFragmentUniforms {
             color: [lit.color.r, lit.color.g, lit.color.b, lit.color.a],
-            use_texture: if lit.texture != TextureId::NONE { 1 } else { 0 },
+            use_texture: if bound_texture.is_some() { 1 } else { 0 },
             _pad0: 0,
             screen_size: [lit.screen_size.0, lit.screen_size.1],
             shadow_filter: lit.shadow_filter as i32,
@@ -667,15 +689,11 @@ impl MetalRenderer {
             &frag_uniforms as *const LitFragmentUniforms as *const c_void,
         );
 
-        if lit.texture != TextureId::NONE {
-            if let Some(tex) = self.textures.get(&lit.texture.0) {
-                encoder.set_fragment_texture(0, Some(tex));
-            }
+        if let Some(tex) = bound_texture {
+            encoder.set_fragment_texture(0, Some(tex));
         }
-        if lit.shadow_mask != TextureId::NONE {
-            if let Some(tex) = self.textures.get(&lit.shadow_mask.0) {
-                encoder.set_fragment_texture(1, Some(tex));
-            }
+        if let Some(tex) = bound_shadow_mask {
+            encoder.set_fragment_texture(1, Some(tex));
         }
 
         let vb = &self.vertex_buffers[self.frame_index];
