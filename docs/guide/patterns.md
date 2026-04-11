@@ -257,7 +257,7 @@ Key points:
 - **One continuous blend variable** (`sun_amount`) avoids flip-flop artifacts at transitions
 - **`smoothstep` on `phase_t`** before computing the angle eases the light direction near the horizon, preventing shadow jitter from rapid direction changes
 - **Moon intensity stays flat** — only the angle changes during the moon phase, giving a calm nighttime feel
-- See `project/levels/day_night_cycle.rs` for the full implementation
+- This pattern works the same in Lua scripting — see [Scripting Migration Guide](../scripting/migration-guide.md) for Lua examples
 
 ## Level Transitions
 

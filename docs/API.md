@@ -635,11 +635,11 @@ Call `ctx.flush_events(&mut self.world)` after `world.step(dt)` each frame.
 
 ```
 your-game/
-├── project/lib.rs          # Game code
-├── project/assets/         # Game assets (embedded at build time)
+├── project/lib.rs          # Platform entry point (Rust); game code is in Lua
+├── project/assets/         # Game assets + Lua scripts (embedded at build time)
 ├── build.rs                # Calls unison_assets::build::embed_assets()
 ├── unison2d/               # Engine (git submodule)
-├── Cargo.toml              # depends on unison2d + unison-web + wasm-bindgen
+├── Cargo.toml              # depends on unison2d + unison-scripting + unison-web + wasm-bindgen
 ├── index.html              # Canvas element with id="canvas"
 ├── Trunk.toml              # Build config
 └── Makefile                # make dev / make build
