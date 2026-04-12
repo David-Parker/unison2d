@@ -1,0 +1,47 @@
+use std::process::Command;
+use tempfile::tempdir;
+
+#[test]
+fn new_creates_expected_files() {
+    let dir = tempdir().unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_unison"))
+        .arg("new")
+        .arg("test-game")
+        .arg("--no-ios")
+        .arg("--no-android")
+        .arg("--no-git")
+        .current_dir(dir.path())
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    let root = dir.path().join("test-game");
+    assert!(root.join("Cargo.toml").exists());
+    assert!(root.join("build.rs").exists());
+    assert!(root.join("project/lib.rs").exists());
+    assert!(root.join("project/assets/scripts/main.lua").exists());
+    assert!(root.join("platform/web/index.html").exists());
+    assert!(root.join("platform/web/Trunk.toml").exists());
+    assert!(root.join("unison.toml").exists());
+    assert!(root.join(".gitignore").exists());
+
+    // Assert substitution happened
+    let cargo = std::fs::read_to_string(root.join("Cargo.toml")).unwrap();
+    assert!(cargo.contains("name = \"test_game\""));
+    assert!(!cargo.contains("{{"));
+}
+
+#[test]
+fn new_fails_if_dir_exists() {
+    let dir = tempdir().unwrap();
+    std::fs::create_dir(dir.path().join("pre-existing")).unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_unison"))
+        .arg("new")
+        .arg("pre-existing")
+        .arg("--no-ios")
+        .arg("--no-android")
+        .arg("--no-git")
+        .current_dir(dir.path())
+        .output()
+        .unwrap();
+    assert!(!out.status.success());
+}
