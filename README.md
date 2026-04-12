@@ -32,6 +32,7 @@ Game code is written in **Lua 5.4** via the `unison-scripting` crate, which impl
 - **SIMD-accelerated physics** — XPBD soft body & rigid body simulation
 - **Dynamic lighting** — 2D lights with real-time soft shadows
 - **Declarative UI** — React-like UI system with diffing, layout, and input handling
+- **TypeScript support** — Write games in TypeScript with full type safety and IDE tooling. TSTL transpiles to Lua at build time; the engine runtime stays Lua-only. See `crates/unison-scripting/types/` for declarations and `samples/` for working examples.
 - **Hot reload** — Edit Lua, save, see changes without a rebuild
 - **Zero-cost profiling** — Hierarchical function-level profiling behind a feature gate
 
@@ -115,7 +116,14 @@ function game.render()   world:auto_render() end
 return game
 ```
 
-See [docs/scripting/getting-started.md](docs/scripting/getting-started.md) for the full walkthrough.
+See [docs/scripting/getting-started/lua.md](docs/scripting/getting-started/lua.md) for the full walkthrough.
+
+### TypeScript Game
+
+TypeScript games transpile to Lua via [TypeScriptToLua](https://typescripttolua.github.io/).
+See `samples/ts-minimal/` for a working example and `docs/scripting/getting-started/typescript.md` for the full setup guide.
+
+Type declarations: `crates/unison-scripting/types/`
 
 ### Rust game (advanced)
 
@@ -127,7 +135,7 @@ use unison2d::render::Color;
 use unison2d::math::Vec2;
 ```
 
-See [docs/guide/getting-started.md](docs/guide/getting-started.md) for the Rust walkthrough.
+See [docs/API.md](docs/API.md) for the Rust type and method reference.
 
 ### Feature Flags
 
@@ -142,10 +150,11 @@ unison2d = { path = "unison2d/crates/unison2d", features = ["simd", "profiling"]
 
 ## Documentation
 
-- [**Lua Scripting**](docs/scripting/getting-started.md) — canonical path: setup, lifecycle, API reference, hot reload
-- [**User Guide**](docs/guide/README.md) — Rust patterns, best practices, getting started
-- [**API Reference**](docs/API.md) — single-file Rust type and method reference
-- [**Per-Crate Docs**](docs/INDEX.md) — deep dives into each subsystem
+- [**Lua Getting Started**](docs/scripting/getting-started/lua.md) — setup, lifecycle, minimal example, hot reload
+- [**TypeScript Getting Started**](docs/scripting/getting-started/typescript.md) — TSTL setup, type declarations, workflow
+- [**Concepts**](docs/scripting/concepts.md) — language-neutral: lifecycle, scenes, events
+- [**API Reference**](docs/scripting/api-reference.md) — all globals (Lua + TypeScript side-by-side)
+- [**Per-Crate Docs**](docs/api/) — deep dives into each subsystem
 
 ## License
 

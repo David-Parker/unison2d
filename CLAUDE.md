@@ -19,6 +19,11 @@ ScriptedGame (Lua VM, implements Game trait)  ← canonical for game code
     └── LightingSystem — point lights, directional lights, + lightmap compositing
 ```
 
+**TypeScript support:** TypeScript is an optional authoring layer. The engine
+runtime and `unison-scripting` crate are Lua-only. Transpilation (via TSTL)
+happens in the consumer project's build pipeline, not in the engine. Type
+declarations live at `crates/unison-scripting/types/`.
+
 Underlying Rust layer (used by `ScriptedGame` internally, available for advanced use):
 
 ```
@@ -59,28 +64,24 @@ All crates are re-exported from `unison2d::{math, physics, render, lighting, pro
 
 ```
 docs/
-├── API.md            # Quick reference — all engine types & methods in one file
+├── API.md            # Quick reference — all engine types & methods
 ├── api/              # Per-crate deep dives (linked in table above)
-├── guide/            # Patterns & best practices (Rust game code)
-│   ├── README.md         # Guide overview — start here for tutorials
-│   ├── getting-started.md
-│   ├── levels.md
-│   ├── prefabs.md
-│   └── patterns.md
-└── scripting/        # Lua scripting guides (canonical way to write games)
-    ├── getting-started.md  # Setup, lifecycle, minimal example, require()
-    ├── api-reference.md    # All Lua globals: engine, input, events, World, …
-    ├── migration-guide.md  # Port a Rust game to Lua — before/after examples
-    └── hot-reload.md       # Level 1/2 reload, ScriptWatcher, web strategy
+└── scripting/        # Game authoring guides (Lua + TypeScript)
+    ├── README.md             # Pick your language
+    ├── getting-started/
+    │   ├── lua.md            # Lua setup + tutorial
+    │   └── typescript.md     # TypeScript setup + tutorial
+    ├── concepts.md           # Language-neutral: lifecycle, scenes, events
+    ├── api-reference.md      # All globals — Lua + TS side-by-side
+    └── hot-reload.md         # Hot reload for both languages
 ```
 
 **How to navigate:**
-- **Starting a new game?** → [scripting/getting-started.md](docs/scripting/getting-started.md)
-- **Need a Lua method signature?** → [scripting/api-reference.md](docs/scripting/api-reference.md)
-- **Porting from Rust?** → [scripting/migration-guide.md](docs/scripting/migration-guide.md)
+- **Starting a new Lua game?** → [scripting/getting-started/lua.md](docs/scripting/getting-started/lua.md)
+- **Starting a new TypeScript game?** → [scripting/getting-started/typescript.md](docs/scripting/getting-started/typescript.md)
+- **Need a Lua/TS method signature?** → [scripting/api-reference.md](docs/scripting/api-reference.md)
 - **Need a type signature or method (Rust)?** → [API.md](docs/API.md)
 - **Need to understand a subsystem?** → per-crate doc (table above)
-- **Need patterns or how-to (Rust)?** → [guide/README.md](docs/guide/README.md)
 
 ## Rules
 
