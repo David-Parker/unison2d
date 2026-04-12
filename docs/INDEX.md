@@ -1,27 +1,17 @@
 # Unison 2D Engine — Documentation
 
-Game code is written in **Lua** via the `unison-scripting` crate. The Rust `Game` trait remains available for advanced use cases (engine work, custom rendering paths), but Lua is the canonical path for writing a game.
+Game code is written in **Lua** or **TypeScript** via the `unison-scripting` crate. TypeScript is transpiled to Lua at build time via TSTL. The Rust `Game` trait remains available for advanced use cases (engine work, custom rendering paths), but scripting is the canonical path for writing a game.
 
-## Scripting (Lua) — canonical game code
-
-| Guide | What you'll learn |
-|-------|-------------------|
-| [Getting Started](scripting/getting-started.md) | Setup, script lifecycle, minimal example, multi-file require |
-| [API Reference](scripting/api-reference.md) | All Lua globals: `engine`, `input`, `events`, `World`, `Color`, `Rng`, `math`, `debug` |
-| [Scenes](guide/scripting-scenes.md) | Lua scene system — lifecycle hooks, switching, multi-level example |
-| [Migration Guide](scripting/migration-guide.md) | Port a Rust game to Lua — before/after examples, gotchas |
-| [Hot Reload](scripting/hot-reload.md) | Level 1 vs Level 2 reload, ScriptWatcher, web strategy, error overlay |
-
-## User Guide (Rust, advanced)
-
-Patterns and best practices for building games directly against the Rust `Game` / `Level` traits. For most games, prefer the Lua scripting path above.
+## Scripting (Lua + TypeScript) — canonical game code
 
 | Guide | What you'll learn |
 |-------|-------------------|
-| [Getting Started](guide/getting-started.md) | Minimal Rust game, project setup, first soft body on screen |
-| [Levels](guide/levels.md) | Level trait, shared state, events, transitions, lifecycle hooks |
-| [Prefabs & Shared Code](guide/prefabs.md) | Reusable spawn templates, shared helpers across levels |
-| [Patterns](guide/patterns.md) | Platformer movement, spawning, cameras, PiP, despawning |
+| [Overview](scripting/README.md) | Pick your language — comparison table and links |
+| [Getting Started (Lua)](scripting/getting-started/lua.md) | Setup, script lifecycle, minimal example, multi-file require |
+| [Getting Started (TypeScript)](scripting/getting-started/typescript.md) | TSTL setup, type declarations, build workflow |
+| [Concepts](scripting/concepts.md) | Language-neutral: lifecycle, scenes, events, worlds |
+| [API Reference](scripting/api-reference.md) | All globals with Lua + TypeScript signatures side-by-side |
+| [Hot Reload](scripting/hot-reload.md) | Level 1 vs Level 2 reload, ScriptWatcher, TSTL watch, web strategy |
 
 ## API Reference
 

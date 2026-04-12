@@ -1,6 +1,6 @@
 # Unison 2D — API Reference
 
-Complete type and method reference for the Unison 2D engine. For tutorials and patterns, see the [User Guide](guide/README.md).
+Complete type and method reference for the Unison 2D engine. For scripting tutorials and patterns, see [scripting/README.md](scripting/README.md).
 
 For per-crate deep dives, see the [api/](api/) directory.
 
@@ -633,7 +633,7 @@ Call `ctx.flush_events(&mut self.world)` after `world.step(dt)` each frame.
 
 ## Project Setup
 
-This section covers **Rust game code** (implementing `Game` directly). For Lua scripting — the canonical path — see [scripting/getting-started.md](scripting/getting-started.md).
+This section covers **Rust game code** (implementing `Game` directly). For scripting — the canonical path — see [scripting/README.md](scripting/README.md).
 
 ```
 your-game/
