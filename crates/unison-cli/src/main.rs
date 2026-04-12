@@ -19,6 +19,7 @@ fn main() -> anyhow::Result<()> {
                 name, lang, no_web, no_ios, no_android, no_git, bundle_id, engine_tag, template,
             }, ENGINE_TAG, ENGINE_GIT_URL)
         }
+        Command::Doctor => commands::doctor::run(Some(&std::env::current_dir()?)),
         _ => {
             println!("Not yet implemented");
             Ok(())
