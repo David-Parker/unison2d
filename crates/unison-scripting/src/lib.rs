@@ -71,6 +71,7 @@ pub mod reexports {
 }
 
 use mlua::prelude::*;
+use mlua::{StdLib, LuaOptions};
 use unison2d::{AntiAliasing, Engine, Game};
 use unison2d::assets::EmbeddedAsset;
 use error_overlay::ErrorOverlay;
@@ -120,6 +121,16 @@ impl ScriptedGame {
             embedded_assets: Some(assets),
             overlay: ErrorOverlay::new(),
         }
+    }
+
+    /// Returns `true` if a Lua error has been captured.
+    pub fn has_error(&self) -> bool {
+        self.overlay.has_error()
+    }
+
+    /// Returns the captured error message, if any.
+    pub fn error_message(&self) -> Option<&str> {
+        self.overlay.message()
     }
 
     /// Call a named function on the script table (the value returned by the top-level chunk).
@@ -176,7 +187,13 @@ impl Game for ScriptedGame {
             }
         };
 
-        let lua = Lua::new();
+        // SAFETY: The debug library is needed for TSTL source-map traceback
+        // (debug.getinfo / debug.traceback). The game VM is sandboxed — no
+        // filesystem or C-module access — so exposing debug introspection is
+        // harmless.
+        let lua = unsafe {
+            Lua::unsafe_new_with(StdLib::ALL_SAFE | StdLib::DEBUG, LuaOptions::default())
+        };
 
         // Register all bindings (World, input, engine globals).
         if let Err(e) = bindings::register_all(&lua) {
@@ -475,7 +492,13 @@ impl ScriptedGame {
         // Tear down the existing VM and create a fresh one.
         self.lua = None;
 
-        let lua = Lua::new();
+        // SAFETY: The debug library is needed for TSTL source-map traceback
+        // (debug.getinfo / debug.traceback). The game VM is sandboxed — no
+        // filesystem or C-module access — so exposing debug introspection is
+        // harmless.
+        let lua = unsafe {
+            Lua::unsafe_new_with(StdLib::ALL_SAFE | StdLib::DEBUG, LuaOptions::default())
+        };
 
         // Re-register all bindings.
         if let Err(e) = bindings::register_all(&lua) {
@@ -525,7 +548,10 @@ impl ScriptedGame {
     /// Set up Lua `require()` to load scripts from embedded assets.
     ///
     /// Iterates all `.lua` asset paths and registers them in `package.preload`
-    /// so that `require("scenes/shared")` loads `scripts/scenes/shared.lua`.
+    /// so that both `require("scenes/shared")` and `require("scenes.shared")`
+    /// resolve to `scripts/scenes/shared.lua`. The dot-notation form is needed
+    /// because TypeScriptToLua emits `require("scenes.menu")` rather than
+    /// `require("scenes/menu")`.
     fn setup_require(lua: &Lua, engine: &Engine<NoAction>) -> LuaResult<()> {
         let preload: LuaTable = lua.globals()
             .get::<LuaTable>("package")?
@@ -554,6 +580,13 @@ impl ScriptedGame {
 
             let chunk_name = format!("@{path}");
             let func = lua.load(&source).set_name(&chunk_name).into_function()?;
+
+            // Register with dot-notation key (e.g. "scenes.shared") for TSTL compat
+            let dot_name = module_name.replace('/', ".");
+            if dot_name != module_name {
+                preload.set(dot_name, func.clone())?;
+            }
+
             preload.set(module_name, func)?;
         }
 

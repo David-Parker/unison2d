@@ -33,7 +33,7 @@ fn collect_files(dir: &Path, rel: &Path, out: &mut Vec<(String, Vec<u8>)>) {
 }
 
 /// Load all Lua files from a sample's `scripts/` directory into the engine,
-/// run init + 5 update ticks, and assert no panics.
+/// run init + 5 update ticks, and assert no errors.
 fn run_sample(scripts_dir: &Path) {
     let main_lua = scripts_dir.join("main.lua");
     assert!(
@@ -57,9 +57,19 @@ fn run_sample(scripts_dir: &Path) {
     }
 
     game.init(&mut engine);
+    assert!(
+        !game.has_error(),
+        "Lua error during init: {}",
+        game.error_message().unwrap_or("(unknown)")
+    );
 
     for _ in 0..5 {
         game.update(&mut engine);
+        assert!(
+            !game.has_error(),
+            "Lua error during update: {}",
+            game.error_message().unwrap_or("(unknown)")
+        );
     }
 }
 
@@ -86,6 +96,26 @@ fn ts_minimal_sample_runs() {
     if !scripts_dir.join("main.lua").exists() {
         eprintln!(
             "SKIPPING ts_minimal_sample_runs: transpiled .lua not found at {}",
+            scripts_dir.display()
+        );
+        return;
+    }
+
+    run_sample(&scripts_dir);
+}
+
+// ---------------------------------------------------------------------------
+// donut-game (TSTL-transpiled — skip if not present)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn donut_game_scripts_run() {
+    let scripts_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../project/assets/scripts");
+
+    if !scripts_dir.join("main.lua").exists() {
+        eprintln!(
+            "SKIPPING donut_game_scripts_run: transpiled .lua not found at {}",
             scripts_dir.display()
         );
         return;

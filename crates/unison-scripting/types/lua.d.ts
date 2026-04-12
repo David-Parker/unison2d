@@ -1,0 +1,15 @@
+/** Lua built-in globals available at runtime. */
+
+/**
+ * Load a Lua module by name.
+ *
+ * Use this for lazy/deferred loading inside callbacks to avoid circular
+ * dependencies that top-level `import` would create.
+ *
+ * ```ts
+ * events.on("return_to_menu", () => {
+ *     engine.switch_scene(require("scenes.menu"));
+ * });
+ * ```
+ */
+declare function require(modname: string): any;
