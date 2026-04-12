@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "lib": ["ESNext"],
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "strict": true,
+    "baseUrl": ".",
+    "rootDir": "./",
+    "outDir": "../scripts",
+    "types": ["@typescript-to-lua/language-extensions"],
+    "paths": {
+      "unison2d": ["../../../crates/unison-scripting/types"]
+    }
+  },
+  "tstl": {
+    "luaTarget": "5.4",
+    "luaLibImport": "require",
+    "noImplicitSelf": true,
+    "sourceMapTraceback": true
+  },
+  "include": ["**/*.ts", "../../../crates/unison-scripting/types/**/*.d.ts"]
+}
