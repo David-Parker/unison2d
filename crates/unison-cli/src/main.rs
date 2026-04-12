@@ -1,4 +1,6 @@
 mod cli;
+#[allow(dead_code)]
+mod config;
 
 use clap::Parser;
 use cli::Cli;
