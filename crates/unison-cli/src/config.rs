@@ -80,8 +80,8 @@ impl Config {
         Ok(())
     }
 
-    /// Save while preserving comments and formatting of `existing` (toml_edit round-trip).
-    /// If `existing` is None (first-time write), emit a fresh canonical file.
+    /// Write config to `path` as a canonical TOML file (no comment preservation).
+    /// To update an existing file while preserving comments, use [`Self::edit_in_place`].
     pub fn save(&self, path: &Path) -> Result<()> {
         // For first-time writes, emit via serde → toml.
         let out = toml::to_string_pretty(self)
@@ -206,5 +206,40 @@ web = true
         assert!(after.contains("# header comment"));
         assert!(after.contains("# inline"));
         assert!(after.contains("ios = true"));
+    }
+
+    #[test]
+    fn rejects_empty_name() {
+        let f = write(r#"
+[project]
+name = ""
+lang = "lua"
+[engine]
+git = "x"
+tag = "v0"
+[platforms]
+web = true
+"#);
+        assert!(Config::load(f.path()).is_err());
+    }
+
+    #[test]
+    fn save_then_load_roundtrips_fields() {
+        let cfg = Config {
+            project: Project { name: "x".into(), lang: Lang::Lua },
+            engine: Engine {
+                git: "u".into(),
+                tag: Some("v0.1.0".into()),
+                branch: None,
+                rev: None,
+                link_path: None,
+            },
+            platforms: Platforms { web: true, ios: false, android: false },
+            build: Build::default(),
+        };
+        let f = NamedTempFile::new().unwrap();
+        cfg.save(f.path()).unwrap();
+        let loaded = Config::load(f.path()).unwrap();
+        assert_eq!(cfg, loaded);
     }
 }
