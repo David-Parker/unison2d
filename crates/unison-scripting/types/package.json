@@ -1,0 +1,9 @@
+{
+  "name": "@unison2d/types",
+  "version": "0.1.0",
+  "types": "index.d.ts",
+  "private": true,
+  "peerDependencies": {
+    "@typescript-to-lua/language-extensions": ">=1.0.0"
+  }
+}
