@@ -4,8 +4,8 @@ declare namespace debug {
   function log(...args: any[]): void;
   /** Draw a 0.1-unit point at world position (x, y). Color is a hex integer. */
   function draw_point(x: number, y: number, color: number): void;
-  /** Toggle physics debug visualization. */
+  /** Toggle physics debug visualization. Currently a no-op; reserved for future engine support. */
   function show_physics(enabled: boolean): void;
-  /** Toggle FPS counter overlay. */
+  /** Toggle FPS counter overlay. Currently a no-op; reserved for future engine support. */
   function show_fps(enabled: boolean): void;
 }
