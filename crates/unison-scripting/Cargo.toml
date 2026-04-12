@@ -20,6 +20,10 @@ wasm-bindgen             = { workspace = true, optional = true }
 web-sys                  = { workspace = true, optional = true }
 console_error_panic_hook = { version = "0.1", optional = true }
 
+[dev-dependencies]
+tree-sitter = "0.24"
+tree-sitter-typescript = "0.23"
+
 [features]
 default = []
 
