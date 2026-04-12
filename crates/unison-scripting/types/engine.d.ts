@@ -16,7 +16,7 @@ declare const engine: {
   /** Load a texture from embedded assets. Returns a texture ID. Call in init or on_enter. */
   load_texture(this: void, path: string): TextureId;
   /** Current screen dimensions in logical points. Returns [width, height]. */
-  screen_size(this: void): LuaMultiReturn<[number, number]>;
+  screen_size(this: void): Tuple<[number, number]>;
   /** Request AA mode for this session. Applied after init returns. */
   set_anti_aliasing(this: void, mode: AntiAliasingMode): void;
 
@@ -35,7 +35,7 @@ declare const engine: {
   // --- Render Targets ---
 
   /** Create an offscreen render target. Returns [target_id, texture_id]. Call in init or on_enter. */
-  create_render_target(this: void, w: number, h: number): LuaMultiReturn<[RenderTargetId, TextureId]>;
+  create_render_target(this: void, w: number, h: number): Tuple<[RenderTargetId, TextureId]>;
   /** Composite a render-target texture onto the screen. Coordinates are in screen-space. */
   draw_overlay(this: void, texture_id: TextureId, x: number, y: number, w: number, h: number): void;
   /** Like draw_overlay but with a colored border. border_color is a hex integer. */

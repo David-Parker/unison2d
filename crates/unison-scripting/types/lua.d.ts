@@ -13,3 +13,6 @@
  * ```
  */
 declare function require(modname: string): any;
+
+/** Alias for LuaMultiReturn — a Lua function returning multiple values. */
+type Tuple<T extends any[]> = LuaMultiReturn<T>;

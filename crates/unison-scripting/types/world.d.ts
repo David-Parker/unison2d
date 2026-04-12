@@ -311,9 +311,9 @@ declare interface World {
   // --- Queries ---
 
   /** Get object center position. Returns [x, y]. */
-  get_position(this: World, id: ObjectId): LuaMultiReturn<[number, number]>;
+  get_position(this: World, id: ObjectId): Tuple<[number, number]>;
   /** Get object velocity. Returns [vx, vy]. */
-  get_velocity(this: World, id: ObjectId): LuaMultiReturn<[number, number]>;
+  get_velocity(this: World, id: ObjectId): Tuple<[number, number]>;
   /** True if the object is resting on the ground plane. */
   is_grounded(this: World, id: ObjectId): boolean;
   /** True if objects a and b are in contact. */
@@ -337,7 +337,7 @@ declare interface World {
   /** Add a named camera with the given viewport size in world units. */
   camera_add(this: World, name: string, width: number, height: number): void;
   /** Get the current camera center position. Returns [x, y]. */
-  camera_get_position(this: World, name: string): LuaMultiReturn<[number, number]>;
+  camera_get_position(this: World, name: string): Tuple<[number, number]>;
 
   // --- Lighting: System Configuration ---
 
