@@ -14,32 +14,33 @@ declare const engine: {
   // --- Textures & Screen ---
 
   /** Load a texture from embedded assets. Returns a texture ID. Call in init or on_enter. */
-  load_texture(path: string): TextureId;
+  load_texture(this: void, path: string): TextureId;
   /** Current screen dimensions in logical points. Returns [width, height]. */
-  screen_size(): LuaMultiReturn<[number, number]>;
+  screen_size(this: void): LuaMultiReturn<[number, number]>;
   /** Request AA mode for this session. Applied after init returns. */
-  set_anti_aliasing(mode: AntiAliasingMode): void;
+  set_anti_aliasing(this: void, mode: AntiAliasingMode): void;
 
   // --- Scene Management ---
 
   /** Activate a scene. Calls `scene.on_enter()` if present. */
-  set_scene(scene: Scene): void;
+  set_scene(this: void, scene: Scene): void;
   /** Transition to a new scene. Calls on_exit on the current scene, then on_enter on the new one. */
-  switch_scene(scene: Scene): void;
+  switch_scene(this: void, scene: Scene): void;
 
   // --- UI ---
 
   /** Create a UI handle for the given font asset. Reuse the handle across frames. */
-  create_ui(font_path: string): UI;
+  create_ui(this: void, font_path: string): UI;
 
   // --- Render Targets ---
 
   /** Create an offscreen render target. Returns [target_id, texture_id]. Call in init or on_enter. */
-  create_render_target(w: number, h: number): LuaMultiReturn<[RenderTargetId, TextureId]>;
+  create_render_target(this: void, w: number, h: number): LuaMultiReturn<[RenderTargetId, TextureId]>;
   /** Composite a render-target texture onto the screen. Coordinates are in screen-space. */
-  draw_overlay(texture_id: TextureId, x: number, y: number, w: number, h: number): void;
+  draw_overlay(this: void, texture_id: TextureId, x: number, y: number, w: number, h: number): void;
   /** Like draw_overlay but with a colored border. border_color is a hex integer. */
   draw_overlay_bordered(
+    this: void,
     texture_id: TextureId,
     x: number, y: number, w: number, h: number,
     border_width: number, border_color: number
@@ -48,8 +49,8 @@ declare const engine: {
   // --- Legacy / Low-level ---
 
   /** Set clear color. Accepts a hex integer or (r, g, b) floats. Prefer world:set_background. */
-  set_background(hex: number): void;
-  set_background(r: number, g: number, b: number): void;
+  set_background(this: void, hex: number): void;
+  set_background(this: void, r: number, g: number, b: number): void;
   /** Draw a colored rectangle. Prefer world:auto_render. */
-  draw_rect(x: number, y: number, w: number, h: number, r: number, g: number, b: number): void;
+  draw_rect(this: void, x: number, y: number, w: number, h: number, r: number, g: number, b: number): void;
 };

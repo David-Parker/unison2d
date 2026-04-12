@@ -5,11 +5,11 @@
  */
 declare interface Scene {
   /** Called when the scene becomes active. */
-  on_enter?: () => void;
+  on_enter?: (this: void) => void;
   /** Called each frame with time delta in seconds. */
-  update?: (dt: number) => void;
+  update?: (this: void, dt: number) => void;
   /** Called each frame for drawing. */
-  render?: () => void;
+  render?: (this: void) => void;
   /** Called when switching away from this scene. */
-  on_exit?: () => void;
+  on_exit?: (this: void) => void;
 }

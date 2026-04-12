@@ -22,13 +22,13 @@ declare interface TouchPosition {
 /** Input state, refreshed automatically before each update. */
 declare const input: {
   /** True while the key is held down. */
-  is_key_pressed(key: KeyName): boolean;
+  is_key_pressed(this: void, key: KeyName): boolean;
   /** True only on the frame the key was first pressed. */
-  is_key_just_pressed(key: KeyName): boolean;
+  is_key_just_pressed(this: void, key: KeyName): boolean;
   /** Horizontal axis in [-1, 1] from joystick or touch joystick. */
-  axis_x(): number;
+  axis_x(this: void): number;
   /** Vertical axis in [-1, 1] from joystick or touch joystick. */
-  axis_y(): number;
+  axis_y(this: void): number;
   /** Array of new touch-start positions this frame. */
-  touches_just_began(): TouchPosition[];
+  touches_just_began(this: void): TouchPosition[];
 };
