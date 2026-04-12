@@ -42,6 +42,14 @@ impl AssetStore {
         }
     }
 
+    /// Insert a raw (uncompressed) asset.
+    ///
+    /// Useful for tests and tools that load assets from the filesystem
+    /// rather than from the build-time embedded table.
+    pub fn insert(&mut self, path: impl Into<String>, data: Vec<u8>) {
+        self.assets.insert(path.into(), data);
+    }
+
     /// Get an asset's bytes by relative path.
     ///
     /// Returns `None` if the asset doesn't exist.
