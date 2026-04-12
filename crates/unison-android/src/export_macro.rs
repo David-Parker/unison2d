@@ -36,11 +36,11 @@ macro_rules! export_game {
         /// Returns an opaque pointer to `GameState` as a `jlong`.
         #[no_mangle]
         pub unsafe extern "system" fn Java_com_unison2d_UnisonNative_gameInit(
-            _env: jni::JNIEnv,
-            _class: jni::objects::JClass,
-            width: jni::sys::jfloat,
-            height: jni::sys::jfloat,
-        ) -> jni::sys::jlong {
+            _env: $crate::jni::JNIEnv,
+            _class: $crate::jni::objects::JClass,
+            width: $crate::jni::sys::jfloat,
+            height: $crate::jni::sys::jfloat,
+        ) -> $crate::jni::sys::jlong {
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 let renderer = $crate::GlesRenderer::new(width, height)
                     .expect("Failed to create GLES renderer");
@@ -48,7 +48,7 @@ macro_rules! export_game {
                 let mut state = $crate::GameState::new(renderer, $constructor);
                 state.init();
 
-                Box::into_raw(Box::new(state)) as jni::sys::jlong
+                Box::into_raw(Box::new(state)) as $crate::jni::sys::jlong
             }));
             match result {
                 Ok(ptr) => ptr,
@@ -59,10 +59,10 @@ macro_rules! export_game {
         /// Run one display frame. Called from `UnisonNative.gameFrame()`.
         #[no_mangle]
         pub unsafe extern "system" fn Java_com_unison2d_UnisonNative_gameFrame(
-            _env: jni::JNIEnv,
-            _class: jni::objects::JClass,
-            state: jni::sys::jlong,
-            dt: jni::sys::jfloat,
+            _env: $crate::jni::JNIEnv,
+            _class: $crate::jni::objects::JClass,
+            state: $crate::jni::sys::jlong,
+            dt: $crate::jni::sys::jfloat,
         ) {
             let state = &mut *(state as *mut __UnisonGameState);
             state.frame(dt);
@@ -71,11 +71,11 @@ macro_rules! export_game {
         /// Update screen size. Called from `UnisonNative.gameResize()`.
         #[no_mangle]
         pub unsafe extern "system" fn Java_com_unison2d_UnisonNative_gameResize(
-            _env: jni::JNIEnv,
-            _class: jni::objects::JClass,
-            state: jni::sys::jlong,
-            width: jni::sys::jfloat,
-            height: jni::sys::jfloat,
+            _env: $crate::jni::JNIEnv,
+            _class: $crate::jni::objects::JClass,
+            state: $crate::jni::sys::jlong,
+            width: $crate::jni::sys::jfloat,
+            height: $crate::jni::sys::jfloat,
         ) {
             let state = &mut *(state as *mut __UnisonGameState);
             if let Some(renderer) = state.engine_mut().renderer_mut() {
@@ -86,12 +86,12 @@ macro_rules! export_game {
         /// Feed a touch-began event. Called from `UnisonNative.gameTouchBegan()`.
         #[no_mangle]
         pub unsafe extern "system" fn Java_com_unison2d_UnisonNative_gameTouchBegan(
-            _env: jni::JNIEnv,
-            _class: jni::objects::JClass,
-            state: jni::sys::jlong,
-            id: jni::sys::jlong,
-            x: jni::sys::jfloat,
-            y: jni::sys::jfloat,
+            _env: $crate::jni::JNIEnv,
+            _class: $crate::jni::objects::JClass,
+            state: $crate::jni::sys::jlong,
+            id: $crate::jni::sys::jlong,
+            x: $crate::jni::sys::jfloat,
+            y: $crate::jni::sys::jfloat,
         ) {
             let state = &mut *(state as *mut __UnisonGameState);
             $crate::input::touch_began(state.input_mut(), id as u64, x, y);
@@ -100,12 +100,12 @@ macro_rules! export_game {
         /// Feed a touch-moved event. Called from `UnisonNative.gameTouchMoved()`.
         #[no_mangle]
         pub unsafe extern "system" fn Java_com_unison2d_UnisonNative_gameTouchMoved(
-            _env: jni::JNIEnv,
-            _class: jni::objects::JClass,
-            state: jni::sys::jlong,
-            id: jni::sys::jlong,
-            x: jni::sys::jfloat,
-            y: jni::sys::jfloat,
+            _env: $crate::jni::JNIEnv,
+            _class: $crate::jni::objects::JClass,
+            state: $crate::jni::sys::jlong,
+            id: $crate::jni::sys::jlong,
+            x: $crate::jni::sys::jfloat,
+            y: $crate::jni::sys::jfloat,
         ) {
             let state = &mut *(state as *mut __UnisonGameState);
             $crate::input::touch_moved(state.input_mut(), id as u64, x, y);
@@ -114,10 +114,10 @@ macro_rules! export_game {
         /// Feed a touch-ended event. Called from `UnisonNative.gameTouchEnded()`.
         #[no_mangle]
         pub unsafe extern "system" fn Java_com_unison2d_UnisonNative_gameTouchEnded(
-            _env: jni::JNIEnv,
-            _class: jni::objects::JClass,
-            state: jni::sys::jlong,
-            id: jni::sys::jlong,
+            _env: $crate::jni::JNIEnv,
+            _class: $crate::jni::objects::JClass,
+            state: $crate::jni::sys::jlong,
+            id: $crate::jni::sys::jlong,
         ) {
             let state = &mut *(state as *mut __UnisonGameState);
             $crate::input::touch_ended(state.input_mut(), id as u64);
@@ -126,10 +126,10 @@ macro_rules! export_game {
         /// Feed a touch-cancelled event. Called from `UnisonNative.gameTouchCancelled()`.
         #[no_mangle]
         pub unsafe extern "system" fn Java_com_unison2d_UnisonNative_gameTouchCancelled(
-            _env: jni::JNIEnv,
-            _class: jni::objects::JClass,
-            state: jni::sys::jlong,
-            id: jni::sys::jlong,
+            _env: $crate::jni::JNIEnv,
+            _class: $crate::jni::objects::JClass,
+            state: $crate::jni::sys::jlong,
+            id: $crate::jni::sys::jlong,
         ) {
             let state = &mut *(state as *mut __UnisonGameState);
             $crate::input::touch_cancelled(state.input_mut(), id as u64);
@@ -138,11 +138,11 @@ macro_rules! export_game {
         /// Set the virtual joystick axis. Called from `UnisonNative.gameSetAxis()`.
         #[no_mangle]
         pub unsafe extern "system" fn Java_com_unison2d_UnisonNative_gameSetAxis(
-            _env: jni::JNIEnv,
-            _class: jni::objects::JClass,
-            state: jni::sys::jlong,
-            x: jni::sys::jfloat,
-            y: jni::sys::jfloat,
+            _env: $crate::jni::JNIEnv,
+            _class: $crate::jni::objects::JClass,
+            state: $crate::jni::sys::jlong,
+            x: $crate::jni::sys::jfloat,
+            y: $crate::jni::sys::jfloat,
         ) {
             let state = &mut *(state as *mut __UnisonGameState);
             $crate::input::set_axis(state.input_mut(), x, y);
@@ -151,9 +151,9 @@ macro_rules! export_game {
         /// Destroy the game state. Called from `UnisonNative.gameDestroy()`.
         #[no_mangle]
         pub unsafe extern "system" fn Java_com_unison2d_UnisonNative_gameDestroy(
-            _env: jni::JNIEnv,
-            _class: jni::objects::JClass,
-            state: jni::sys::jlong,
+            _env: $crate::jni::JNIEnv,
+            _class: $crate::jni::objects::JClass,
+            state: $crate::jni::sys::jlong,
         ) {
             if state != 0 {
                 drop(Box::from_raw(state as *mut __UnisonGameState));

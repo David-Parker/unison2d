@@ -24,3 +24,8 @@ mod export_macro;
 
 pub use renderer::GlesRenderer;
 pub use game_loop::GameState;
+
+// Re-export `jni` so the `export_game!` macro expansion can refer to it as
+// `$crate::jni::...` without the game crate needing a direct `jni` dep.
+#[doc(hidden)]
+pub use jni;

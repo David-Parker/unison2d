@@ -43,6 +43,33 @@ pub mod bindings;
 pub mod error_overlay;
 pub mod hot_reload;
 
+// Platform entry macro — stitches together web/iOS/Android entry points
+// so a Lua game's lib.rs can be a single macro invocation.
+#[macro_use]
+mod entry_macro;
+
+// libc stubs needed by embedded Lua on wasm32-unknown-unknown. Compiled only
+// under wasm32; symbols are pulled in at link time by the Lua C static lib.
+#[cfg(target_arch = "wasm32")]
+pub mod wasm_libc;
+
+// Re-exports used by the scripted_game_entry! macro so the expansion at the
+// call site only has to name $crate::reexports::*. Games should not import
+// from here directly — use the macro.
+#[doc(hidden)]
+pub mod reexports {
+    #[cfg(feature = "web")]
+    pub use wasm_bindgen;
+    #[cfg(feature = "web")]
+    pub use console_error_panic_hook;
+    #[cfg(feature = "web")]
+    pub use unison_web;
+    #[cfg(feature = "ios")]
+    pub use unison_ios;
+    #[cfg(feature = "android")]
+    pub use unison_android;
+}
+
 use mlua::prelude::*;
 use unison2d::{AntiAliasing, Engine, Game};
 use unison2d::assets::EmbeddedAsset;

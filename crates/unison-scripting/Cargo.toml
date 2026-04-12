@@ -10,5 +10,27 @@ repository.workspace = true
 unison2d = { workspace = true }
 mlua = { version = "0.10", features = ["lua54", "vendored"] }
 
+# ── Platform deps (optional, enabled via features) ─────────────────────
+# These are pulled in by the scripted_game_entry! macro so a Lua game only
+# needs to depend on unison-scripting + enable the right feature.
+unison-web               = { workspace = true, optional = true }
+unison-ios               = { workspace = true, optional = true }
+unison-android           = { workspace = true, optional = true }
+wasm-bindgen             = { workspace = true, optional = true }
+web-sys                  = { workspace = true, optional = true }
+console_error_panic_hook = { version = "0.1", optional = true }
+
 [features]
 default = []
+
+# Platform features — enabled by the game crate to pick a target platform.
+# Each one pulls in the matching platform runner + its FFI glue.
+web     = ["dep:unison-web", "dep:wasm-bindgen", "dep:web-sys", "dep:console_error_panic_hook"]
+ios     = ["dep:unison-ios"]
+android = ["dep:unison-android"]
+
+# SIMD — forwarded to unison2d and the active platform runner.
+simd = ["unison2d/simd", "unison-web?/simd", "unison-ios?/simd", "unison-android?/simd"]
+
+# Profiling — forwarded to the active platform runner.
+profiling = ["unison-web?/profiling", "unison-ios?/profiling", "unison-android?/profiling"]

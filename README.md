@@ -67,29 +67,30 @@ git submodule add https://github.com/David-Parker/unison2d.git
 
 ### Lua game (canonical)
 
-A Lua game needs one Rust file that hands `ScriptedGame` to the platform runner. Everything else lives in `.lua` files under your asset dir.
+A Lua game's entire Rust-side scaffold is two lines of `lib.rs` — the `scripted_game_entry!` macro emits the web, iOS, and Android FFI glue for you. Everything else lives in `.lua` files under your asset dir.
 
 ```toml
 [dependencies]
-unison2d          = { path = "unison2d/crates/unison2d" }
-unison-scripting  = { path = "unison2d/crates/unison-scripting" }
-unison-web        = { path = "unison2d/crates/unison-web" }
+unison-scripting = { path = "unison2d/crates/unison-scripting", features = ["simd"] }
+# wasm-bindgen must be a direct dep of the game crate because
+# `#[wasm_bindgen(start)]` emits absolute `::wasm_bindgen` paths.
+wasm-bindgen = { version = "0.2", optional = true }
 
 [build-dependencies]
 unison-assets = { path = "unison2d/crates/unison-assets", features = ["build"] }
+
+[features]
+default = ["web"]
+web     = ["unison-scripting/web", "dep:wasm-bindgen"]
+ios     = ["unison-scripting/ios"]
+android = ["unison-scripting/android"]
 ```
 
 ```rust
-use wasm_bindgen::prelude::*;
-use unison_scripting::ScriptedGame;
-
+// lib.rs — your entire platform scaffold
 mod assets { include!(concat!(env!("OUT_DIR"), "/assets.rs")); }
 
-#[wasm_bindgen(start)]
-pub fn main() {
-    let game = ScriptedGame::from_asset("scripts/main.lua", assets::ASSETS);
-    unison_web::run(game);
-}
+unison_scripting::scripted_game_entry!("scripts/main.lua", assets::ASSETS);
 ```
 
 ```lua
