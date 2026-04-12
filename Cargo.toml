@@ -16,6 +16,7 @@ members = [
     "crates/unison-android",
     "crates/unison-scripting",
     "crates/unison-tests",
+    "crates/unison-cli",
 ]
 
 [workspace.package]
