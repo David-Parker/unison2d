@@ -180,6 +180,37 @@ mod tests {
     }
 
     #[test]
+    fn ended_touch_does_not_bounce_between_buffers() {
+        // Regression: copy_held_from used to copy Ended touches back into shared,
+        // causing them to oscillate forever (iOS/Android ball continued applying
+        // force after release). Ended/Cancelled are per-frame events, not held state.
+        let mut buf = InputBuffer::new();
+        let mut engine_input = InputState::new();
+
+        // Frame 1: touch begins
+        buf.shared_mut().touch_started(1, 50.0, 75.0);
+        buf.transfer(true);
+        buf.swap_into(&mut engine_input);
+        assert_eq!(engine_input.active_touches().len(), 1);
+
+        // Frame 2: touch ends
+        buf.shared_mut().touch_ended(1);
+        buf.transfer(true);
+        buf.swap_into(&mut engine_input);
+        // Engine sees the Ended touch on the tick where it was released
+        assert_eq!(engine_input.active_touches().len(), 1);
+
+        // Frame 3: no new platform events — touch should be gone everywhere
+        buf.transfer(true);
+        buf.swap_into(&mut engine_input);
+        assert_eq!(
+            engine_input.active_touches().len(),
+            0,
+            "Ended touch must not persist into subsequent frames"
+        );
+    }
+
+    #[test]
     fn mouse_click_survives_deferred_frame() {
         let mut buf = InputBuffer::new();
         buf.shared_mut().mouse_moved(100.0, 50.0);

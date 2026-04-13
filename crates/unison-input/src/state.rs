@@ -151,11 +151,19 @@ impl InputState {
     /// Copy held-key and held-mouse-button state from another InputState.
     /// Used after swapping input buffers so the shared buffer starts with
     /// the correct held state for processing key-release events next frame.
+    ///
+    /// Ended/Cancelled touches are filtered out — those are per-frame events,
+    /// not held state. Copying them would bounce them back into the shared
+    /// buffer indefinitely, since the engine buffer retains Ended touches
+    /// until the next `begin_frame` call.
     pub fn copy_held_from(&mut self, other: &InputState) {
         self.keys_held = other.keys_held.clone();
         self.mouse_buttons_held = other.mouse_buttons_held.clone();
         self.mouse_pos = other.mouse_pos;
-        self.touches = other.touches.clone();
+        self.touches = other.touches.iter()
+            .filter(|(_, t)| !matches!(t.phase, TouchPhase::Ended | TouchPhase::Cancelled))
+            .map(|(id, t)| (*id, t.clone()))
+            .collect();
         self.axis = other.axis;
     }
 
