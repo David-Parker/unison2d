@@ -33,7 +33,12 @@ pub fn run_with(cfg: &Config, project_root: &Path, invoker: &dyn Invoker, args: 
                 project_name: cfg.project.name.clone(),
             })?;
         }
-        "android" => bail!("android — Task 14"),
+        "android" => {
+            if !cfg.platforms.android { bail!("android is not enabled in unison.toml"); }
+            platforms::android::build(project_root, invoker, platforms::android::AndroidBuildArgs {
+                release: args.release, profile: args.profile,
+            })?;
+        }
         "all" => bail!("all — Task 15"),
         other => bail!("unknown platform: {}", other),
     }
