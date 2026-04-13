@@ -53,6 +53,7 @@ unison2d/crates/
 ├── unison-web/       # Web platform (WebGL2, DOM input, rAF loop)
 ├── unison-ios/       # iOS platform (Metal renderer, touch input, frame loop)
 ├── unison-android/   # Android platform (GLES 3.0 renderer, touch input, JNI loop)
+├── unison-cli/       # `unison` CLI — scaffold, build, dev, test, link, doctor
 └── unison-tests/     # Headless e2e / simulation tests
 ```
 
@@ -60,11 +61,21 @@ All subsystems are independent. Use `unison2d` to get everything, or depend on i
 
 ## Quick Start
 
-Add as a git submodule:
+Install the CLI and scaffold a new project:
 
 ```bash
-git submodule add https://github.com/David-Parker/unison2d.git
+cargo install --git https://github.com/David-Parker/unison2d unison-cli
+unison new my-game
+cd my-game
+unison doctor     # check your toolchain
+unison dev web    # run locally
 ```
+
+See [`crates/unison-cli/README.md`](crates/unison-cli/README.md) for the full command reference.
+
+---
+
+For an existing project, or if you'd rather wire things up by hand, the raw layout looks like this:
 
 ### Lua game (canonical)
 

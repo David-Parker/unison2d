@@ -30,6 +30,7 @@ Per-crate deep dives:
 | `unison-assets` | Build-time asset embedding & runtime store | [api/assets.md](api/assets.md) |
 | `unison-ui` | Declarative React-like UI system (HUDs, menus, buttons) | [api/ui.md](api/ui.md) |
 | `unison-scripting` | Lua 5.4 scripting — `ScriptedGame` implementing `Game` trait | [api/scripting.md](api/scripting.md) |
+| `unison-cli` | `unison` CLI — scaffold, build, dev, test, link, doctor | [../crates/unison-cli/README.md](../crates/unison-cli/README.md) |
 | `unison-web` | Web platform (WebGL2, DOM input, rAF loop) | [api/web.md](api/web.md) |
 | `unison-ios` | iOS platform (Metal renderer, touch input, frame loop) | [api/ios.md](api/ios.md) |
 | `unison-android` | Android platform (GLES 3.0 renderer, touch input, JNI loop) | [api/android.md](api/android.md) |
