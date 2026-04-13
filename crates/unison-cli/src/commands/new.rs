@@ -118,7 +118,11 @@ pub fn run(args: NewArgs, engine_tag_default: &str, engine_git_url: &str) -> Res
             .status();
     }
 
-    println!("Created {}. Next: `cd {} && unison doctor && unison dev web`", dest.display(), dest.display());
+    println!("Created {}.", dest.display());
+    println!("Next: `cd {} && unison doctor && unison dev web`", dest.display());
+    println!();
+    println!("If the engine tag {} isn't published yet, point at a local checkout:", engine_tag);
+    println!("  unison link /path/to/unison2d");
     Ok(())
 }
 
