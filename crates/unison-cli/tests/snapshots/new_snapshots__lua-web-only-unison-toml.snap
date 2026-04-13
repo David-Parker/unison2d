@@ -1,0 +1,20 @@
+---
+source: crates/unison-cli/tests/new_snapshots.rs
+expression: "captured(&root, \"unison.toml\")"
+---
+[project]
+name = "g"
+lang = "lua"
+
+[engine]
+git = "https://github.com/David-Parker/unison2d"
+tag = "v0.1.0"
+
+[platforms]
+web = true
+ios = false
+android = false
+
+[build]
+release = false
+profile = false

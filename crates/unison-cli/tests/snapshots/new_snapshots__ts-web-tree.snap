@@ -1,0 +1,15 @@
+---
+source: crates/unison-cli/tests/new_snapshots.rs
+expression: file_tree(&root)
+---
+.gitignore
+Cargo.toml
+README.md
+build.rs
+package.json
+platform/web/Trunk.toml
+platform/web/index.html
+project/lib.rs
+project/scripts-src/main.ts
+project/scripts-src/tsconfig.json
+unison.toml

@@ -24,3 +24,4 @@ include_dir = "0.7"
 [dev-dependencies]
 insta = { version = "1", features = ["filters"] }
 tempfile = "3"
+walkdir = "2"

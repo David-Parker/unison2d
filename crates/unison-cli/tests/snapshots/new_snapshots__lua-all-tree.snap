@@ -1,0 +1,27 @@
+---
+source: crates/unison-cli/tests/new_snapshots.rs
+expression: file_tree(&root)
+---
+.gitignore
+Cargo.toml
+README.md
+build.rs
+platform/android/app/build.gradle.kts
+platform/android/app/src/main/AndroidManifest.xml
+platform/android/app/src/main/java/com/example/g/MainActivity.kt
+platform/android/build-rust.sh
+platform/android/build.gradle.kts
+platform/android/settings.gradle.kts
+platform/ios/AppDelegate.swift
+platform/ios/Assets.xcassets/AppIcon.appiconset/Contents.json
+platform/ios/Assets.xcassets/Contents.json
+platform/ios/Base.lproj/LaunchScreen.storyboard
+platform/ios/Base.lproj/Main.storyboard
+platform/ios/Info.plist
+platform/ios/SceneDelegate.swift
+platform/ios/g-ios.xcodeproj/project.pbxproj
+platform/web/Trunk.toml
+platform/web/index.html
+project/assets/scripts/main.lua
+project/lib.rs
+unison.toml

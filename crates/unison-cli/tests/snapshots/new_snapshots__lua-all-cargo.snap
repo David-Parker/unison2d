@@ -1,0 +1,32 @@
+---
+source: crates/unison-cli/tests/new_snapshots.rs
+expression: "captured(&root, \"Cargo.toml\")"
+---
+[package]
+name = "g"
+version = "0.1.0"
+edition = "2021"
+description = "A Unison 2D game"
+
+[lib]
+path = "project/lib.rs"
+crate-type = ["cdylib", "rlib", "staticlib"]
+
+[dependencies]
+unison-scripting = { git = "https://github.com/David-Parker/unison2d", tag = "v0.1.0", features = ["simd"] }
+wasm-bindgen = { version = "0.2", optional = true }
+
+[build-dependencies]
+unison-assets = { git = "https://github.com/David-Parker/unison2d", tag = "v0.1.0", features = ["build"] }
+
+[features]
+default = ["web"]
+web       = ["unison-scripting/web", "dep:wasm-bindgen"]
+ios       = ["unison-scripting/ios"]
+android   = ["unison-scripting/android"]
+profiling = ["unison-scripting/profiling"]
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
