@@ -65,7 +65,10 @@ pub fn run(args: NewArgs, engine_tag_default: &str, engine_git_url: &str) -> Res
     if platforms.web {
         render_dir_to(&templates::PLATFORM_WEB, &dest.join("platform/web"), &vars)?;
     }
-    // iOS / Android templates: Task 8 / Task 9.
+    if platforms.ios {
+        render_dir_to(&templates::PLATFORM_IOS, &dest.join("platform/ios"), &vars)?;
+    }
+    // Android template: Task 9.
 
     // Write unison.toml
     let cfg = Config {
@@ -119,12 +122,25 @@ fn render_dir(dir: &include_dir::Dir<'_>, dest: &Path, vars: &HashMap<&str, &str
     render_dir_to(dir, dest, vars)
 }
 
+fn render_path_component(s: &str, vars: &HashMap<&str, &str>) -> String {
+    // Filenames support {{PROJECT_NAME}} via the literal substring "PROJECT_NAME"
+    // in path segments (e.g. "PROJECT_NAME-ios.xcodeproj"). Keep this simple — it
+    // covers the only case we need (iOS xcodeproj directory naming).
+    let project_name = vars.get("PROJECT_NAME").copied().unwrap_or("");
+    s.replace("PROJECT_NAME", project_name)
+}
+
 fn render_dir_to(dir: &include_dir::Dir<'_>, dest: &Path, vars: &HashMap<&str, &str>) -> Result<()> {
     for entry in dir.entries() {
         match entry {
             include_dir::DirEntry::File(f) => {
                 let rel = f.path();
-                let target = dest.join(rel);
+                // Apply PROJECT_NAME substitution to each path component
+                let rendered_rel: std::path::PathBuf = rel
+                    .components()
+                    .map(|c| render_path_component(c.as_os_str().to_str().unwrap_or(""), vars))
+                    .collect();
+                let target = dest.join(&rendered_rel);
                 if let Some(p) = target.parent() {
                     fs::create_dir_all(p)?;
                 }

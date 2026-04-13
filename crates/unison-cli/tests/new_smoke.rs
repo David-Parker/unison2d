@@ -45,3 +45,22 @@ fn new_fails_if_dir_exists() {
         .unwrap();
     assert!(!out.status.success());
 }
+
+#[test]
+fn new_creates_ios_files() {
+    let dir = tempdir().unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_unison"))
+        .args(["new", "ios-test", "--no-android", "--no-git"])
+        .current_dir(dir.path())
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    let root = dir.path().join("ios-test");
+    assert!(root.join("platform/ios/AppDelegate.swift").exists());
+    assert!(root.join("platform/ios/Info.plist").exists());
+    assert!(root.join("platform/ios/ios-test-ios.xcodeproj/project.pbxproj").exists());
+
+    let info = std::fs::read_to_string(root.join("platform/ios/Info.plist")).unwrap();
+    assert!(info.contains("com.example.ios_test"));
+    assert!(!info.contains("{{"));
+}

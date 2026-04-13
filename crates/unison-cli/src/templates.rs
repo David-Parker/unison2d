@@ -3,6 +3,7 @@ use include_dir::{include_dir, Dir};
 pub static COMMON: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/templates/common");
 pub static SCRIPTING_LUA: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/templates/scripting-lua");
 pub static PLATFORM_WEB: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/templates/platform-web");
+pub static PLATFORM_IOS: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/templates/platform-ios");
 
 #[cfg(test)]
 mod tests {
@@ -25,5 +26,12 @@ mod tests {
     fn platform_web_contains_index_and_trunk() {
         assert!(PLATFORM_WEB.get_file("index.html").is_some());
         assert!(PLATFORM_WEB.get_file("Trunk.toml").is_some());
+    }
+
+    #[test]
+    fn platform_ios_contains_core_files() {
+        assert!(PLATFORM_IOS.get_file("AppDelegate.swift").is_some());
+        assert!(PLATFORM_IOS.get_file("Info.plist").is_some());
+        assert!(PLATFORM_IOS.get_file("Base.lproj/Main.storyboard").is_some());
     }
 }
