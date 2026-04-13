@@ -50,6 +50,7 @@ unison2d/crates/
 ├── unison-assets/    # Build-time asset embedding & runtime store
 ├── unison-profiler/  # Function-level profiling
 ├── unison-scripting/ # Lua 5.4 scripting — ScriptedGame implementing Game trait
+├── unison-lua/       # Lua 5.4 interpreter fork (wasm32 support, patches `lua-src`)
 ├── unison-web/       # Web platform (WebGL2, DOM input, rAF loop)
 ├── unison-ios/       # iOS platform (Metal renderer, touch input, frame loop)
 ├── unison-android/   # Android platform (GLES 3.0 renderer, touch input, JNI loop)
