@@ -36,8 +36,10 @@ open class GameActivity : Activity() {
     lateinit var gameSurfaceView: GameSurfaceView
         private set
 
-    lateinit var joystickView: JoystickView
+    var joystickView: JoystickView? = null
         private set
+
+    private lateinit var rootLayout: FrameLayout
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -64,26 +66,34 @@ open class GameActivity : Activity() {
             )
         }
 
-        val root = FrameLayout(this)
+        rootLayout = FrameLayout(this)
 
         // GL surface (fills the screen)
         gameSurfaceView = GameSurfaceView(this)
-        root.addView(
+        rootLayout.addView(
             gameSurfaceView,
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT
         )
 
-        // Virtual joystick overlay (bottom-left)
-        joystickView = JoystickView(this)
+        setContentView(rootLayout)
+    }
+
+    /**
+     * Install the built-in virtual joystick overlay (bottom-left). Call from a
+     * subclass's `onCreate` (after `super.onCreate()`) when the game wants the
+     * default joystick UI. Not installed by default — games that handle touch
+     * input directly (e.g. via `input.pointer_position`) don't need it and
+     * shouldn't pay for the overlay.
+     */
+    fun installJoystick() {
+        if (joystickView != null) return
+        val joystick = JoystickView(this)
         val joystickSizePx = (JoystickView.VIEW_SIZE_DP * resources.displayMetrics.density).toInt()
-        val marginPx = 0 // Padding inside the view provides visual offset from screen edge
         val lp = FrameLayout.LayoutParams(joystickSizePx, joystickSizePx).apply {
             gravity = Gravity.BOTTOM or Gravity.START
-            leftMargin = marginPx
-            bottomMargin = marginPx
         }
-        joystickView.onAxisChanged = { x, y ->
+        joystick.onAxisChanged = { x, y ->
             val state = gameSurfaceView.gameState
             if (state != 0L) {
                 gameSurfaceView.queueEvent {
@@ -91,9 +101,8 @@ open class GameActivity : Activity() {
                 }
             }
         }
-        root.addView(joystickView, lp)
-
-        setContentView(root)
+        rootLayout.addView(joystick, lp)
+        joystickView = joystick
     }
 
     // ── Touch forwarding to Rust ──

@@ -12,6 +12,10 @@ platform/android/app/src/main/AndroidManifest.xml
 platform/android/app/src/main/java/com/example/g/MainActivity.kt
 platform/android/build-rust.sh
 platform/android/build.gradle.kts
+platform/android/gradle.properties
+platform/android/gradle/wrapper/gradle-wrapper.jar
+platform/android/gradle/wrapper/gradle-wrapper.properties
+platform/android/gradlew
 platform/android/settings.gradle.kts
 platform/ios/AppDelegate.swift
 platform/ios/Assets.xcassets/AppIcon.appiconset/Contents.json

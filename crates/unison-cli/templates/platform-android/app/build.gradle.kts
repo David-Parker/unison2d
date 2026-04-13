@@ -12,32 +12,55 @@ android {
         minSdk = 24
         targetSdk = 34
         versionCode = 1
-        versionName = "1.0"
+        versionName = "0.1.0"
+
+        ndk {
+            abiFilters += listOf("arm64-v8a", "x86_64")
+        }
     }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+
     kotlinOptions {
         jvmTarget = "17"
     }
-}
 
-// Cross-compile Rust before packaging APK.
-val buildRust = tasks.register<Exec>("buildRust") {
-    workingDir = rootProject.projectDir
-    commandLine = listOf("./build-rust.sh")
+    sourceSets {
+        getByName("main") {
+            jniLibs.srcDirs("src/main/jniLibs")
+        }
+    }
+
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
 }
-tasks.matching { it.name.startsWith("merge") && it.name.endsWith("JniLibFolders") }
-    .configureEach { dependsOn(buildRust) }
 
 dependencies {
-    implementation("androidx.core:core-ktx:1.12.0")
-    implementation("androidx.appcompat:appcompat:1.6.1")
-    // UnisonAndroid — JVM package pulled from engine git. Gradle setup for git deps TBD by Task 17 wiring.
+    implementation(project(":unison-android"))
+}
+
+// Auto-compile Rust native library before packaging. Mirrors the Xcode
+// "Run Script" build phase that calls cargo build.
+val buildRust by tasks.registering(Exec::class) {
+    workingDir = rootProject.projectDir
+    val profile = if (gradle.startParameter.taskNames.any { it.contains("Release", ignoreCase = true) }) "release" else "debug"
+    commandLine("bash", "./build-rust.sh", profile)
+}
+
+// Run build-rust.sh before the .so files get merged into the APK.
+tasks.matching { it.name.startsWith("merge") && it.name.contains("JniLibFolders") }.configureEach {
+    dependsOn(buildRust)
 }
