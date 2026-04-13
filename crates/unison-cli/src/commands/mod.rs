@@ -1,4 +1,5 @@
 pub mod build;
+pub mod clean;
 pub mod dev;
 pub mod doctor;
 pub mod link;
