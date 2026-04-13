@@ -10,7 +10,10 @@ name = "proj"
 version = "0.1.0"
 
 [dependencies]
-unison-scripting = { git = "https://github.com/x/unison2d", tag = "v0" }
+unison-scripting = { git = "https://github.com/x/unison2d", tag = "v0", features = ["simd"] }
+
+[build-dependencies]
+unison-assets = { git = "https://github.com/x/unison2d", tag = "v0", features = ["build"] }
 "#).unwrap();
     fs::write(proj.join("unison.toml"), r#"[project]
 name = "proj"
@@ -34,26 +37,60 @@ android = false
 }
 
 #[test]
-fn link_writes_patch_block() {
+fn link_swaps_git_deps_to_path_deps() {
     let (_d, proj, engine) = setup_project_and_engine();
     let engine_str = engine.to_str().unwrap();
     unison_cli::commands::link::link(&proj, engine_str).unwrap();
     let cargo = fs::read_to_string(proj.join("Cargo.toml")).unwrap();
-    assert!(cargo.contains("[patch.\"https://github.com/x/unison2d\"]"),
-            "expected patch header in:\n{}", cargo);
-    assert!(cargo.contains("unison-scripting"));
-    assert!(cargo.contains("unison-assets"));
+
+    // Git specs should be gone, replaced with path specs.
+    assert!(!cargo.contains("git = \"https://github.com/x/unison2d\""),
+            "expected git spec to be removed after link:\n{}", cargo);
+    assert!(!cargo.contains("tag = \"v0\""),
+            "expected tag to be removed after link:\n{}", cargo);
+
+    // Path entries present. Use canonicalize to match link's canonicalize call
+    // (on macOS /var → /private/var).
+    let engine_canon = fs::canonicalize(&engine).unwrap();
+    let expected_scripting = engine_canon.join("crates/unison-scripting");
+    let expected_assets = engine_canon.join("crates/unison-assets");
+    assert!(cargo.contains(&format!("path = \"{}\"", expected_scripting.display())),
+            "expected unison-scripting path:\n{}", cargo);
+    assert!(cargo.contains(&format!("path = \"{}\"", expected_assets.display())),
+            "expected unison-assets path:\n{}", cargo);
+
+    // Features preserved.
+    assert!(cargo.contains("features = [\"simd\"]"));
+    assert!(cargo.contains("features = [\"build\"]"));
+
+    // No stale [patch] block.
+    assert!(!cargo.contains("[patch"), "unexpected [patch] block after link:\n{}", cargo);
+
     let unison_toml = fs::read_to_string(proj.join("unison.toml")).unwrap();
     assert!(unison_toml.contains("link_path"));
 }
 
 #[test]
-fn unlink_removes_patch_block() {
+fn unlink_restores_git_deps() {
     let (_d, proj, engine) = setup_project_and_engine();
     unison_cli::commands::link::link(&proj, engine.to_str().unwrap()).unwrap();
     unison_cli::commands::link::unlink(&proj).unwrap();
     let cargo = fs::read_to_string(proj.join("Cargo.toml")).unwrap();
-    assert!(!cargo.contains("[patch."), "unexpected patch left in:\n{}", cargo);
+
+    // Git specs restored.
+    assert!(cargo.contains("git = \"https://github.com/x/unison2d\""),
+            "expected git spec restored:\n{}", cargo);
+    assert!(cargo.contains("tag = \"v0\""),
+            "expected tag restored:\n{}", cargo);
+
+    // Features preserved through link → unlink round trip.
+    assert!(cargo.contains("features = [\"simd\"]"));
+    assert!(cargo.contains("features = [\"build\"]"));
+
+    // No lingering path entries or patch block.
+    assert!(!cargo.contains("path ="), "unexpected path spec after unlink:\n{}", cargo);
+    assert!(!cargo.contains("[patch"), "unexpected [patch] block after unlink:\n{}", cargo);
+
     let unison_toml = fs::read_to_string(proj.join("unison.toml")).unwrap();
     assert!(!unison_toml.contains("link_path"));
 }
@@ -66,4 +103,23 @@ fn link_rejects_non_engine_path() {
     let err = unison_cli::commands::link::link(&proj, fake.to_str().unwrap()).unwrap_err();
     assert!(err.to_string().contains("not look like"),
             "unexpected error message: {}", err);
+}
+
+#[test]
+fn link_strips_legacy_patch_block() {
+    // Projects created before the rewrite may have a [patch.<url>] block from
+    // the old `unison link`. Running the new `link` should clean it up.
+    let (_d, proj, engine) = setup_project_and_engine();
+    // Inject a legacy patch block as if left behind by an older link run.
+    let mut cargo = fs::read_to_string(proj.join("Cargo.toml")).unwrap();
+    cargo.push_str(&format!(
+        "\n[patch.\"https://github.com/x/unison2d\"]\n\
+         unison-scripting = {{ path = \"/old/path/unison-scripting\" }}\n"
+    ));
+    fs::write(proj.join("Cargo.toml"), cargo).unwrap();
+
+    unison_cli::commands::link::link(&proj, engine.to_str().unwrap()).unwrap();
+    let cargo = fs::read_to_string(proj.join("Cargo.toml")).unwrap();
+    assert!(!cargo.contains("[patch"), "legacy patch block not cleaned up:\n{}", cargo);
+    assert!(!cargo.contains("/old/path"), "old patch entry still present:\n{}", cargo);
 }
