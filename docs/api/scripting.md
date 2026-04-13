@@ -526,3 +526,7 @@ The scripting layer simplifies several Rust engine abstractions into more idioma
 | Prefab functions | Factory functions returning `ObjectId`, taking `&mut World` + many parameters. | Lua factory functions in shared modules | Same pattern, but `require("scenes/shared")` replaces `use crate::prefabs`. |
 | `SharedState` struct | Game-defined struct passed as `S` in `Level<S>` for cross-level data (score, settings). | Module-level locals + event data tables | Lua closures and upvalues replace the struct. Events carry data payloads. |
 | `ActiveLevel` enum + dispatch | Rust enum with match arms dispatching to the active level. | `engine.set_scene()` / `engine.switch_scene()` | One function call replaces the enum + match pattern. |
+
+## See also
+
+- [Scripting Rationale](../scripting/rationale.md) — design decisions behind Unison's scripting layer (Lua 5.4 vs 5.1, no LuaJIT, forked lua-src, mlua)

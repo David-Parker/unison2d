@@ -9,9 +9,12 @@ Modifications by Unison 2D:
     bundled libc sysroot (wasm-sysroot/include/).
   - Trimmed to Lua 5.4 only; removed lua-5.1.5 / lua-5.2.4 / lua-5.3.6
     source trees and corresponding dispatch in src/lib.rs.
-  - Added [lib] name = "lua_src" so the renamed package remains ABI-
-    compatible with mlua-sys's `use lua_src::...` imports under
-    [patch.crates-io].
+  - Preserved [package] name = "lua-src" and [lib] name = "lua_src" so
+    the crate remains ABI-compatible with mlua-sys's `use lua_src::...`
+    imports when substituted via [patch.crates-io]. Unison branding
+    lives in the crate directory (crates/unison-lua/), README, and
+    NOTICE — Cargo's patch machinery resolves by package name, so the
+    published name stays `lua-src`.
 
 Lua itself is copyright © 1994–2024 Lua.org, PUC-Rio, under the MIT
 license. See LICENSE.
