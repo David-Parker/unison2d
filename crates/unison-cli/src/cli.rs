@@ -9,12 +9,13 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug)]
 pub enum Command {
-    /// Scaffold a new cross-platform game project. Generates a Rust workspace
-    /// with Lua or TypeScript scripting, plus platform shells for Web, iOS,
-    /// and Android. Each platform can be skipped with --no-<platform>.
+    /// Scaffold a new cross-platform game project.
+    ///
+    /// Generates a Rust workspace with Lua or TypeScript scripting, plus platform
+    /// shells for Web, iOS, and Android. Each platform can be skipped with
+    /// --no-<platform>.
     New {
-        /// Project name (used as directory name and Cargo crate name; hyphens are
-        /// normalized to underscores in the crate name).
+        /// Project name (directory + Cargo crate name; hyphens become underscores).
         name: String,
         /// Scripting language: `lua` (default) or `ts` (TypeScript via TSTL).
         #[arg(long, default_value = "lua")]
@@ -34,23 +35,26 @@ pub enum Command {
         /// iOS bundle id / Android application id (default: com.example.<crate_name>).
         #[arg(long)]
         bundle_id: Option<String>,
-        /// Override the engine tag that the generated project pins against
-        /// (engine-dev flag; leave unset to use the CLI's matching engine version).
+        /// Override the engine tag the generated project pins against (engine-dev flag).
         #[arg(long)]
         engine_tag: Option<String>,
         /// Use an alternate template (power-user escape hatch). NOT YET IMPLEMENTED.
         #[arg(long)]
         template: Option<String>,
     },
-    /// Run the dev loop for a platform. Web: starts `trunk serve` with hot reload.
-    /// iOS / Android: prints instructions for opening the project in Xcode or
-    /// Android Studio (native IDEs handle the run loop for those targets).
+    /// Run the dev loop for a platform.
+    ///
+    /// Web: starts `trunk serve` with hot reload. iOS / Android: prints instructions
+    /// for opening the project in Xcode or Android Studio (native IDEs handle the
+    /// run loop for those targets).
     Dev {
         /// Target platform: `web`, `ios`, or `android`.
         platform: String,
     },
-    /// Build for one or all platforms. Accepts `web`, `ios`, `android`, or `all`.
-    /// Web uses Trunk; iOS and Android delegate to `xcodebuild` / Gradle respectively.
+    /// Build for one or all platforms.
+    ///
+    /// Accepts `web`, `ios`, `android`, or `all`. Web uses Trunk; iOS and Android
+    /// delegate to `xcodebuild` / Gradle respectively.
     Build {
         /// Target platform: `web`, `ios`, `android`, or `all`.
         platform: String,
@@ -61,29 +65,37 @@ pub enum Command {
         #[arg(long)]
         profile: bool,
     },
-    /// Run game-side tests. Executes `cargo test` for Rust/Lua projects and also
-    /// runs `npm test` for TypeScript projects where a test script is present.
+    /// Run game-side tests.
+    ///
+    /// Executes `cargo test` for all projects and also runs `npm test` for
+    /// TypeScript projects where a test script is present.
     Test,
-    /// Remove build artifacts. Deletes `target/`, `platform/web/dist/`,
-    /// `platform/android/app/build/`, and (for TS projects) `project/assets/scripts/`.
+    /// Remove build artifacts.
+    ///
+    /// Deletes `target/`, `platform/web/dist/`, `platform/android/app/build/`, and
+    /// (for TS projects) `project/assets/scripts/`.
     Clean,
-    /// Check the environment and report missing toolchain pieces. Verifies that
-    /// required tools (cargo, trunk, wasm-pack, Xcode CLI tools, Android SDK, etc.)
-    /// are available and prints a pass/fail summary with install hints.
+    /// Check the environment and report missing toolchain pieces.
+    ///
+    /// Verifies that required tools (cargo, trunk, wasm-bindgen, Xcode CLI tools,
+    /// Android SDK, etc.) are available and prints a pass/fail summary with
+    /// install hints.
     Doctor,
-    /// Add a `[patch.crates-io]` override to the project's `Cargo.toml` so that
-    /// all engine crates resolve to a local checkout instead of the published version.
-    /// Useful when iterating on the engine alongside a game project.
+    /// Point the project at a local engine checkout.
+    ///
+    /// Adds a `[patch]` override to the project's `Cargo.toml` so that all engine
+    /// crates resolve to a local `unison2d` checkout instead of the published
+    /// version. Useful when iterating on the engine alongside a game project.
     Link {
         /// Filesystem path to the local `unison2d` engine checkout.
         path: String,
     },
-    /// Remove the `[patch.crates-io]` override added by `link`, restoring the
-    /// project to the published engine version.
+    /// Undo `link` and restore the published engine version.
     Unlink,
-    /// Add or remove a platform shell from an existing project. Use this after
-    /// `unison new` if you initially skipped a platform and want to add it later,
-    /// or to remove a platform you no longer need.
+    /// Add or remove a platform shell from an existing project.
+    ///
+    /// Use this after `unison new` if you initially skipped a platform and want
+    /// to add it later, or to remove a platform you no longer need.
     Platform {
         #[command(subcommand)]
         action: PlatformAction,
