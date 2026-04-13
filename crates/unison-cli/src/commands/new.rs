@@ -60,7 +60,20 @@ pub fn run(args: NewArgs, engine_tag_default: &str, engine_git_url: &str) -> Res
     render_dir(&templates::COMMON, &dest, &vars)?;
     match lang {
         Lang::Lua => render_dir(&templates::SCRIPTING_LUA, &dest, &vars)?,
-        Lang::Ts => bail!("--lang ts not yet implemented (Task 10)"),
+        Lang::Ts => {
+            render_dir_to(&templates::SCRIPTING_TS, &dest, &vars)?;
+            // Append TS-specific .gitignore rules to the common .gitignore.
+            if let Some(addon) = templates::SCRIPTING_TS.get_file(".gitignore-ts-addon") {
+                let current = fs::read_to_string(dest.join(".gitignore")).unwrap_or_default();
+                let extra = addon.contents_utf8().unwrap_or("");
+                fs::write(
+                    dest.join(".gitignore"),
+                    format!("{}\n{}\n", current.trim_end(), extra.trim()),
+                )?;
+                // Remove the addon file from the scaffolded output.
+                let _ = fs::remove_file(dest.join(".gitignore-ts-addon"));
+            }
+        }
     }
     if platforms.web {
         render_dir_to(&templates::PLATFORM_WEB, &dest.join("platform/web"), &vars)?;

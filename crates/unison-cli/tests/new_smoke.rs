@@ -2,6 +2,25 @@ use std::process::Command;
 use tempfile::tempdir;
 
 #[test]
+fn new_ts_lang_creates_ts_layout() {
+    let dir = tempdir().unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_unison"))
+        .args(["new", "ts-test", "--lang", "ts", "--no-ios", "--no-android", "--no-git"])
+        .current_dir(dir.path())
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    let root = dir.path().join("ts-test");
+    assert!(root.join("package.json").exists());
+    assert!(root.join("project/scripts-src/tsconfig.json").exists());
+    assert!(root.join("project/scripts-src/main.ts").exists());
+    let gi = std::fs::read_to_string(root.join(".gitignore")).unwrap();
+    assert!(gi.contains("/node_modules"));
+    assert!(gi.contains("/project/assets/scripts/"));
+    assert!(!root.join(".gitignore-ts-addon").exists());
+}
+
+#[test]
 fn new_creates_expected_files() {
     let dir = tempdir().unwrap();
     let out = Command::new(env!("CARGO_BIN_EXE_unison"))

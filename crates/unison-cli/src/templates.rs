@@ -2,6 +2,7 @@ use include_dir::{include_dir, Dir};
 
 pub static COMMON: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/templates/common");
 pub static SCRIPTING_LUA: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/templates/scripting-lua");
+pub static SCRIPTING_TS: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/templates/scripting-ts");
 pub static PLATFORM_WEB: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/templates/platform-web");
 pub static PLATFORM_IOS: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/templates/platform-ios");
 pub static PLATFORM_ANDROID: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/templates/platform-android");
@@ -21,6 +22,14 @@ mod tests {
     #[test]
     fn scripting_lua_contains_main() {
         assert!(SCRIPTING_LUA.get_file("project/assets/scripts/main.lua").is_some());
+    }
+
+    #[test]
+    fn scripting_ts_contains_core_files() {
+        assert!(SCRIPTING_TS.get_file("package.json").is_some());
+        assert!(SCRIPTING_TS.get_file("project/scripts-src/tsconfig.json").is_some());
+        assert!(SCRIPTING_TS.get_file("project/scripts-src/main.ts").is_some());
+        assert!(SCRIPTING_TS.get_file(".gitignore-ts-addon").is_some());
     }
 
     #[test]

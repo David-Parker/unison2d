@@ -1,0 +1,14 @@
+{
+  "name": "{{CRATE_NAME}}",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "tstl": "tstl -p project/scripts-src/tsconfig.json",
+    "tstl:watch": "tstl -p project/scripts-src/tsconfig.json --watch",
+    "test": "tstl -p project/scripts-src/tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5",
+    "typescript-to-lua": "^1"
+  }
+}
