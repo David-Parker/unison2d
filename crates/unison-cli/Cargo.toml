@@ -20,6 +20,7 @@ serde = { version = "1", features = ["derive"] }
 toml = "0.8"
 toml_edit = "0.22"
 include_dir = "0.7"
+regex = "1"
 
 [dev-dependencies]
 insta = { version = "1", features = ["filters"] }

@@ -42,6 +42,9 @@ pub fn run(args: NewArgs, engine_tag_default: &str, engine_git_url: &str) -> Res
     let crate_name = args.name.replace('-', "_");
     let bundle_id = args.bundle_id.unwrap_or_else(|| format!("com.example.{}", crate_name));
     let engine_tag = args.engine_tag.unwrap_or_else(|| engine_tag_default.to_string());
+    // SwiftPM's pbxproj requirement block needs a bare semver (no `v` prefix);
+    // we carry `ENGINE_TAG` as the git ref and `ENGINE_VERSION` as its semver twin.
+    let engine_version = engine_tag.strip_prefix('v').unwrap_or(&engine_tag).to_string();
 
     let vars: HashMap<&str, &str> = [
         ("PROJECT_NAME", args.name.as_str()),
@@ -51,6 +54,7 @@ pub fn run(args: NewArgs, engine_tag_default: &str, engine_git_url: &str) -> Res
         ("KOTLIN_PACKAGE", bundle_id.as_str()),
         ("IOS_MODULE", crate_name.as_str()),
         ("ENGINE_TAG", engine_tag.as_str()),
+        ("ENGINE_VERSION", engine_version.as_str()),
         ("ENGINE_GIT_URL", engine_git_url),
     ].into_iter().collect();
 
@@ -83,16 +87,7 @@ pub fn run(args: NewArgs, engine_tag_default: &str, engine_git_url: &str) -> Res
     }
     if platforms.android {
         render_dir_to(&templates::PLATFORM_ANDROID, &dest.join("platform/android"), &vars)?;
-        // Make build-rust.sh executable.
-        #[cfg(unix)] {
-            use std::os::unix::fs::PermissionsExt;
-            let p = dest.join("platform/android/build-rust.sh");
-            if let Ok(md) = fs::metadata(&p) {
-                let mut perm = md.permissions();
-                perm.set_mode(0o755);
-                let _ = fs::set_permissions(&p, perm);
-            }
-        }
+        chmod_android_scripts(&dest.join("platform/android"));
     }
 
     // Write unison.toml
@@ -172,6 +167,26 @@ fn render_path_component(s: &str, vars: &HashMap<&str, &str>) -> String {
     }
 }
 
+/// Make the rendered android platform's shell scripts executable.
+/// `include_dir` drops the executable bit from embedded files, so `gradlew`
+/// and `build-rust.sh` come out as plain text files — not runnable.
+pub fn chmod_android_scripts(android_dir: &Path) {
+    #[cfg(unix)] {
+        use std::os::unix::fs::PermissionsExt;
+        for name in ["build-rust.sh", "gradlew"] {
+            let p = android_dir.join(name);
+            if let Ok(md) = fs::metadata(&p) {
+                let mut perm = md.permissions();
+                perm.set_mode(0o755);
+                let _ = fs::set_permissions(&p, perm);
+            }
+        }
+    }
+    #[cfg(not(unix))] {
+        let _ = android_dir;
+    }
+}
+
 pub fn render_dir_to(dir: &include_dir::Dir<'_>, dest: &Path, vars: &HashMap<&str, &str>) -> Result<()> {
     for entry in dir.entries() {
         match entry {
@@ -202,8 +217,6 @@ pub fn render_dir_to(dir: &include_dir::Dir<'_>, dest: &Path, vars: &HashMap<&st
                 }
             }
             include_dir::DirEntry::Dir(d) => {
-                let sub_dest = dest.join(d.path());
-                fs::create_dir_all(&sub_dest)?;
                 render_dir_to(d, dest, vars)?;
             }
         }

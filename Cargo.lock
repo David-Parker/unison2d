@@ -1357,6 +1357,7 @@ dependencies = [
  "clap",
  "include_dir",
  "insta",
+ "regex",
  "serde",
  "tempfile",
  "thiserror",

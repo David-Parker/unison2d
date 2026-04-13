@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
-use crate::commands::new::render_dir_to;
+use crate::commands::new::{chmod_android_scripts, render_dir_to};
 use crate::config::Config;
 use crate::templates;
 
@@ -15,6 +15,7 @@ pub fn add(project_root: &Path, platform: &str) -> Result<()> {
     let crate_name = cfg.project.name.replace('-', "_");
     let bundle_id = format!("com.example.{}", crate_name);
     let engine_tag = cfg.engine.tag.clone().unwrap_or_default();
+    let engine_version = engine_tag.strip_prefix('v').unwrap_or(&engine_tag).to_string();
     let vars: HashMap<&str, &str> = [
         ("PROJECT_NAME", cfg.project.name.as_str()),
         ("CRATE_NAME", crate_name.as_str()),
@@ -23,13 +24,18 @@ pub fn add(project_root: &Path, platform: &str) -> Result<()> {
         ("KOTLIN_PACKAGE", bundle_id.as_str()),
         ("IOS_MODULE", crate_name.as_str()),
         ("ENGINE_TAG", engine_tag.as_str()),
+        ("ENGINE_VERSION", engine_version.as_str()),
         ("ENGINE_GIT_URL", cfg.engine.git.as_str()),
     ].into_iter().collect();
 
     match platform {
         "web" => render_dir_to(&templates::PLATFORM_WEB, &project_root.join("platform/web"), &vars)?,
         "ios" => render_dir_to(&templates::PLATFORM_IOS, &project_root.join("platform/ios"), &vars)?,
-        "android" => render_dir_to(&templates::PLATFORM_ANDROID, &project_root.join("platform/android"), &vars)?,
+        "android" => {
+            let android_dir = project_root.join("platform/android");
+            render_dir_to(&templates::PLATFORM_ANDROID, &android_dir, &vars)?;
+            chmod_android_scripts(&android_dir);
+        }
         other => bail!("unknown platform: {}", other),
     }
 
