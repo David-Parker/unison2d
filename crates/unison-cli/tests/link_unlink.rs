@@ -14,6 +14,9 @@ unison-scripting = { git = "https://github.com/x/unison2d", tag = "v0", features
 
 [build-dependencies]
 unison-assets = { git = "https://github.com/x/unison2d", tag = "v0", features = ["build"] }
+
+[patch.crates-io]
+lua-src = { git = "https://github.com/x/unison2d", tag = "v0" }
 "#).unwrap();
     fs::write(proj.join("unison.toml"), r#"[project]
 name = "proj"
@@ -31,9 +34,10 @@ android = false
     let engine = dir.path().join("engine");
     fs::create_dir_all(engine.join("crates/unison-scripting")).unwrap();
     fs::create_dir_all(engine.join("crates/unison-assets")).unwrap();
-    fs::create_dir_all(engine.join("vendor/lua-src")).unwrap();
+    fs::create_dir_all(engine.join("crates/unison-lua")).unwrap();
     fs::write(engine.join("crates/unison-scripting/Cargo.toml"), "").unwrap();
     fs::write(engine.join("crates/unison-assets/Cargo.toml"), "").unwrap();
+    fs::write(engine.join("crates/unison-lua/Cargo.toml"), "").unwrap();
     (dir, proj, engine)
 }
 
@@ -64,18 +68,28 @@ fn link_swaps_git_deps_to_path_deps() {
     assert!(cargo.contains("features = [\"simd\"]"));
     assert!(cargo.contains("features = [\"build\"]"));
 
-    // No leftover git-URL patch block — but [patch.crates-io] lua-src IS
-    // expected (engine ships a forked lua-src with wasm32 support).
-    assert!(!cargo.contains("[patch.\"https://github.com/x/unison2d\"]"),
-            "unexpected git patch after link:\n{}", cargo);
-    assert!(cargo.contains("[patch.crates-io]"),
-            "expected [patch.crates-io] block:\n{}", cargo);
-    let expected_vendor = engine_canon.join("vendor/lua-src");
-    assert!(cargo.contains(&format!("lua-src = {{ path = \"{}\"", expected_vendor.display())),
-            "expected lua-src patch pointing at engine vendor dir:\n{}", cargo);
-
     let unison_toml = fs::read_to_string(proj.join("unison.toml")).unwrap();
     assert!(unison_toml.contains("link_path"));
+}
+
+#[test]
+fn link_writes_lua_src_patch() {
+    let (_d, proj, engine) = setup_project_and_engine();
+    unison_cli::commands::link::link(&proj, engine.to_str().unwrap()).unwrap();
+    let cargo = fs::read_to_string(proj.join("Cargo.toml")).unwrap();
+
+    let engine_canon = fs::canonicalize(&engine).unwrap();
+    let expected_lua = engine_canon.join("crates/unison-lua");
+
+    assert!(cargo.contains("[patch.crates-io]"),
+            "expected [patch.crates-io] block:\n{}", cargo);
+    assert!(cargo.contains(&format!("lua-src = {{ path = \"{}\" }}", expected_lua.display())),
+            "expected lua-src path patch:\n{}", cargo);
+    // No `package = ...` key should be present on the lua-src patch.
+    assert!(!cargo.contains("package = \"lua-src\""),
+            "unexpected package key on lua-src patch:\n{}", cargo);
+    assert!(!cargo.contains("package = \"unison-lua\""),
+            "unexpected package key on lua-src patch:\n{}", cargo);
 }
 
 #[test]
@@ -95,12 +109,66 @@ fn unlink_restores_git_deps() {
     assert!(cargo.contains("features = [\"simd\"]"));
     assert!(cargo.contains("features = [\"build\"]"));
 
-    // No lingering path entries or patch block.
+    // No lingering path entries for the engine deps/patch.
     assert!(!cargo.contains("path ="), "unexpected path spec after unlink:\n{}", cargo);
-    assert!(!cargo.contains("[patch"), "unexpected [patch] block after unlink:\n{}", cargo);
 
     let unison_toml = fs::read_to_string(proj.join("unison.toml")).unwrap();
     assert!(!unison_toml.contains("link_path"));
+}
+
+#[test]
+fn unlink_writes_lua_src_patch_with_git() {
+    let (_d, proj, engine) = setup_project_and_engine();
+    unison_cli::commands::link::link(&proj, engine.to_str().unwrap()).unwrap();
+    unison_cli::commands::link::unlink(&proj).unwrap();
+    let cargo = fs::read_to_string(proj.join("Cargo.toml")).unwrap();
+
+    // lua-src patch is in git form — same URL + tag as the engine deps.
+    assert!(cargo.contains("[patch.crates-io]"),
+            "expected [patch.crates-io] block after unlink:\n{}", cargo);
+    // Look for lua-src as a git-form inline table.
+    let lua_line = cargo
+        .lines()
+        .find(|l| l.trim_start().starts_with("lua-src"))
+        .unwrap_or_else(|| panic!("no lua-src line after unlink:\n{}", cargo));
+    assert!(lua_line.contains("git = \"https://github.com/x/unison2d\""),
+            "expected lua-src git spec:\n{}", lua_line);
+    assert!(lua_line.contains("tag = \"v0\""),
+            "expected lua-src tag spec:\n{}", lua_line);
+    assert!(!lua_line.contains("path ="),
+            "unexpected path spec on lua-src after unlink:\n{}", lua_line);
+    assert!(!lua_line.contains("package ="),
+            "unexpected package key on lua-src:\n{}", lua_line);
+}
+
+#[test]
+fn link_unlink_round_trip_preserves_engine_deps() {
+    let (_d, proj, engine) = setup_project_and_engine();
+    for _ in 0..2 {
+        unison_cli::commands::link::link(&proj, engine.to_str().unwrap()).unwrap();
+        unison_cli::commands::link::unlink(&proj).unwrap();
+    }
+    let cargo = fs::read_to_string(proj.join("Cargo.toml")).unwrap();
+
+    // Engine deps present with features intact.
+    assert!(cargo.contains("unison-scripting"));
+    assert!(cargo.contains("features = [\"simd\"]"),
+            "unison-scripting features lost after round trip:\n{}", cargo);
+    assert!(cargo.contains("unison-assets"));
+    assert!(cargo.contains("features = [\"build\"]"),
+            "unison-assets features lost after round trip:\n{}", cargo);
+
+    // lua-src patch survives in git form.
+    assert!(cargo.contains("[patch.crates-io]"),
+            "expected [patch.crates-io] after round trip:\n{}", cargo);
+    let lua_line = cargo
+        .lines()
+        .find(|l| l.trim_start().starts_with("lua-src"))
+        .unwrap_or_else(|| panic!("no lua-src line after round trip:\n{}", cargo));
+    assert!(lua_line.contains("git ="),
+            "expected lua-src git spec after round trip:\n{}", lua_line);
+    assert!(lua_line.contains("tag = \"v0\""),
+            "expected lua-src tag after round trip:\n{}", lua_line);
 }
 
 #[test]
@@ -111,25 +179,4 @@ fn link_rejects_non_engine_path() {
     let err = unison_cli::commands::link::link(&proj, fake.to_str().unwrap()).unwrap_err();
     assert!(err.to_string().contains("not look like"),
             "unexpected error message: {}", err);
-}
-
-#[test]
-fn link_strips_legacy_patch_block() {
-    // Projects created before the rewrite may have a [patch.<url>] block from
-    // the old `unison link`. Running the new `link` should clean it up.
-    let (_d, proj, engine) = setup_project_and_engine();
-    // Inject a legacy patch block as if left behind by an older link run.
-    let mut cargo = fs::read_to_string(proj.join("Cargo.toml")).unwrap();
-    cargo.push_str(&format!(
-        "\n[patch.\"https://github.com/x/unison2d\"]\n\
-         unison-scripting = {{ path = \"/old/path/unison-scripting\" }}\n"
-    ));
-    fs::write(proj.join("Cargo.toml"), cargo).unwrap();
-
-    unison_cli::commands::link::link(&proj, engine.to_str().unwrap()).unwrap();
-    let cargo = fs::read_to_string(proj.join("Cargo.toml")).unwrap();
-    assert!(!cargo.contains("[patch.\"https://github.com/x/unison2d\"]"),
-            "legacy git-URL patch block not cleaned up:\n{}", cargo);
-    assert!(!cargo.contains("/old/path"),
-            "old patch entry still present:\n{}", cargo);
 }

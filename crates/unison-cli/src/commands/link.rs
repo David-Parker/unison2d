@@ -4,12 +4,39 @@ use std::path::Path;
 
 use crate::config::Config;
 
-/// Engine crates that `unison new` adds as dependencies. Listed with the
-/// `[dependencies]` vs `[build-dependencies]` section they belong to so that
-/// `link` / `unlink` can find and rewrite them in place.
-const ENGINE_DEPS: &[(&str, &str)] = &[
-    ("dependencies", "unison-scripting"),
-    ("build-dependencies", "unison-assets"),
+/// Where in Cargo.toml an engine dep lives. Drives how `link`/`unlink` find
+/// and rewrite it.
+enum Section {
+    Dependencies,
+    BuildDependencies,
+    PatchCratesIo,
+}
+
+struct EngineDep {
+    section: Section,
+    key: &'static str,
+    crate_subpath: &'static str,
+}
+
+/// Engine crates that `unison new` adds as dependencies, plus the
+/// `[patch.crates-io]` entry for the forked `lua-src`. `link` / `unlink`
+/// rewrite each entry in place, flipping between git-form and path-form.
+const ENGINE_DEPS: &[EngineDep] = &[
+    EngineDep {
+        section: Section::Dependencies,
+        key: "unison-scripting",
+        crate_subpath: "unison-scripting",
+    },
+    EngineDep {
+        section: Section::BuildDependencies,
+        key: "unison-assets",
+        crate_subpath: "unison-assets",
+    },
+    EngineDep {
+        section: Section::PatchCratesIo,
+        key: "lua-src",
+        crate_subpath: "unison-lua",
+    },
 ];
 
 pub fn link(project_root: &Path, engine_path: &str) -> Result<()> {
@@ -17,8 +44,6 @@ pub fn link(project_root: &Path, engine_path: &str) -> Result<()> {
         .with_context(|| format!("resolving {}", engine_path))?;
     validate_engine_workspace(&engine_abs)?;
     rewrite_deps_to_path(project_root, &engine_abs)?;
-    remove_legacy_git_patch_block(project_root)?;
-    add_vendor_patch(project_root, &engine_abs)?;
     rewrite_xcode_spm_to_local(project_root, &engine_abs)?;
     rewrite_android_engine_path(project_root, Some(&engine_abs))?;
     let engine_path_owned = engine_path.to_string();
@@ -33,8 +58,6 @@ pub fn link(project_root: &Path, engine_path: &str) -> Result<()> {
 pub fn unlink(project_root: &Path) -> Result<()> {
     let cfg = Config::load(&project_root.join("unison.toml"))?;
     rewrite_deps_to_git(project_root, &cfg)?;
-    remove_legacy_git_patch_block(project_root)?;
-    remove_vendor_patch(project_root)?;
     rewrite_xcode_spm_to_remote(project_root, &cfg)?;
     rewrite_android_engine_path(project_root, None)?;
     Config::edit_in_place(&project_root.join("unison.toml"), |doc| {
@@ -48,12 +71,85 @@ pub fn unlink(project_root: &Path) -> Result<()> {
 }
 
 fn validate_engine_workspace(engine_abs: &Path) -> Result<()> {
-    for (_section, crate_name) in ENGINE_DEPS {
-        if !engine_abs.join("crates").join(crate_name).join("Cargo.toml").exists() {
+    for dep in ENGINE_DEPS {
+        if !engine_abs.join("crates").join(dep.crate_subpath).join("Cargo.toml").exists() {
             bail!(
                 "{} does not look like a unison2d workspace (missing crates/{}/Cargo.toml)",
-                engine_abs.display(), crate_name
+                engine_abs.display(), dep.crate_subpath
             );
+        }
+    }
+    Ok(())
+}
+
+/// Walk `[patch.crates-io]` on `doc`, creating it (and the parent `[patch]`
+/// table) if missing. The tables are marked implicit so they don't serialize
+/// as `[patch]\n` headers when empty.
+fn patch_crates_io_mut<'a>(
+    doc: &'a mut toml_edit::DocumentMut,
+) -> Result<&'a mut toml_edit::Table> {
+    let patch = doc.entry("patch").or_insert_with(|| {
+        let mut t = toml_edit::Table::new();
+        t.set_implicit(true);
+        toml_edit::Item::Table(t)
+    });
+    let patch_tbl = patch
+        .as_table_mut()
+        .ok_or_else(|| anyhow::anyhow!("[patch] is not a table"))?;
+    patch_tbl.set_implicit(true);
+    let crates_io = patch_tbl
+        .entry("crates-io")
+        .or_insert_with(|| toml_edit::Item::Table(toml_edit::Table::new()));
+    crates_io
+        .as_table_mut()
+        .ok_or_else(|| anyhow::anyhow!("[patch.crates-io] is not a table"))
+}
+
+/// Fetch the existing `features` array for an engine dep, if any. Used so
+/// rewrites preserve whatever feature set the consumer asked for.
+fn existing_features(
+    doc: &toml_edit::DocumentMut,
+    dep: &EngineDep,
+) -> Option<toml_edit::Value> {
+    let existing = match dep.section {
+        Section::Dependencies => doc.get("dependencies")?.get(dep.key)?,
+        Section::BuildDependencies => doc.get("build-dependencies")?.get(dep.key)?,
+        Section::PatchCratesIo => doc.get("patch")?.get("crates-io")?.get(dep.key)?,
+    };
+    existing
+        .as_inline_table()
+        .and_then(|t| t.get("features"))
+        .cloned()
+}
+
+/// Insert `value` as the entry for `dep` in its owning section. Creates the
+/// section table (or `[patch.crates-io]` parent chain) if missing.
+fn insert_dep(
+    doc: &mut toml_edit::DocumentMut,
+    dep: &EngineDep,
+    value: toml_edit::InlineTable,
+) -> Result<()> {
+    let item = toml_edit::Item::Value(toml_edit::Value::InlineTable(value));
+    match dep.section {
+        Section::Dependencies => {
+            let tbl = doc
+                .entry("dependencies")
+                .or_insert_with(|| toml_edit::Item::Table(toml_edit::Table::new()))
+                .as_table_mut()
+                .ok_or_else(|| anyhow::anyhow!("[dependencies] is not a table"))?;
+            tbl.insert(dep.key, item);
+        }
+        Section::BuildDependencies => {
+            let tbl = doc
+                .entry("build-dependencies")
+                .or_insert_with(|| toml_edit::Item::Table(toml_edit::Table::new()))
+                .as_table_mut()
+                .ok_or_else(|| anyhow::anyhow!("[build-dependencies] is not a table"))?;
+            tbl.insert(dep.key, item);
+        }
+        Section::PatchCratesIo => {
+            let tbl = patch_crates_io_mut(doc)?;
+            tbl.insert(dep.key, item);
         }
     }
     Ok(())
@@ -63,27 +159,24 @@ fn validate_engine_workspace(engine_abs: &Path) -> Result<()> {
 /// to `{ path = "<engine>/crates/<name>", features = [...] }`, preserving the
 /// existing `features` array. This is more reliable than `[patch]` — cargo
 /// won't try to fetch the git source at all when the dep points at a path.
+///
+/// For `PatchCratesIo` entries (e.g. `lua-src`), the patch is written with
+/// just `path` — NO `package` key. Cargo's `[patch.crates-io]` does not
+/// rename crates via `package`; the patched crate's own `[package] name` must
+/// match the dependency being patched, and `crates/unison-lua/Cargo.toml`
+/// already has `name = "lua-src"`.
 fn rewrite_deps_to_path(project_root: &Path, engine_abs: &Path) -> Result<()> {
     let engine_abs = engine_abs.to_path_buf();
     Config::edit_in_place(&project_root.join("Cargo.toml"), |doc| {
-        for (section, crate_name) in ENGINE_DEPS {
-            let Some(tbl) = doc.get_mut(*section).and_then(|i| i.as_table_mut()) else { continue };
-            let Some(existing) = tbl.get(*crate_name) else { continue };
-            let features = existing
-                .as_inline_table()
-                .and_then(|t| t.get("features"))
-                .cloned();
-
+        for dep in ENGINE_DEPS {
+            let features = existing_features(doc, dep);
             let mut inline = toml_edit::InlineTable::new();
-            let crate_path = engine_abs.join("crates").join(crate_name);
+            let crate_path = engine_abs.join("crates").join(dep.crate_subpath);
             inline.insert("path", toml_edit::Value::from(crate_path.display().to_string()));
             if let Some(f) = features {
                 inline.insert("features", f);
             }
-            tbl.insert(
-                crate_name,
-                toml_edit::Item::Value(toml_edit::Value::InlineTable(inline)),
-            );
+            insert_dep(doc, dep, inline)?;
         }
         Ok(())
     })
@@ -91,20 +184,18 @@ fn rewrite_deps_to_path(project_root: &Path, engine_abs: &Path) -> Result<()> {
 
 /// Inverse of `rewrite_deps_to_path` — restore each engine dep to its git
 /// spec using `unison.toml`'s `[engine]` section as the source of truth.
+///
+/// The `lua-src` patch reuses the same git URL/tag/branch/rev as the other
+/// engine deps because `crates/unison-lua` lives inside the unison2d repo:
+/// Cargo will discover it by walking the workspace at that git ref.
 fn rewrite_deps_to_git(project_root: &Path, cfg: &Config) -> Result<()> {
     let git = cfg.engine.git.clone();
     let tag = cfg.engine.tag.clone();
     let branch = cfg.engine.branch.clone();
     let rev = cfg.engine.rev.clone();
     Config::edit_in_place(&project_root.join("Cargo.toml"), |doc| {
-        for (section, crate_name) in ENGINE_DEPS {
-            let Some(tbl) = doc.get_mut(*section).and_then(|i| i.as_table_mut()) else { continue };
-            let Some(existing) = tbl.get(*crate_name) else { continue };
-            let features = existing
-                .as_inline_table()
-                .and_then(|t| t.get("features"))
-                .cloned();
-
+        for dep in ENGINE_DEPS {
+            let features = existing_features(doc, dep);
             let mut inline = toml_edit::InlineTable::new();
             inline.insert("git", toml_edit::Value::from(&git));
             if let Some(t) = &tag { inline.insert("tag", toml_edit::Value::from(t)); }
@@ -113,64 +204,8 @@ fn rewrite_deps_to_git(project_root: &Path, cfg: &Config) -> Result<()> {
             if let Some(f) = features {
                 inline.insert("features", f);
             }
-            tbl.insert(
-                crate_name,
-                toml_edit::Item::Value(toml_edit::Value::InlineTable(inline)),
-            );
+            insert_dep(doc, dep, inline)?;
         }
-        Ok(())
-    })
-}
-
-/// Earlier versions of `unison link` added a `[patch."<git-url>"]` block
-/// instead of rewriting deps. Cargo fetches the git source to validate patches,
-/// so that approach broke when the engine tag wasn't published yet. Strip any
-/// such leftover block so upgraded projects aren't left with dead entries.
-fn remove_legacy_git_patch_block(project_root: &Path) -> Result<()> {
-    Config::edit_in_place(&project_root.join("Cargo.toml"), |doc| {
-        let Some(patch) = doc.get_mut("patch").and_then(|i| i.as_table_mut()) else { return Ok(()) };
-        // Remove every [patch."<url>"] entry (anything that isn't the
-        // crates-io subtable). The vendor lua-src patch lives under
-        // [patch.crates-io] and is managed by add_vendor_patch.
-        let keys: Vec<String> = patch
-            .iter()
-            .filter(|(k, _)| *k != "crates-io")
-            .map(|(k, _)| k.to_string())
-            .collect();
-        for k in keys {
-            patch.remove(&k);
-        }
-        if patch.is_empty() {
-            doc.as_table_mut().remove("patch");
-        }
-        Ok(())
-    })
-}
-
-/// Add `[patch.crates-io] lua-src = { path = "<engine>/vendor/lua-src" }`.
-/// The engine ships a forked lua-src with wasm32 support; building for web
-/// without this patch fails in `mlua-sys` with "don't know how to build Lua
-/// for wasm32-unknown-unknown".
-fn add_vendor_patch(project_root: &Path, engine_abs: &Path) -> Result<()> {
-    let vendor = engine_abs.join("vendor").join("lua-src");
-    let vendor_str = vendor.display().to_string();
-    Config::edit_in_place(&project_root.join("Cargo.toml"), |doc| {
-        let patch = doc.entry("patch").or_insert_with(|| {
-            let mut t = toml_edit::Table::new();
-            t.set_implicit(true);
-            toml_edit::Item::Table(t)
-        });
-        let patch_tbl = patch.as_table_mut()
-            .ok_or_else(|| anyhow::anyhow!("[patch] is not a table"))?;
-        patch_tbl.set_implicit(true);
-        let crates_io = patch_tbl.entry("crates-io").or_insert_with(|| {
-            toml_edit::Item::Table(toml_edit::Table::new())
-        });
-        let crates_io_tbl = crates_io.as_table_mut()
-            .ok_or_else(|| anyhow::anyhow!("[patch.crates-io] is not a table"))?;
-        let mut inline = toml_edit::InlineTable::new();
-        inline.insert("path", toml_edit::Value::from(vendor_str.clone()));
-        crates_io_tbl.insert("lua-src", toml_edit::Item::Value(toml_edit::Value::InlineTable(inline)));
         Ok(())
     })
 }
@@ -310,22 +345,6 @@ fn rewrite_android_engine_path(project_root: &Path, engine_abs: Option<&Path>) -
             .with_context(|| format!("writing {}", settings.display()))?;
     }
     Ok(())
-}
-
-fn remove_vendor_patch(project_root: &Path) -> Result<()> {
-    Config::edit_in_place(&project_root.join("Cargo.toml"), |doc| {
-        let Some(patch) = doc.get_mut("patch").and_then(|i| i.as_table_mut()) else { return Ok(()) };
-        if let Some(crates_io) = patch.get_mut("crates-io").and_then(|i| i.as_table_mut()) {
-            crates_io.remove("lua-src");
-            if crates_io.is_empty() {
-                patch.remove("crates-io");
-            }
-        }
-        if patch.is_empty() {
-            doc.as_table_mut().remove("patch");
-        }
-        Ok(())
-    })
 }
 
 #[cfg(test)]
