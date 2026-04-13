@@ -2,6 +2,7 @@
 source: crates/unison-cli/tests/new_snapshots.rs
 expression: file_tree(&root)
 ---
+.cargo/config.toml
 .gitignore
 Cargo.toml
 README.md

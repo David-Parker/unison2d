@@ -156,11 +156,20 @@ fn render_path_component(s: &str, vars: &HashMap<&str, &str>) -> String {
     // Filenames support substitution via literal substrings in path segments.
     // KOTLIN_PACKAGE_PATH expands to e.g. "com/example/my_game" (dots → slashes),
     // which means one original component becomes multiple path components joined by '/'.
+    //
+    // The `include_dir!` macro silently skips directories whose name starts
+    // with a dot (e.g. `.cargo/`), so the template checks them in under
+    // placeholder names and we rewrite here: `_cargo` → `.cargo`.
     let project_name = vars.get("PROJECT_NAME").copied().unwrap_or("");
     let kotlin_pkg = vars.get("KOTLIN_PACKAGE").copied().unwrap_or("");
     let kotlin_path = kotlin_pkg.replace('.', "/");
-    s.replace("PROJECT_NAME", project_name)
-     .replace("KOTLIN_PACKAGE_PATH", &kotlin_path)
+    let with_subs = s
+        .replace("PROJECT_NAME", project_name)
+        .replace("KOTLIN_PACKAGE_PATH", &kotlin_path);
+    match with_subs.as_str() {
+        "_cargo" => ".cargo".to_string(),
+        _ => with_subs,
+    }
 }
 
 pub fn render_dir_to(dir: &include_dir::Dir<'_>, dest: &Path, vars: &HashMap<&str, &str>) -> Result<()> {

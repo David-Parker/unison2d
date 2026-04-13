@@ -31,6 +31,7 @@ android = false
     let engine = dir.path().join("engine");
     fs::create_dir_all(engine.join("crates/unison-scripting")).unwrap();
     fs::create_dir_all(engine.join("crates/unison-assets")).unwrap();
+    fs::create_dir_all(engine.join("vendor/lua-src")).unwrap();
     fs::write(engine.join("crates/unison-scripting/Cargo.toml"), "").unwrap();
     fs::write(engine.join("crates/unison-assets/Cargo.toml"), "").unwrap();
     (dir, proj, engine)
@@ -63,8 +64,15 @@ fn link_swaps_git_deps_to_path_deps() {
     assert!(cargo.contains("features = [\"simd\"]"));
     assert!(cargo.contains("features = [\"build\"]"));
 
-    // No stale [patch] block.
-    assert!(!cargo.contains("[patch"), "unexpected [patch] block after link:\n{}", cargo);
+    // No leftover git-URL patch block — but [patch.crates-io] lua-src IS
+    // expected (engine ships a forked lua-src with wasm32 support).
+    assert!(!cargo.contains("[patch.\"https://github.com/x/unison2d\"]"),
+            "unexpected git patch after link:\n{}", cargo);
+    assert!(cargo.contains("[patch.crates-io]"),
+            "expected [patch.crates-io] block:\n{}", cargo);
+    let expected_vendor = engine_canon.join("vendor/lua-src");
+    assert!(cargo.contains(&format!("lua-src = {{ path = \"{}\"", expected_vendor.display())),
+            "expected lua-src patch pointing at engine vendor dir:\n{}", cargo);
 
     let unison_toml = fs::read_to_string(proj.join("unison.toml")).unwrap();
     assert!(unison_toml.contains("link_path"));
@@ -120,6 +128,8 @@ fn link_strips_legacy_patch_block() {
 
     unison_cli::commands::link::link(&proj, engine.to_str().unwrap()).unwrap();
     let cargo = fs::read_to_string(proj.join("Cargo.toml")).unwrap();
-    assert!(!cargo.contains("[patch"), "legacy patch block not cleaned up:\n{}", cargo);
-    assert!(!cargo.contains("/old/path"), "old patch entry still present:\n{}", cargo);
+    assert!(!cargo.contains("[patch.\"https://github.com/x/unison2d\"]"),
+            "legacy git-URL patch block not cleaned up:\n{}", cargo);
+    assert!(!cargo.contains("/old/path"),
+            "old patch entry still present:\n{}", cargo);
 }

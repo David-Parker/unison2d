@@ -1,3 +1,3 @@
 fn main() {
-    unison_assets::embed("project/assets").expect("failed to embed assets");
+    unison_assets::build::embed_assets("project/assets", "assets.rs");
 }

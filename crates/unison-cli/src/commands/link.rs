@@ -17,7 +17,8 @@ pub fn link(project_root: &Path, engine_path: &str) -> Result<()> {
         .with_context(|| format!("resolving {}", engine_path))?;
     validate_engine_workspace(&engine_abs)?;
     rewrite_deps_to_path(project_root, &engine_abs)?;
-    remove_legacy_patch_block(project_root)?;
+    remove_legacy_git_patch_block(project_root)?;
+    add_vendor_patch(project_root, &engine_abs)?;
     let engine_path_owned = engine_path.to_string();
     Config::edit_in_place(&project_root.join("unison.toml"), |doc| {
         doc["engine"]["link_path"] = toml_edit::value(engine_path_owned.clone());
@@ -30,7 +31,8 @@ pub fn link(project_root: &Path, engine_path: &str) -> Result<()> {
 pub fn unlink(project_root: &Path) -> Result<()> {
     let cfg = Config::load(&project_root.join("unison.toml"))?;
     rewrite_deps_to_git(project_root, &cfg)?;
-    remove_legacy_patch_block(project_root)?;
+    remove_legacy_git_patch_block(project_root)?;
+    remove_vendor_patch(project_root)?;
     Config::edit_in_place(&project_root.join("unison.toml"), |doc| {
         if let Some(engine) = doc.get_mut("engine").and_then(|i| i.as_table_mut()) {
             engine.remove("link_path");
@@ -120,15 +122,66 @@ fn rewrite_deps_to_git(project_root: &Path, cfg: &Config) -> Result<()> {
 /// instead of rewriting deps. Cargo fetches the git source to validate patches,
 /// so that approach broke when the engine tag wasn't published yet. Strip any
 /// such leftover block so upgraded projects aren't left with dead entries.
-fn remove_legacy_patch_block(project_root: &Path) -> Result<()> {
+fn remove_legacy_git_patch_block(project_root: &Path) -> Result<()> {
     Config::edit_in_place(&project_root.join("Cargo.toml"), |doc| {
-        if let Some(patch) = doc.get_mut("patch").and_then(|i| i.as_table_mut()) {
-            patch.clear();
+        let Some(patch) = doc.get_mut("patch").and_then(|i| i.as_table_mut()) else { return Ok(()) };
+        // Remove every [patch."<url>"] entry (anything that isn't the
+        // crates-io subtable). The vendor lua-src patch lives under
+        // [patch.crates-io] and is managed by add_vendor_patch.
+        let keys: Vec<String> = patch
+            .iter()
+            .filter(|(k, _)| *k != "crates-io")
+            .map(|(k, _)| k.to_string())
+            .collect();
+        for k in keys {
+            patch.remove(&k);
         }
-        if let Some(tbl) = doc.as_table().get("patch").and_then(|i| i.as_table()) {
-            if tbl.is_empty() {
-                doc.as_table_mut().remove("patch");
+        if patch.is_empty() {
+            doc.as_table_mut().remove("patch");
+        }
+        Ok(())
+    })
+}
+
+/// Add `[patch.crates-io] lua-src = { path = "<engine>/vendor/lua-src" }`.
+/// The engine ships a forked lua-src with wasm32 support; building for web
+/// without this patch fails in `mlua-sys` with "don't know how to build Lua
+/// for wasm32-unknown-unknown".
+fn add_vendor_patch(project_root: &Path, engine_abs: &Path) -> Result<()> {
+    let vendor = engine_abs.join("vendor").join("lua-src");
+    let vendor_str = vendor.display().to_string();
+    Config::edit_in_place(&project_root.join("Cargo.toml"), |doc| {
+        let patch = doc.entry("patch").or_insert_with(|| {
+            let mut t = toml_edit::Table::new();
+            t.set_implicit(true);
+            toml_edit::Item::Table(t)
+        });
+        let patch_tbl = patch.as_table_mut()
+            .ok_or_else(|| anyhow::anyhow!("[patch] is not a table"))?;
+        patch_tbl.set_implicit(true);
+        let crates_io = patch_tbl.entry("crates-io").or_insert_with(|| {
+            toml_edit::Item::Table(toml_edit::Table::new())
+        });
+        let crates_io_tbl = crates_io.as_table_mut()
+            .ok_or_else(|| anyhow::anyhow!("[patch.crates-io] is not a table"))?;
+        let mut inline = toml_edit::InlineTable::new();
+        inline.insert("path", toml_edit::Value::from(vendor_str.clone()));
+        crates_io_tbl.insert("lua-src", toml_edit::Item::Value(toml_edit::Value::InlineTable(inline)));
+        Ok(())
+    })
+}
+
+fn remove_vendor_patch(project_root: &Path) -> Result<()> {
+    Config::edit_in_place(&project_root.join("Cargo.toml"), |doc| {
+        let Some(patch) = doc.get_mut("patch").and_then(|i| i.as_table_mut()) else { return Ok(()) };
+        if let Some(crates_io) = patch.get_mut("crates-io").and_then(|i| i.as_table_mut()) {
+            crates_io.remove("lua-src");
+            if crates_io.is_empty() {
+                patch.remove("crates-io");
             }
+        }
+        if patch.is_empty() {
+            doc.as_table_mut().remove("patch");
         }
         Ok(())
     })

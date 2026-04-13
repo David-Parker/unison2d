@@ -1,0 +1,7 @@
+[target.wasm32-unknown-unknown]
+rustflags = ["-C", "target-feature=+simd128"]
+
+[env]
+# LLVM clang is required to compile Lua C source to wasm32-unknown-unknown.
+# Apple Clang lacks the WebAssembly backend. Install: brew install llvm
+CC_wasm32_unknown_unknown = "/opt/homebrew/opt/llvm/bin/clang"
