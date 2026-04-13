@@ -34,9 +34,5 @@ fn main() -> anyhow::Result<()> {
         },
         Command::Test => commands::test::run(&std::env::current_dir()?),
         Command::Clean => commands::clean::run(&std::env::current_dir()?),
-        _ => {
-            println!("Not yet implemented");
-            Ok(())
-        }
     }
 }
