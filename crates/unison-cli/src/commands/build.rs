@@ -18,13 +18,17 @@ pub fn run(project_root: &Path, args: BuildArgs) -> Result<()> {
 }
 
 pub fn run_with(cfg: &Config, project_root: &Path, invoker: &dyn Invoker, args: BuildArgs) -> Result<()> {
-    let run_tstl = matches!(cfg.project.lang, Lang::Ts);
+    // Run tstl once if the project uses TypeScript. Individual platform builders no
+    // longer need to re-run it.
+    if matches!(cfg.project.lang, Lang::Ts) {
+        platforms::run_tstl(project_root, invoker)?;
+    }
     match args.platform.as_str() {
         "web" => {
             if !cfg.platforms.web { bail!("web is not enabled in unison.toml"); }
             platforms::web::build(project_root, invoker, platforms::web::WebBuildArgs {
                 release: args.release, profile: args.profile,
-            }, run_tstl)?;
+            })?;
         }
         "ios" => {
             if !cfg.platforms.ios { bail!("ios is not enabled in unison.toml"); }
@@ -39,7 +43,24 @@ pub fn run_with(cfg: &Config, project_root: &Path, invoker: &dyn Invoker, args: 
                 release: args.release, profile: args.profile,
             })?;
         }
-        "all" => bail!("all — Task 15"),
+        "all" => {
+            if cfg.platforms.web {
+                platforms::web::build(project_root, invoker, platforms::web::WebBuildArgs {
+                    release: args.release, profile: args.profile,
+                })?;
+            }
+            if cfg.platforms.ios {
+                platforms::ios::build(project_root, invoker, platforms::ios::IosBuildArgs {
+                    release: args.release, profile: args.profile,
+                    project_name: cfg.project.name.clone(),
+                })?;
+            }
+            if cfg.platforms.android {
+                platforms::android::build(project_root, invoker, platforms::android::AndroidBuildArgs {
+                    release: args.release, profile: args.profile,
+                })?;
+            }
+        }
         other => bail!("unknown platform: {}", other),
     }
     Ok(())
