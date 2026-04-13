@@ -26,7 +26,14 @@ pub fn run_with(cfg: &Config, project_root: &Path, invoker: &dyn Invoker, args: 
                 release: args.release, profile: args.profile,
             }, run_tstl)?;
         }
-        "ios" | "android" => bail!("{} build — Task 13/14", args.platform),
+        "ios" => {
+            if !cfg.platforms.ios { bail!("ios is not enabled in unison.toml"); }
+            platforms::ios::build(project_root, invoker, platforms::ios::IosBuildArgs {
+                release: args.release, profile: args.profile,
+                project_name: cfg.project.name.clone(),
+            })?;
+        }
+        "android" => bail!("android — Task 14"),
         "all" => bail!("all — Task 15"),
         other => bail!("unknown platform: {}", other),
     }
