@@ -1,0 +1,20 @@
+[package]
+name        = "unison-lua"
+version     = "547.0.0"
+edition     = "2021"
+license     = "MIT"
+repository  = "https://github.com/David-Parker/unison2d"
+description = "Lua 5.4 source crate used by Unison 2D — wasm32 support + interpreter customizations"
+readme      = "README.md"
+authors = [
+    "Aleksandr Orlenko <zxteam@protonmail.com>",
+    "David Parker",
+]
+keywords   = ["lua", "wasm", "unison"]
+categories = ["external-ffi-bindings"]
+
+[lib]
+name = "lua_src"
+
+[dependencies]
+cc = "1.0.54"

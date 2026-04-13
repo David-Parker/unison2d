@@ -1,0 +1,17 @@
+unison-lua
+==========
+
+This crate is a fork of lua-src-rs by Aleksandr Orlenko (khvzak):
+    https://github.com/khvzak/lua-src-rs
+
+Modifications by Unison 2D:
+  - Added wasm32-unknown-unknown build support using LLVM clang and a
+    bundled libc sysroot (wasm-sysroot/include/).
+  - Trimmed to Lua 5.4 only; removed lua-5.1.5 / lua-5.2.4 / lua-5.3.6
+    source trees and corresponding dispatch in src/lib.rs.
+  - Added [lib] name = "lua_src" so the renamed package remains ABI-
+    compatible with mlua-sys's `use lua_src::...` imports under
+    [patch.crates-io].
+
+Lua itself is copyright © 1994–2024 Lua.org, PUC-Rio, under the MIT
+license. See LICENSE.

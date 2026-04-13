@@ -4,9 +4,6 @@ use std::path::{Path, PathBuf};
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Version {
-    Lua51,
-    Lua52,
-    Lua53,
     Lua54,
 }
 pub use self::Version::*;
@@ -57,9 +54,6 @@ impl Build {
 
         let source_dir_base = Path::new(env!("CARGO_MANIFEST_DIR"));
         let mut source_dir = match version {
-            Lua51 => source_dir_base.join("lua-5.1.5"),
-            Lua52 => source_dir_base.join("lua-5.2.4"),
-            Lua53 => source_dir_base.join("lua-5.3.6"),
             Lua54 => source_dir_base.join("lua-5.4.7"),
         };
 
@@ -89,16 +83,10 @@ impl Build {
                 config.define("LUA_USE_LINUX", None);
             }
             _ if target.contains("apple-darwin") => {
-                match version {
-                    Lua51 => config.define("LUA_USE_LINUX", None),
-                    _ => config.define("LUA_USE_MACOSX", None),
-                };
+                config.define("LUA_USE_MACOSX", None);
             }
             _ if target.contains("apple-ios") => {
-                match version {
-                    Lua54 => config.define("LUA_USE_IOS", None),
-                    _ => config.define("LUA_USE_POSIX", None),
-                };
+                config.define("LUA_USE_IOS", None);
             }
             _ if target.contains("windows") => {
                 // Defined in Lua >= 5.3
@@ -159,9 +147,6 @@ impl Build {
         }
 
         let lib_name = match version {
-            Lua51 => "lua5.1",
-            Lua52 => "lua5.2",
-            Lua53 => "lua5.3",
             Lua54 => "lua5.4",
         };
 
@@ -204,20 +189,6 @@ impl Build {
             .file(source_dir.join("lzio.c"));
 
         match version {
-            Lua51 => {}
-            Lua52 => {
-                config
-                    .file(source_dir.join("lbitlib.c"))
-                    .file(source_dir.join("lcorolib.c"))
-                    .file(source_dir.join("lctype.c"));
-            }
-            Lua53 => {
-                config
-                    .file(source_dir.join("lbitlib.c"))
-                    .file(source_dir.join("lcorolib.c"))
-                    .file(source_dir.join("lctype.c"))
-                    .file(source_dir.join("lutf8lib.c"));
-            }
             Lua54 => {
                 config
                     .file(source_dir.join("lcorolib.c"))

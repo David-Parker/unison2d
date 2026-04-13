@@ -17,6 +17,7 @@ members = [
     "crates/unison-scripting",
     "crates/unison-tests",
     "crates/unison-cli",
+    "crates/unison-lua",
 ]
 
 [workspace.package]
