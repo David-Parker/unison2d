@@ -76,10 +76,10 @@ web-sys = { version = "0.3", features = [
     "console",
 ] }
 
-# Patch lua-src to add wasm32-unknown-unknown build support.
-# The vanilla lua-src rejects this target; our fork adds a minimal C11 build
-# with a bundled libc sysroot (wasm-sysroot/) and uses LLVM clang.
-# Requires: CC_wasm32_unknown_unknown=/opt/homebrew/opt/llvm/bin/clang
-# (set in the root .cargo/config.toml)
+# Patch crates-io's `lua-src` with our fork at crates/unison-lua. The fork
+# adds wasm32-unknown-unknown build support (minimal C11 build with a bundled
+# libc sysroot; requires CC_wasm32_unknown_unknown=/opt/homebrew/opt/llvm/bin/clang
+# from .cargo/config.toml) and is trimmed to Lua 5.4 only. The crate preserves
+# [lib] name = "lua_src" so mlua-sys resolves `use lua_src::...` unchanged.
 [patch.crates-io]
-lua-src = { path = "vendor/lua-src" }
+lua-src = { path = "crates/unison-lua" }
