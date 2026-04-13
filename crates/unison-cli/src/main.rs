@@ -20,6 +20,11 @@ fn main() -> anyhow::Result<()> {
             }, ENGINE_TAG, ENGINE_GIT_URL)
         }
         Command::Doctor => commands::doctor::run(Some(&std::env::current_dir()?)),
+        Command::Build { platform, release, profile } => {
+            commands::build::run(&std::env::current_dir()?, commands::build::BuildArgs {
+                platform, release, profile,
+            })
+        }
         _ => {
             println!("Not yet implemented");
             Ok(())
