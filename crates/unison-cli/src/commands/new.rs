@@ -186,12 +186,20 @@ pub fn render_dir_to(dir: &include_dir::Dir<'_>, dest: &Path, vars: &HashMap<&st
                 if let Some(p) = target.parent() {
                     fs::create_dir_all(p)?;
                 }
-                let content = f.contents_utf8()
-                    .ok_or_else(|| anyhow::anyhow!("non-UTF8 template file: {}", rel.display()))?;
-                let rendered = render(content, vars)
-                    .with_context(|| format!("rendering {}", rel.display()))?;
-                fs::write(&target, rendered)
-                    .with_context(|| format!("writing {}", target.display()))?;
+                // Binary template files (images, fonts, etc.) are copied
+                // verbatim — templating only applies to text files.
+                match f.contents_utf8() {
+                    Some(content) => {
+                        let rendered = render(content, vars)
+                            .with_context(|| format!("rendering {}", rel.display()))?;
+                        fs::write(&target, rendered)
+                            .with_context(|| format!("writing {}", target.display()))?;
+                    }
+                    None => {
+                        fs::write(&target, f.contents())
+                            .with_context(|| format!("writing {}", target.display()))?;
+                    }
+                }
             }
             include_dir::DirEntry::Dir(d) => {
                 let sub_dest = dest.join(d.path());

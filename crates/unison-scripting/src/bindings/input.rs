@@ -10,7 +10,7 @@
 use std::cell::RefCell;
 
 use mlua::prelude::*;
-use unison2d::input::{InputState, KeyCode};
+use unison2d::input::{InputState, KeyCode, MouseButton};
 
 thread_local! {
     /// Snapshot of the input state, refreshed each frame by `ScriptedGame::update`.
@@ -24,6 +24,10 @@ pub struct InputStateSnapshot {
     pub keys_just_pressed: Vec<KeyCode>,
     pub axis: (f32, f32),
     pub touches_began: Vec<(f32, f32)>,
+    pub active_touch: Option<(f32, f32)>,
+    pub mouse_pos: (f32, f32),
+    pub mouse_left_just_pressed: bool,
+    pub mouse_left_pressed: bool,
 }
 
 impl InputStateSnapshot {
@@ -43,12 +47,19 @@ impl InputStateSnapshot {
             .iter()
             .map(|t| (t.position.x, t.position.y))
             .collect();
+        let active_touch = input.active_touches().first()
+            .map(|t| (t.position.x, t.position.y));
+        let mouse_pos_vec = input.mouse_position();
 
         Self {
             keys_pressed,
             keys_just_pressed,
             axis: (axis_vec.x, axis_vec.y),
             touches_began,
+            active_touch,
+            mouse_pos: (mouse_pos_vec.x, mouse_pos_vec.y),
+            mouse_left_just_pressed: input.is_mouse_just_pressed(MouseButton::Left),
+            mouse_left_pressed: input.is_mouse_pressed(MouseButton::Left),
         }
     }
 }
@@ -121,6 +132,60 @@ pub fn register(lua: &Lua) -> LuaResult<()> {
                 table.set(i + 1, t)?;
             }
             Ok(table)
+        })
+    })?)?;
+
+    // input.is_mouse_just_pressed() → bool (left button, this frame)
+    input.set("is_mouse_just_pressed", lua.create_function(|_, ()| {
+        INPUT_STATE.with(|cell| {
+            Ok(cell.borrow().as_ref().is_some_and(|s| s.mouse_left_just_pressed))
+        })
+    })?)?;
+
+    // input.mouse_position() → x, y (screen-space)
+    input.set("mouse_position", lua.create_function(|_, ()| {
+        INPUT_STATE.with(|cell| {
+            Ok(cell.borrow().as_ref().map(|s| s.mouse_pos).unwrap_or((0.0, 0.0)))
+        })
+    })?)?;
+
+    // input.pointer_just_pressed() → x, y or nil, nil
+    // Unified cross-platform "tap/click": returns the position of a touch that
+    // began this frame, OR the mouse position if the primary button was just
+    // pressed. Returns `nil, nil` when neither is active.
+    input.set("pointer_just_pressed", lua.create_function(|_, ()| -> LuaResult<(Option<f32>, Option<f32>)> {
+        INPUT_STATE.with(|cell| {
+            let snap = cell.borrow();
+            let Some(s) = snap.as_ref() else {
+                return Ok((None, None));
+            };
+            if let Some(&(x, y)) = s.touches_began.first() {
+                return Ok((Some(x), Some(y)));
+            }
+            if s.mouse_left_just_pressed {
+                return Ok((Some(s.mouse_pos.0), Some(s.mouse_pos.1)));
+            }
+            Ok((None, None))
+        })
+    })?)?;
+
+    // input.pointer_position() → x, y or nil, nil
+    // "While held" counterpart to `pointer_just_pressed`: returns the position
+    // of an active touch OR the mouse position if the primary button is
+    // currently held. Returns `nil, nil` when no pointer is active.
+    input.set("pointer_position", lua.create_function(|_, ()| -> LuaResult<(Option<f32>, Option<f32>)> {
+        INPUT_STATE.with(|cell| {
+            let snap = cell.borrow();
+            let Some(s) = snap.as_ref() else {
+                return Ok((None, None));
+            };
+            if let Some((x, y)) = s.active_touch {
+                return Ok((Some(x), Some(y)));
+            }
+            if s.mouse_left_pressed {
+                return Ok((Some(s.mouse_pos.0), Some(s.mouse_pos.1)));
+            }
+            Ok((None, None))
         })
     })?)?;
 

@@ -31,4 +31,20 @@ declare const input: {
   axis_y(this: void): number;
   /** Array of new touch-start positions this frame. */
   touches_just_began(this: void): TouchPosition[];
+  /** True on the frame the primary (left) mouse button was first pressed. */
+  is_mouse_just_pressed(this: void): boolean;
+  /** Current mouse position in screen space: `[x, y]`. */
+  mouse_position(this: void): LuaMultiReturn<[number, number]>;
+  /**
+   * Cross-platform tap/click: returns `[x, y]` of a just-began touch, or the
+   * mouse position if the primary button was just pressed. Returns
+   * `[undefined, undefined]` when neither happened this frame.
+   */
+  pointer_just_pressed(this: void): LuaMultiReturn<[number | undefined, number | undefined]>;
+  /**
+   * Cross-platform "pointer is currently held" position: returns `[x, y]` of
+   * an active touch, or the mouse position if the primary button is held.
+   * Returns `[undefined, undefined]` when no pointer is active.
+   */
+  pointer_position(this: void): LuaMultiReturn<[number | undefined, number | undefined]>;
 };

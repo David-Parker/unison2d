@@ -2,6 +2,11 @@
 target = "index.html"
 dist = "dist"
 
+# Watch the project source tree so changes to Lua scripts, shaders, or other
+# embedded assets trigger a rebuild. Paths are relative to this file.
+[watch]
+watch = [".", "../../project"]
+
 [serve]
 address = "127.0.0.1"
 port = 8080

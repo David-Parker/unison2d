@@ -42,6 +42,14 @@ fn new_web_index_html_points_trunk_at_project_root_cargo_toml() {
         "index.html is missing trunk href pointing at project-root Cargo.toml:\n{}",
         index
     );
+    // unison-web::run() hardcodes document.get_element_by_id("canvas") and
+    // panics at runtime if the id doesn't match. The template must use
+    // id="canvas" (not "game-canvas" or anything else).
+    assert!(
+        index.contains("id=\"canvas\""),
+        "index.html is missing <canvas id=\"canvas\"> (unison-web looks up by this exact id):\n{}",
+        index
+    );
 }
 
 #[test]
@@ -71,6 +79,22 @@ fn new_creates_expected_files() {
     let cargo = std::fs::read_to_string(root.join("Cargo.toml")).unwrap();
     assert!(cargo.contains("name = \"test_game\""));
     assert!(!cargo.contains("{{"));
+
+    // The scaffolded main.lua must match the engine's expected shape:
+    // a table with init/update/render methods, returned from the script.
+    // Without `return game`, unison-scripting's `eval()` call gets nil
+    // and the engine renders the error overlay (red bar) at runtime.
+    let main_lua = std::fs::read_to_string(root.join("project/assets/scripts/main.lua")).unwrap();
+    assert!(
+        main_lua.contains("function game.init") && main_lua.contains("function game.render"),
+        "main.lua missing lifecycle methods on `game` table:\n{}",
+        main_lua
+    );
+    assert!(
+        main_lua.trim_end().ends_with("return game"),
+        "main.lua must end with `return game` (unison-scripting expects script to return a table):\n{}",
+        main_lua
+    );
 }
 
 #[test]

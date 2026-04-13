@@ -116,7 +116,7 @@ impl Material {
         area_compliance: 1e-4,
     };
 
-    /// Soft, jiggly material
+    /// Soft, jiggly material — visibly deforms under impact and force.
     pub const JELLO: Self = Self {
         density: 1000.0,
         edge_compliance: 0.0,

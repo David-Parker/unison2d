@@ -23,6 +23,8 @@ platform/ios/SceneDelegate.swift
 platform/ios/g-ios.xcodeproj/project.pbxproj
 platform/web/Trunk.toml
 platform/web/index.html
+project/assets/fonts/DejaVuSans-Bold.ttf
 project/assets/scripts/main.lua
+project/assets/textures/logo.png
 project/lib.rs
 unison.toml

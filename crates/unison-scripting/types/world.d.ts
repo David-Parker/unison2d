@@ -338,6 +338,11 @@ declare interface World {
   camera_add(this: World, name: string, width: number, height: number): void;
   /** Get the current camera center position. Returns [x, y]. */
   camera_get_position(this: World, name: string): Tuple<[number, number]>;
+  /**
+   * Convert a screen-space point (e.g. from `input.pointer_just_pressed()`) to
+   * world-space using the `"main"` camera. Returns [world_x, world_y].
+   */
+  screen_to_world(this: World, screen_x: number, screen_y: number): Tuple<[number, number]>;
 
   // --- Lighting: System Configuration ---
 

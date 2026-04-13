@@ -43,4 +43,18 @@ pub fn add_world_methods<M: LuaUserDataMethods<LuaWorld>>(methods: &mut M) {
             None => Err(LuaError::RuntimeError(format!("camera '{name}' not found"))),
         }
     });
+
+    // world:screen_to_world(screen_x, screen_y) → world_x, world_y
+    //
+    // Converts a screen-space point (e.g., from input.pointer_just_pressed() or
+    // input.mouse_position()) to world-space using the active "main" camera.
+    // Uses the current screen size captured by the engine layer each frame.
+    methods.add_method("screen_to_world", |_, this, (sx, sy): (f32, f32)| {
+        let world = this.0.borrow();
+        let cam = world.cameras.get("main")
+            .ok_or_else(|| LuaError::RuntimeError("main camera not found".into()))?;
+        let (sw, sh) = super::engine::get_screen_size();
+        let (wx, wy) = cam.screen_to_world(sx, sy, sw, sh);
+        Ok((wx, wy))
+    });
 }

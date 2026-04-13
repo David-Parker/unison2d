@@ -442,9 +442,16 @@ pub fn create_rounded_box_mesh(width: f32, height: f32, corner_radius: f32, corn
     Mesh::with_uvs(vertices, triangles, uvs)
 }
 
-/// Create an ellipse mesh with a small hole in the center (like ring topology)
+/// Create a filled ellipse mesh with concentric-ring topology.
 ///
-/// UV mapping: same as ring mesh (u = angle, v = radial position)
+/// Topology: a small inner ring (no center vertex) plus `rings` outer rings.
+/// No vertex sits at the origin, which keeps the interior free to deform under
+/// soft-body constraints — a true fan-from-center would tether every inner
+/// vertex back to the center and behave like a rigid body.
+///
+/// UV mapping: planar (texture maps onto the bounding box like a decal). `v`
+/// is flipped so image row 0 renders at the top of the mesh in world space
+/// (where +y is up).
 pub fn create_ellipse_mesh(
     width: f32,
     height: f32,
@@ -455,27 +462,29 @@ pub fn create_ellipse_mesh(
     let mut uvs = Vec::new();
     let mut triangles = Vec::new();
 
-    // Create rings from inner (small hole) to outer
-    // Inner ring is 20% of size to create deformable center
+    let half_w = width * 0.5;
+    let half_h = height * 0.5;
     let inner_scale = 0.2;
 
+    // Ring vertices (indices 0..segments*(rings+1)).
     for r in 0..=rings {
         let radial_t = r as f32 / rings as f32;
         let t = inner_scale + (1.0 - inner_scale) * radial_t;
-        let rx = width * 0.5 * t;
-        let ry = height * 0.5 * t;
+        let rx = half_w * t;
+        let ry = half_h * t;
 
         for i in 0..segments {
             let angle = (i as f32 / segments as f32) * PI * 2.0;
-            vertices.push(angle.cos() * rx);
-            vertices.push(angle.sin() * ry);
-
-            uvs.push(i as f32 / segments as f32);
-            uvs.push(radial_t);
+            let px = angle.cos() * rx;
+            let py = angle.sin() * ry;
+            vertices.push(px);
+            vertices.push(py);
+            uvs.push((px + half_w) / width);
+            uvs.push(1.0 - (py + half_h) / height);
         }
     }
 
-    // Triangles between rings (same as ring mesh)
+    // Between-ring triangles.
     for r in 0..rings {
         let ring_start = r * segments;
         let next_ring_start = (r + 1) * segments;
@@ -491,6 +500,23 @@ pub fn create_ellipse_mesh(
             triangles.push(next_ring_start + i);
             triangles.push(next_ring_start + next);
         }
+    }
+
+    // Center vertex + fan to the innermost ring to close the hole.
+    // `inner_scale` keeps the innermost ring off-origin so the fan spokes have
+    // non-trivial rest length — otherwise every constraint would be near-zero
+    // and the body behaves rigidly around the origin.
+    let center_idx = (segments * (rings + 1)) as u32;
+    vertices.push(0.0);
+    vertices.push(0.0);
+    uvs.push(0.5);
+    uvs.push(0.5);
+
+    for i in 0..segments {
+        let next = (i + 1) % segments;
+        triangles.push(center_idx);
+        triangles.push(i);
+        triangles.push(next);
     }
 
     Mesh::with_uvs(vertices, triangles, uvs)
@@ -683,10 +709,10 @@ mod tests {
     #[test]
     fn test_ellipse_mesh() {
         let mesh = create_ellipse_mesh(2.0, 1.5, 8, 3);
-        // With hole topology: 8 segments * (3+1) rings = 32 vertices
-        assert_eq!(mesh.vertices.len() / 2, 32);
-        // 8 segments * 3 ring transitions * 2 triangles = 48 triangles
-        assert_eq!(mesh.triangles.len() / 3, 48);
+        // 8 segments * (3+1) rings + 1 center = 33 vertices
+        assert_eq!(mesh.vertices.len() / 2, 33);
+        // 8 segs * 3 transitions * 2 + 8 center-fan = 56 triangles
+        assert_eq!(mesh.triangles.len() / 3, 56);
         // Verify no NaN or infinite values
         for v in &mesh.vertices {
             assert!(v.is_finite(), "Vertex should be finite");
