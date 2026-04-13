@@ -14,15 +14,15 @@ pub fn run_with(cfg: &Config, project_root: &Path, invoker: &dyn Invoker, platfo
     match platform {
         "web" => {
             if !cfg.platforms.web { bail!("web is not enabled in unison.toml"); }
-            if matches!(cfg.project.lang, Lang::Ts) {
-                // Spawn tstl --watch. In the real SystemInvoker this blocks; for v1 we run
-                // it synchronously and rely on trunk serve's own reload for the main loop.
-                // A follow-up can introduce Invoker::spawn() for true parallelism.
+            // Held across the trunk serve lifetime; dropped (killed) when we return.
+            let _tstl_watcher = if matches!(cfg.project.lang, Lang::Ts) {
                 let inv = Invocation::new("npx", project_root)
                     .arg("tstl").arg("-p").arg("project/scripts-src/tsconfig.json").arg("--watch")
                     .streaming();
-                invoker.run(&inv)?;
-            }
+                Some(invoker.spawn(&inv)?)
+            } else {
+                None
+            };
             let inv = Invocation::new("trunk", project_root.join("platform/web")).arg("serve").streaming();
             let out = invoker.run(&inv)?;
             if out.status != 0 { bail!("trunk serve failed (exit {}) — see output above", out.status); }

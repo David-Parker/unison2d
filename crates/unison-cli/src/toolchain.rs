@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Child, Command};
 use std::sync::Mutex;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -60,8 +60,41 @@ pub struct Output {
     pub stderr: String,
 }
 
+/// A background process handle returned by [`Invoker::spawn`]. Dropping the
+/// handle kills the child — callers that want the process to keep running
+/// must hold onto the handle for the lifetime of the parent process.
+pub trait SpawnedProcess: Send {
+    fn kill(&mut self) -> Result<()>;
+}
+
 pub trait Invoker: Send + Sync {
     fn run(&self, inv: &Invocation) -> Result<Output>;
+    /// Launch the command in the background and return a handle to it. The
+    /// `streaming` flag on `Invocation` still controls whether stdout/stderr
+    /// inherit the parent's (useful for `tstl --watch`) or are discarded.
+    fn spawn(&self, inv: &Invocation) -> Result<Box<dyn SpawnedProcess>>;
+}
+
+/// `SpawnedProcess` wrapping a real OS child process. Kills the child on drop.
+pub struct SystemChild {
+    child: Option<Child>,
+}
+
+impl SpawnedProcess for SystemChild {
+    fn kill(&mut self) -> Result<()> {
+        if let Some(mut c) = self.child.take() {
+            // Ignore "already exited" errors.
+            let _ = c.kill();
+            let _ = c.wait();
+        }
+        Ok(())
+    }
+}
+
+impl Drop for SystemChild {
+    fn drop(&mut self) {
+        let _ = self.kill();
+    }
 }
 
 pub struct SystemInvoker;
@@ -92,6 +125,23 @@ impl Invoker for SystemInvoker {
                 stderr: String::from_utf8_lossy(&out.stderr).into_owned(),
             })
         }
+    }
+
+    fn spawn(&self, inv: &Invocation) -> Result<Box<dyn SpawnedProcess>> {
+        let mut cmd = Command::new(&inv.program);
+        cmd.args(&inv.args).current_dir(&inv.cwd);
+        for (k, v) in &inv.env {
+            cmd.env(k, v);
+        }
+        if !inv.streaming {
+            // Background processes that aren't streaming get their stdio silenced
+            // so they don't interleave with the foreground command's output.
+            cmd.stdout(std::process::Stdio::null());
+            cmd.stderr(std::process::Stdio::null());
+        }
+        let child = cmd.spawn()
+            .with_context(|| format!("spawning {} {:?}", inv.program, inv.args))?;
+        Ok(Box::new(SystemChild { child: Some(child) }))
     }
 }
 
@@ -127,6 +177,17 @@ impl Invoker for MockInvoker {
         self.invocations.lock().unwrap().push(inv.clone());
         Ok(self.default_output.clone())
     }
+
+    fn spawn(&self, inv: &Invocation) -> Result<Box<dyn SpawnedProcess>> {
+        self.invocations.lock().unwrap().push(inv.clone());
+        Ok(Box::new(NoopSpawned))
+    }
+}
+
+/// No-op spawned process for MockInvoker — kill/drop are free.
+struct NoopSpawned;
+impl SpawnedProcess for NoopSpawned {
+    fn kill(&mut self) -> Result<()> { Ok(()) }
 }
 
 #[cfg(test)]
