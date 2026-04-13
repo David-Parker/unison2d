@@ -56,6 +56,7 @@ Each crate has a per-crate deep dive in `docs/api/`. Read the relevant doc befor
 | `unison-android` | [android.md](docs/api/android.md) | Android platform (GLES 3.0 renderer, touch input, JNI frame loop) |
 | `unison-profiler` | [profiler.md](docs/api/profiler.md) | Function-level profiling |
 | `unison-scripting` | [scripting.md](docs/api/scripting.md) | Lua 5.4 scripting — ScriptedGame implementing Game trait |
+| `unison-lua` | [../crates/unison-lua/README.md](crates/unison-lua/README.md) | Lua 5.4 interpreter fork (wasm32 support, substituted for `lua-src` via `[patch.crates-io]`) |
 | `unison-cli` | [../crates/unison-cli/README.md](crates/unison-cli/README.md) | `unison` CLI — scaffold, build, dev, test, link, doctor |
 | `unison-tests` | — | Headless e2e / simulation tests (physics, rendering, etc.) |
 
@@ -74,7 +75,8 @@ docs/
     │   └── typescript.md     # TypeScript setup + tutorial
     ├── concepts.md           # Language-neutral: lifecycle, scenes, events
     ├── api-reference.md      # All globals — Lua + TS side-by-side
-    └── hot-reload.md         # Hot reload for both languages
+    ├── hot-reload.md         # Hot reload for both languages
+    └── rationale.md          # Why Lua 5.4, why no LuaJIT, why fork lua-src, why keep mlua
 ```
 
 **How to navigate:**

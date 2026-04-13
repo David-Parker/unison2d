@@ -499,9 +499,9 @@ Compiling for `wasm32-unknown-unknown` requires LLVM clang (Apple Clang lacks th
 brew install llvm
 ```
 
-The `CC_wasm32_unknown_unknown` env var is pre-configured in the root `.cargo/config.toml`. A patched `lua-src` (at `vendor/lua-src/`) adds `wasm32` build support and includes a minimal libc sysroot (`vendor/lua-src/wasm-sysroot/`).
+The `CC_wasm32_unknown_unknown` env var is pre-configured in the root `.cargo/config.toml`. The `unison-lua` workspace crate (at `crates/unison-lua/`, substituted for `lua-src` via `[patch.crates-io]`) adds `wasm32` build support and includes a minimal libc sysroot (`crates/unison-lua/wasm-sysroot/`). See [scripting/rationale.md](../scripting/rationale.md) for why the fork exists.
 
-Lua's `setjmp`/`longjmp` error handling is replaced with a JS exception bridge (`wasm_lua_throw` / `wasm_protected_call` in `project/wasm_libc.rs`), patched in `vendor/lua-src/lua-5.4.7/ldo.c`.
+Lua's `setjmp`/`longjmp` error handling is replaced with a JS exception bridge (`wasm_lua_throw` / `wasm_protected_call` in `project/wasm_libc.rs`), patched in `crates/unison-lua/lua-5.4.7/ldo.c`.
 
 ## Script Loading
 
