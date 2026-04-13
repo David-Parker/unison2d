@@ -4,3 +4,4 @@ pub mod doctor;
 pub mod link;
 pub mod new;
 pub mod platform;
+pub mod test;

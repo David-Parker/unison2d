@@ -32,6 +32,7 @@ fn main() -> anyhow::Result<()> {
             PlatformAction::Add { name } => commands::platform::add(&std::env::current_dir()?, &name),
             PlatformAction::Remove { name } => commands::platform::remove(&std::env::current_dir()?, &name),
         },
+        Command::Test => commands::test::run(&std::env::current_dir()?),
         _ => {
             println!("Not yet implemented");
             Ok(())
