@@ -21,6 +21,30 @@ fn new_ts_lang_creates_ts_layout() {
 }
 
 #[test]
+fn new_web_index_html_points_trunk_at_project_root_cargo_toml() {
+    // Regression test: the scaffolded platform/web/index.html must tell trunk
+    // where Cargo.toml lives. Without `href="../../Cargo.toml"` on the
+    // `<link data-trunk rel="rust">` tag, trunk looks for Cargo.toml inside
+    // platform/web/ and fails immediately with
+    // `manifest path '.../platform/web/Cargo.toml' does not exist`.
+    let dir = tempdir().unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_unison"))
+        .args(["new", "web-href-test", "--no-ios", "--no-android", "--no-git"])
+        .current_dir(dir.path())
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    let index = std::fs::read_to_string(
+        dir.path().join("web-href-test/platform/web/index.html"),
+    ).unwrap();
+    assert!(
+        index.contains("href=\"../../Cargo.toml\""),
+        "index.html is missing trunk href pointing at project-root Cargo.toml:\n{}",
+        index
+    );
+}
+
+#[test]
 fn new_creates_expected_files() {
     let dir = tempdir().unwrap();
     let out = Command::new(env!("CARGO_BIN_EXE_unison"))
