@@ -113,6 +113,7 @@ pub fn run(args: NewArgs, engine_tag_default: &str, engine_git_url: &str) -> Res
     if !args.no_git {
         let _ = std::process::Command::new("git")
             .arg("init")
+            .arg("--initial-branch=main")
             .current_dir(&dest)
             .status();
     }

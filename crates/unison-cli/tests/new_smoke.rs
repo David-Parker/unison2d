@@ -85,6 +85,24 @@ fn new_creates_ios_files() {
 }
 
 #[test]
+fn new_git_init_uses_main_branch() {
+    let dir = tempdir().unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_unison"))
+        .args(["new", "main-branch-test", "--no-ios", "--no-android"])
+        .current_dir(dir.path())
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    let root = dir.path().join("main-branch-test");
+    let head = std::fs::read_to_string(root.join(".git/HEAD")).unwrap();
+    assert!(
+        head.trim() == "ref: refs/heads/main",
+        "expected HEAD to point at main, got: {:?}",
+        head
+    );
+}
+
+#[test]
 fn new_creates_android_files() {
     let dir = tempdir().unwrap();
     let out = Command::new(env!("CARGO_BIN_EXE_unison"))
