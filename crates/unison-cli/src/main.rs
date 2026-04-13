@@ -25,6 +25,7 @@ fn main() -> anyhow::Result<()> {
                 platform, release, profile,
             })
         }
+        Command::Dev { platform } => commands::dev::run(&std::env::current_dir()?, &platform),
         _ => {
             println!("Not yet implemented");
             Ok(())
