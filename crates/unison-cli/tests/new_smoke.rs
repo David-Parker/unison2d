@@ -64,3 +64,23 @@ fn new_creates_ios_files() {
     assert!(info.contains("com.example.ios_test"));
     assert!(!info.contains("{{"));
 }
+
+#[test]
+fn new_creates_android_files() {
+    let dir = tempdir().unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_unison"))
+        .args(["new", "android-test", "--no-ios", "--no-git"])
+        .current_dir(dir.path())
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    let root = dir.path().join("android-test");
+    assert!(root.join("platform/android/settings.gradle.kts").exists());
+    assert!(root.join("platform/android/app/src/main/AndroidManifest.xml").exists());
+    assert!(root.join("platform/android/app/src/main/java/com/example/android_test/MainActivity.kt").exists());
+    assert!(root.join("platform/android/build-rust.sh").exists());
+
+    let manifest = std::fs::read_to_string(root.join("platform/android/app/src/main/AndroidManifest.xml")).unwrap();
+    assert!(manifest.contains("android-test"));
+    assert!(!manifest.contains("{{"));
+}

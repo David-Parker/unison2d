@@ -4,6 +4,7 @@ pub static COMMON: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/templates/common"
 pub static SCRIPTING_LUA: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/templates/scripting-lua");
 pub static PLATFORM_WEB: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/templates/platform-web");
 pub static PLATFORM_IOS: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/templates/platform-ios");
+pub static PLATFORM_ANDROID: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/templates/platform-android");
 
 #[cfg(test)]
 mod tests {
@@ -33,5 +34,12 @@ mod tests {
         assert!(PLATFORM_IOS.get_file("AppDelegate.swift").is_some());
         assert!(PLATFORM_IOS.get_file("Info.plist").is_some());
         assert!(PLATFORM_IOS.get_file("Base.lproj/Main.storyboard").is_some());
+    }
+
+    #[test]
+    fn platform_android_contains_core_files() {
+        assert!(PLATFORM_ANDROID.get_file("settings.gradle.kts").is_some());
+        assert!(PLATFORM_ANDROID.get_file("app/src/main/AndroidManifest.xml").is_some());
+        assert!(PLATFORM_ANDROID.get_file("build-rust.sh").is_some());
     }
 }

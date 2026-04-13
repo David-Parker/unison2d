@@ -68,7 +68,19 @@ pub fn run(args: NewArgs, engine_tag_default: &str, engine_git_url: &str) -> Res
     if platforms.ios {
         render_dir_to(&templates::PLATFORM_IOS, &dest.join("platform/ios"), &vars)?;
     }
-    // Android template: Task 9.
+    if platforms.android {
+        render_dir_to(&templates::PLATFORM_ANDROID, &dest.join("platform/android"), &vars)?;
+        // Make build-rust.sh executable.
+        #[cfg(unix)] {
+            use std::os::unix::fs::PermissionsExt;
+            let p = dest.join("platform/android/build-rust.sh");
+            if let Ok(md) = fs::metadata(&p) {
+                let mut perm = md.permissions();
+                perm.set_mode(0o755);
+                let _ = fs::set_permissions(&p, perm);
+            }
+        }
+    }
 
     // Write unison.toml
     let cfg = Config {
@@ -123,11 +135,14 @@ fn render_dir(dir: &include_dir::Dir<'_>, dest: &Path, vars: &HashMap<&str, &str
 }
 
 fn render_path_component(s: &str, vars: &HashMap<&str, &str>) -> String {
-    // Filenames support {{PROJECT_NAME}} via the literal substring "PROJECT_NAME"
-    // in path segments (e.g. "PROJECT_NAME-ios.xcodeproj"). Keep this simple — it
-    // covers the only case we need (iOS xcodeproj directory naming).
+    // Filenames support substitution via literal substrings in path segments.
+    // KOTLIN_PACKAGE_PATH expands to e.g. "com/example/my_game" (dots → slashes),
+    // which means one original component becomes multiple path components joined by '/'.
     let project_name = vars.get("PROJECT_NAME").copied().unwrap_or("");
+    let kotlin_pkg = vars.get("KOTLIN_PACKAGE").copied().unwrap_or("");
+    let kotlin_path = kotlin_pkg.replace('.', "/");
     s.replace("PROJECT_NAME", project_name)
+     .replace("KOTLIN_PACKAGE_PATH", &kotlin_path)
 }
 
 fn render_dir_to(dir: &include_dir::Dir<'_>, dest: &Path, vars: &HashMap<&str, &str>) -> Result<()> {
