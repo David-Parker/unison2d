@@ -8,7 +8,6 @@
 
 /* Begin PBXBuildFile section */
 		631F83532F7441D4003D446A /* UnisoniOS in Frameworks */ = {isa = PBXBuildFile; productRef = 63BF83102F737A000070E5E8 /* UnisoniOS */; };
-		631F83692F7442A9003D446A /* UnisoniOS in Frameworks */ = {isa = PBXBuildFile; productRef = 631F83682F7442A9003D446A /* UnisoniOS */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -43,7 +42,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				631F83692F7442A9003D446A /* UnisoniOS in Frameworks */,
 				631F83532F7441D4003D446A /* UnisoniOS in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -94,7 +92,6 @@
 			name = "{{PROJECT_NAME}}-ios";
 			packageProductDependencies = (
 				63BF83102F737A000070E5E8 /* UnisoniOS */,
-				631F83682F7442A9003D446A /* UnisoniOS */,
 			);
 			productName = "{{PROJECT_NAME}}-ios";
 			productReference = 63BF82DC2F736C530070E5E8 /* {{PROJECT_NAME}}-ios.app */;
@@ -166,7 +163,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/bash;
-			shellScript = "# Build Rust {{PROJECT_NAME}} for iOS\nset -e\n\n# Source cargo environment (supports both rustup and Homebrew installations)\nif [ -f \"$HOME/.cargo/env\" ]; then\n    source \"$HOME/.cargo/env\"\nfi\n\n# Also check Homebrew path and common Node.js locations\nexport PATH=\"/opt/homebrew/bin:$HOME/.nvm/versions/node/$(ls $HOME/.nvm/versions/node 2>/dev/null | tail -1)/bin:/usr/local/bin:$PATH\"\n\n# SRCROOT is platform/ios/, project root is two levels up\nPROJECT_ROOT=\"$SRCROOT/../..\"\ncd \"$PROJECT_ROOT\"\n\n# Transpile TypeScript to Lua (must run before cargo embeds assets)\nif command -v npx &> /dev/null; then\n    npx tstl -p project/scripts-src/tsconfig.json\nelse\n    echo \"warning: npx not found — skipping TypeScript transpilation\"\nfi\n\n# Detect target: device vs simulator\nif [ \"$PLATFORM_NAME\" = \"iphonesimulator\" ]; then\n    RUST_TARGET=\"aarch64-apple-ios-sim\"\nelse\n    RUST_TARGET=\"aarch64-apple-ios\"\nfi\n\n# Use debug for Debug builds, release for Release\nif [ \"$CONFIGURATION\" = \"Debug\" ]; then\n    RUST_PROFILE=\"debug\"\n    CARGO_FLAGS=\"\"\nelse\n    RUST_PROFILE=\"release\"\n    CARGO_FLAGS=\"--release\"\nfi\n\ncargo build --target \"$RUST_TARGET\" --features ios,profiling --no-default-features $CARGO_FLAGS\n\n# Copy the static library to where Xcode can find it\nRUST_LIB=\"$PROJECT_ROOT/target/$RUST_TARGET/$RUST_PROFILE/lib{{CRATE_NAME}}.a\"\nmkdir -p \"$SRCROOT/libs\"\ncp \"$RUST_LIB\" \"$SRCROOT/libs/lib{{CRATE_NAME}}.a\"\n";
+			shellScript = "# Build Rust {{PROJECT_NAME}} for iOS\nset -e\n\n# Source cargo environment (supports both rustup and Homebrew installations)\nif [ -f \"$HOME/.cargo/env\" ]; then\n    source \"$HOME/.cargo/env\"\nfi\n\n# Also check Homebrew path and common Node.js locations\nexport PATH=\"/opt/homebrew/bin:$HOME/.nvm/versions/node/$(ls $HOME/.nvm/versions/node 2>/dev/null | tail -1)/bin:/usr/local/bin:$PATH\"\n\n# SRCROOT is platform/ios/, project root is two levels up\nPROJECT_ROOT=\"$SRCROOT/../..\"\ncd \"$PROJECT_ROOT\"\n\n# Transpile TypeScript to Lua (must run before cargo embeds assets)\nif [ -f \"project/scripts-src/tsconfig.json\" ]; then\n    if command -v npx &> /dev/null; then\n        npx tstl -p project/scripts-src/tsconfig.json\n    else\n        echo \"warning: npx not found — skipping TypeScript transpilation\"\n    fi\nfi\n\n# Detect target: device vs simulator\nif [ \"$PLATFORM_NAME\" = \"iphonesimulator\" ]; then\n    RUST_TARGET=\"aarch64-apple-ios-sim\"\nelse\n    RUST_TARGET=\"aarch64-apple-ios\"\nfi\n\n# Use debug for Debug builds, release for Release\nif [ \"$CONFIGURATION\" = \"Debug\" ]; then\n    RUST_PROFILE=\"debug\"\n    CARGO_FLAGS=\"\"\nelse\n    RUST_PROFILE=\"release\"\n    CARGO_FLAGS=\"--release\"\nfi\n\ncargo build --target \"$RUST_TARGET\" --features ios,profiling --no-default-features $CARGO_FLAGS\n\n# Copy the static library to where Xcode can find it\nRUST_LIB=\"$PROJECT_ROOT/target/$RUST_TARGET/$RUST_PROFILE/lib{{CRATE_NAME}}.a\"\nmkdir -p \"$SRCROOT/libs\"\ncp \"$RUST_LIB\" \"$SRCROOT/libs/lib{{CRATE_NAME}}.a\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -416,18 +413,13 @@
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "{{ENGINE_GIT_URL}}";
 			requirement = {
-				kind = revision;
-				revision = {{ENGINE_TAG}};
+				kind = exactVersion;
+				version = {{ENGINE_VERSION}};
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		631F83682F7442A9003D446A /* UnisoniOS */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 631F83672F7442A9003D446A /* XCRemoteSwiftPackageReference "{{ENGINE_GIT_URL}}" */;
-			productName = UnisoniOS;
-		};
 		63BF83102F737A000070E5E8 /* UnisoniOS */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 631F83672F7442A9003D446A /* XCRemoteSwiftPackageReference "{{ENGINE_GIT_URL}}" */;

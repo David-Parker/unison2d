@@ -44,8 +44,15 @@ open class GameViewController: UIViewController {
         self.mtkView = mtkView
 
         view.isMultipleTouchEnabled = true
+    }
 
-        // Virtual joystick overlay (bottom-left)
+    /// Install the built-in virtual joystick overlay (bottom-left). Call from
+    /// a subclass's `viewDidLoad` (after `super.viewDidLoad()`) when the game
+    /// wants the default joystick UI. Not installed by default — games that
+    /// handle touch input directly (e.g. via `input.pointer_position`) don't
+    /// need it and shouldn't pay for the overlay.
+    open func installJoystick() {
+        guard let renderer = renderer else { return }
         let size = JoystickView.defaultSize
         let joystick = JoystickView()
         joystick.gameState = renderer.gameState

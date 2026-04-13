@@ -23,6 +23,9 @@ fn build_ios_invokes_xcodebuild_debug() {
         "-project", "platform/ios/g-ios.xcodeproj",
         "-scheme", "g-ios",
         "-configuration", "Debug",
+        "-destination", "generic/platform=iOS Simulator",
+        "ARCHS=arm64",
+        "ONLY_ACTIVE_ARCH=YES",
         "build",
     ]);
 }

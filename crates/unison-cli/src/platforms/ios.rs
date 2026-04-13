@@ -18,6 +18,13 @@ pub fn build(project_root: &Path, invoker: &dyn Invoker, args: IosBuildArgs) -> 
         .arg("-project").arg(&xcodeproj)
         .arg("-scheme").arg(&scheme)
         .arg("-configuration").arg(configuration)
+        // Without an explicit destination, recent Xcodes pick "My Mac" and
+        // fail when the macOS version is newer than Xcode supports. Pin the
+        // simulator build to arm64 — the Rust build-phase script only ships
+        // `aarch64-apple-ios-sim`, so letting Xcode link x86_64 would fail.
+        .arg("-destination").arg("generic/platform=iOS Simulator")
+        .arg("ARCHS=arm64")
+        .arg("ONLY_ACTIVE_ARCH=YES")
         .arg("build");
     if args.profile {
         inv = inv.env("UNISON_PROFILING", "1");
