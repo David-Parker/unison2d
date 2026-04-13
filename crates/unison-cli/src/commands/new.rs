@@ -158,7 +158,7 @@ fn render_path_component(s: &str, vars: &HashMap<&str, &str>) -> String {
      .replace("KOTLIN_PACKAGE_PATH", &kotlin_path)
 }
 
-fn render_dir_to(dir: &include_dir::Dir<'_>, dest: &Path, vars: &HashMap<&str, &str>) -> Result<()> {
+pub fn render_dir_to(dir: &include_dir::Dir<'_>, dest: &Path, vars: &HashMap<&str, &str>) -> Result<()> {
     for entry in dir.entries() {
         match entry {
             include_dir::DirEntry::File(f) => {

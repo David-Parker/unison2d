@@ -1,7 +1,7 @@
 mod cli;
 
 use clap::Parser;
-use cli::{Cli, Command};
+use cli::{Cli, Command, PlatformAction};
 use unison_cli::commands;
 
 pub const ENGINE_TAG: &str = concat!("v", env!("CARGO_PKG_VERSION"));
@@ -28,6 +28,10 @@ fn main() -> anyhow::Result<()> {
         Command::Dev { platform } => commands::dev::run(&std::env::current_dir()?, &platform),
         Command::Link { path } => commands::link::link(&std::env::current_dir()?, &path),
         Command::Unlink => commands::link::unlink(&std::env::current_dir()?),
+        Command::Platform { action } => match action {
+            PlatformAction::Add { name } => commands::platform::add(&std::env::current_dir()?, &name),
+            PlatformAction::Remove { name } => commands::platform::remove(&std::env::current_dir()?, &name),
+        },
         _ => {
             println!("Not yet implemented");
             Ok(())
