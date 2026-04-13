@@ -25,7 +25,11 @@ fn main() -> anyhow::Result<()> {
                 platform, release, profile,
             })
         }
-        Command::Dev { platform } => commands::dev::run(&std::env::current_dir()?, &platform),
+        Command::Dev { platform, release, profile } => {
+            commands::dev::run(&std::env::current_dir()?, commands::dev::DevArgs {
+                platform, release, profile,
+            })
+        }
         Command::Link { path } => commands::link::link(&std::env::current_dir()?, &path),
         Command::Unlink => commands::link::unlink(&std::env::current_dir()?),
         Command::Platform { action } => match action {

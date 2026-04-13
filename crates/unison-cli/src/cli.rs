@@ -50,6 +50,12 @@ pub enum Command {
     Dev {
         /// Target platform: `web`, `ios`, or `android`.
         platform: String,
+        /// Serve a release (optimized) build instead of debug.
+        #[arg(long)]
+        release: bool,
+        /// Enable the `unison-scripting/profiling` feature flag for profiler output.
+        #[arg(long)]
+        profile: bool,
     },
     /// Build for one or all platforms.
     ///
