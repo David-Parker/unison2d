@@ -2,6 +2,7 @@ use anyhow::{bail, Result};
 use std::path::Path;
 
 use crate::config::{Config, Lang};
+use crate::platforms;
 use crate::toolchain::{Invocation, Invoker, SystemInvoker};
 
 pub struct DevArgs {
@@ -22,6 +23,7 @@ pub fn run_with(cfg: &Config, project_root: &Path, invoker: &dyn Invoker, args: 
             if !cfg.platforms.web { bail!("web is not enabled in unison.toml"); }
             // Held across the trunk serve lifetime; dropped (killed) when we return.
             let _tstl_watcher = if matches!(cfg.project.lang, Lang::Ts) {
+                platforms::ensure_npm_deps(project_root, invoker)?;
                 let inv = Invocation::new("npx", project_root)
                     .arg("tstl").arg("-p").arg("project/scripts-src/tsconfig.json").arg("--watch")
                     .streaming();
