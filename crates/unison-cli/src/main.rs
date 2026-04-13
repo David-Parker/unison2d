@@ -26,6 +26,8 @@ fn main() -> anyhow::Result<()> {
             })
         }
         Command::Dev { platform } => commands::dev::run(&std::env::current_dir()?, &platform),
+        Command::Link { path } => commands::link::link(&std::env::current_dir()?, &path),
+        Command::Unlink => commands::link::unlink(&std::env::current_dir()?),
         _ => {
             println!("Not yet implemented");
             Ok(())
