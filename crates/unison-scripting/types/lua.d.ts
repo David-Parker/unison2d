@@ -16,3 +16,6 @@ declare function require(modname: string): any;
 
 /** Alias for LuaMultiReturn — a Lua function returning multiple values. */
 type Tuple<T extends any[]> = LuaMultiReturn<T>;
+
+/** Lua's built-in `print` — writes values to stdout, separated by tabs. */
+declare function print(...values: any[]): void;

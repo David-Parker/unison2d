@@ -66,6 +66,15 @@ pub fn run(args: NewArgs, engine_tag_default: &str, engine_git_url: &str) -> Res
         Lang::Lua => render_dir(&templates::SCRIPTING_LUA, &dest, &vars)?,
         Lang::Ts => {
             render_dir_to(&templates::SCRIPTING_TS, &dest, &vars)?;
+            // Copy engine type declarations so the TS compiler can resolve
+            // `engine`, `input`, `World`, etc. Rendered into a types/ subtree
+            // of the scripts-src dir, where the tsconfig include glob picks
+            // them up.
+            render_dir_to(
+                &templates::ENGINE_TYPES,
+                &dest.join("project/scripts-src/types/unison2d"),
+                &vars,
+            )?;
             // Append TS-specific .gitignore rules to the common .gitignore.
             if let Some(addon) = templates::SCRIPTING_TS.get_file(".gitignore-ts-addon") {
                 let current = fs::read_to_string(dest.join(".gitignore")).unwrap_or_default();

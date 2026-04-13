@@ -7,6 +7,12 @@ pub static PLATFORM_WEB: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/templates/p
 pub static PLATFORM_IOS: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/templates/platform-ios");
 pub static PLATFORM_ANDROID: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/templates/platform-android");
 
+/// Engine-side TypeScript type declarations. Copied into each scaffolded TS
+/// project under `project/scripts-src/types/unison2d/` so the TS compiler can
+/// resolve globals like `engine`, `input`, `World`, etc. Pinned to whatever
+/// engine version the CLI was built against.
+pub static ENGINE_TYPES: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/../unison-scripting/types");
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -50,5 +56,13 @@ mod tests {
         assert!(PLATFORM_ANDROID.get_file("settings.gradle.kts").is_some());
         assert!(PLATFORM_ANDROID.get_file("app/src/main/AndroidManifest.xml").is_some());
         assert!(PLATFORM_ANDROID.get_file("build-rust.sh").is_some());
+    }
+
+    #[test]
+    fn engine_types_contains_globals() {
+        assert!(ENGINE_TYPES.get_file("game.d.ts").is_some());
+        assert!(ENGINE_TYPES.get_file("engine.d.ts").is_some());
+        assert!(ENGINE_TYPES.get_file("input.d.ts").is_some());
+        assert!(ENGINE_TYPES.get_file("index.d.ts").is_some());
     }
 }

@@ -2,20 +2,26 @@
   "compilerOptions": {
     "target": "ESNext",
     "lib": ["ESNext"],
+    "module": "commonjs",
     "moduleResolution": "node",
     "rootDir": ".",
-    "outDir": "../../assets/scripts",
+    "outDir": "../assets/scripts",
     "strict": true,
     "esModuleInterop": true,
     "noEmitOnError": true,
-    "types": ["@typescript-to-lua/language-extensions"]
+    "types": []
   },
   "tstl": {
     "luaTarget": "5.4",
     "luaLibImport": "require",
-    "luaBundle": "../../assets/scripts/main.lua",
+    "luaBundle": "main.lua",
     "luaBundleEntry": "main.ts",
+    "noImplicitSelf": true,
     "sourceMapTraceback": true
   },
-  "include": ["**/*.ts"]
+  "include": [
+    "**/*.ts",
+    "types/**/*.d.ts",
+    "../../node_modules/@typescript-to-lua/language-extensions/index.d.ts"
+  ]
 }
