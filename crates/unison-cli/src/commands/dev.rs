@@ -19,12 +19,13 @@ pub fn run_with(cfg: &Config, project_root: &Path, invoker: &dyn Invoker, platfo
                 // it synchronously and rely on trunk serve's own reload for the main loop.
                 // A follow-up can introduce Invoker::spawn() for true parallelism.
                 let inv = Invocation::new("npx", project_root)
-                    .arg("tstl").arg("-p").arg("project/scripts-src/tsconfig.json").arg("--watch");
+                    .arg("tstl").arg("-p").arg("project/scripts-src/tsconfig.json").arg("--watch")
+                    .streaming();
                 invoker.run(&inv)?;
             }
-            let inv = Invocation::new("trunk", project_root.join("platform/web")).arg("serve");
+            let inv = Invocation::new("trunk", project_root.join("platform/web")).arg("serve").streaming();
             let out = invoker.run(&inv)?;
-            if out.status != 0 { bail!("trunk serve failed:\n{}", out.stderr); }
+            if out.status != 0 { bail!("trunk serve failed (exit {}) — see output above", out.status); }
         }
         "ios" => {
             println!("Open platform/ios/{}-ios.xcodeproj in Xcode.", cfg.project.name);

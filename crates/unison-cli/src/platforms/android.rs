@@ -15,9 +15,9 @@ pub fn build(project_root: &Path, invoker: &dyn Invoker, args: AndroidBuildArgs)
     if args.profile {
         inv = inv.arg("-Pprofile=true");
     }
-    let out = invoker.run(&inv)?;
+    let out = invoker.run(&inv.streaming())?;
     if out.status != 0 {
-        anyhow::bail!("gradle failed:\n{}", out.stderr);
+        anyhow::bail!("gradle failed (exit {}) — see output above", out.status);
     }
     Ok(())
 }

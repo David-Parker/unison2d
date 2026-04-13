@@ -12,10 +12,11 @@ pub fn run_tstl(project_root: &Path, invoker: &dyn Invoker) -> Result<()> {
     let inv = Invocation::new("npx", project_root)
         .arg("tstl")
         .arg("-p")
-        .arg("project/scripts-src/tsconfig.json");
+        .arg("project/scripts-src/tsconfig.json")
+        .streaming();
     let out = invoker.run(&inv)?;
     if out.status != 0 {
-        anyhow::bail!("tstl failed:\n{}", out.stderr);
+        anyhow::bail!("tstl failed (exit {}) — see output above", out.status);
     }
     Ok(())
 }

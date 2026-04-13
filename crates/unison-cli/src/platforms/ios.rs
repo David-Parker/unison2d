@@ -22,9 +22,9 @@ pub fn build(project_root: &Path, invoker: &dyn Invoker, args: IosBuildArgs) -> 
     if args.profile {
         inv = inv.env("UNISON_PROFILING", "1");
     }
-    let out = invoker.run(&inv)?;
+    let out = invoker.run(&inv.streaming())?;
     if out.status != 0 {
-        anyhow::bail!("xcodebuild failed:\n{}", out.stderr);
+        anyhow::bail!("xcodebuild failed (exit {}) — see output above", out.status);
     }
     Ok(())
 }

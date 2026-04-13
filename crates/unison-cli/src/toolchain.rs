@@ -9,6 +9,11 @@ pub struct Invocation {
     pub args: Vec<String>,
     pub cwd: PathBuf,
     pub env: Vec<(String, String)>,
+    /// When true, `SystemInvoker` inherits the parent process's stdout/stderr so
+    /// the child's output streams live to the terminal. `Output::stdout` and
+    /// `Output::stderr` are then empty. Use this for long-running build tools
+    /// (trunk, xcodebuild, gradle, tstl) where real-time progress matters.
+    pub streaming: bool,
 }
 
 impl Invocation {
@@ -18,6 +23,7 @@ impl Invocation {
             args: Vec::new(),
             cwd: cwd.as_ref().to_path_buf(),
             env: Vec::new(),
+            streaming: false,
         }
     }
     pub fn arg(mut self, a: impl Into<String>) -> Self {
@@ -36,6 +42,13 @@ impl Invocation {
     }
     pub fn env(mut self, k: impl Into<String>, v: impl Into<String>) -> Self {
         self.env.push((k.into(), v.into()));
+        self
+    }
+    /// Inherit the parent process's stdout/stderr instead of capturing them.
+    /// Output fields will be empty after the call — rely on terminal output
+    /// for diagnostics. Use for long-running build tools.
+    pub fn streaming(mut self) -> Self {
+        self.streaming = true;
         self
     }
 }
@@ -60,13 +73,25 @@ impl Invoker for SystemInvoker {
         for (k, v) in &inv.env {
             cmd.env(k, v);
         }
-        let out = cmd.output()
-            .with_context(|| format!("running {} {:?}", inv.program, inv.args))?;
-        Ok(Output {
-            status: out.status.code().unwrap_or(-1),
-            stdout: String::from_utf8_lossy(&out.stdout).into_owned(),
-            stderr: String::from_utf8_lossy(&out.stderr).into_owned(),
-        })
+        if inv.streaming {
+            // Inherit the parent's stdout/stderr so the child streams live to the
+            // terminal. Good for trunk/xcodebuild/gradle/tstl where progress matters.
+            let status = cmd.status()
+                .with_context(|| format!("running {} {:?}", inv.program, inv.args))?;
+            Ok(Output {
+                status: status.code().unwrap_or(-1),
+                stdout: String::new(),
+                stderr: String::new(),
+            })
+        } else {
+            let out = cmd.output()
+                .with_context(|| format!("running {} {:?}", inv.program, inv.args))?;
+            Ok(Output {
+                status: out.status.code().unwrap_or(-1),
+                stdout: String::from_utf8_lossy(&out.stdout).into_owned(),
+                stderr: String::from_utf8_lossy(&out.stderr).into_owned(),
+            })
+        }
     }
 }
 
