@@ -1,19 +1,13 @@
-//! Engine bindings — texture loading, screen size, anti-aliasing.
+//! Thread-local engine state — bridge between the Lua VM and the Rust engine.
 //!
-//! Also manages the thread-local state needed to bridge Lua calls with the
-//! Engine/Renderer, which are only available during `ScriptedGame`'s trait
-//! method calls.
-//!
-//! ```lua
-//! local tex = engine.load_texture("textures/donut-pink.png")
-//! local w, h = engine.screen_size()
-//! engine.set_anti_aliasing("msaa8x")
-//! ```
+//! This module is **internal only** — it has no Lua registration. It contains
+//! the thread-locals that let Lua closures call engine methods synchronously
+//! during `ScriptedGame` lifecycle calls, plus public helpers that other
+//! binding modules use.
 
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use mlua::prelude::*;
 use unison2d::render::Color;
 use unison2d::{Engine, World};
 
@@ -74,6 +68,16 @@ pub fn take_aa_request() -> Option<String> {
     AA_REQUEST.with(|cell| cell.borrow_mut().take())
 }
 
+pub fn set_aa_request(mode: String) {
+    AA_REQUEST.with(|cell| {
+        *cell.borrow_mut() = Some(mode);
+    });
+}
+
+pub fn get_aa_mode() -> Option<String> {
+    AA_REQUEST.with(|cell| cell.borrow().clone())
+}
+
 /// Call a closure with a mutable reference to the engine, if the pointer is set.
 /// Returns `None` when the engine pointer is not live.
 ///
@@ -116,59 +120,8 @@ pub fn set_engine_ptr(engine: &mut Engine) -> EngineGuard {
 }
 
 /// Explicitly clear the engine pointer without needing the guard.
-/// Used by [`crate::bindings::engine::reset()`].
 pub fn clear_engine_ptr() {
     ENGINE_PTR.with(|c| c.set(None));
-}
-
-// ===================================================================
-// Lua registration
-// ===================================================================
-
-/// Register the `engine` global table.
-pub fn register(lua: &Lua) -> LuaResult<()> {
-    let engine = lua.create_table()?;
-
-    // engine.load_texture("path") → integer texture ID
-    // Loads synchronously via the thread-local engine pointer (set during init).
-    engine.set("load_texture", lua.create_function(|_, path: String| {
-        ENGINE_PTR.with(|c| {
-            match c.get() {
-                Some(ptr) => {
-                    // Safety: ptr is valid while ScriptedGame::init() is on the stack.
-                    let engine = unsafe { &mut *ptr };
-                    match engine.load_texture(&path) {
-                        Ok(tid) => Ok(tid.raw()),
-                        Err(e) => {
-                            eprintln!("[unison-scripting] Failed to load texture '{path}': {e}");
-                            Ok(0)
-                        }
-                    }
-                }
-                None => {
-                    eprintln!("[unison-scripting] engine.load_texture() called outside init — engine not available");
-                    Ok(0)
-                }
-            }
-        })
-    })?)?;
-
-    // engine.screen_size() → width, height
-    engine.set("screen_size", lua.create_function(|_, ()| {
-        let (w, h) = SCREEN_SIZE.with(|c| c.get());
-        Ok((w, h))
-    })?)?;
-
-    // engine.set_anti_aliasing("msaa8x")
-    engine.set("set_anti_aliasing", lua.create_function(|_, mode: String| {
-        AA_REQUEST.with(|cell| {
-            *cell.borrow_mut() = Some(mode);
-        });
-        Ok(())
-    })?)?;
-
-    lua.globals().set("engine", engine)?;
-    Ok(())
 }
 
 /// Reset all thread-local engine state.
@@ -180,4 +133,3 @@ pub fn reset() {
     AA_REQUEST.with(|cell| *cell.borrow_mut() = None);
     ENGINE_PTR.with(|c| c.set(None));
 }
-

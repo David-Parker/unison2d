@@ -53,7 +53,7 @@ pub fn add_world_methods<M: LuaUserDataMethods<LuaWorld>>(methods: &mut M) {
         let world = this.0.borrow();
         let cam = world.cameras.get("main")
             .ok_or_else(|| LuaError::RuntimeError("main camera not found".into()))?;
-        let (sw, sh) = super::engine::get_screen_size();
+        let (sw, sh) = super::engine_state::get_screen_size();
         let (wx, wy) = cam.screen_to_world(sx, sy, sw, sh);
         Ok((wx, wy))
     });

@@ -3,7 +3,7 @@ local game = {}
 
 function game.init()
     local demo = require("scenes/demo")
-    engine.set_scene(demo)
+    unison.scenes.set(demo)
 end
 
 function game.update(dt) end

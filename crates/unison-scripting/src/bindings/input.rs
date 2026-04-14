@@ -79,8 +79,8 @@ pub fn refresh(input: &InputState) {
     });
 }
 
-/// Register the `input` global table.
-pub fn register(lua: &Lua) -> LuaResult<()> {
+/// Populate `unison.input` on the given `unison` table.
+pub fn populate(lua: &Lua, unison: &LuaTable) -> LuaResult<()> {
     let input = lua.create_table()?;
 
     // input.is_key_pressed("Space") → bool
@@ -218,7 +218,7 @@ pub fn register(lua: &Lua) -> LuaResult<()> {
         })
     })?)?;
 
-    lua.globals().set("input", input)?;
+    unison.set("input", input)?;
     Ok(())
 }
 

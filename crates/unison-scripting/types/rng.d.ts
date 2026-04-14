@@ -6,11 +6,5 @@ declare interface Rng {
   range_int(this: Rng, min: number, max: number): number;
 }
 
-/** Rng constructor table. */
-declare interface RngConstructor {
-  /** Create a new RNG with the given seed. Seed 0 is treated as 1. */
-  new: (this: void, seed: number) => Rng;
-}
-
-/** @noSelf */
-declare const Rng: RngConstructor;
+// Rng constructor is now unison.Rng.new
+// See unison.d.ts.

@@ -220,7 +220,7 @@ pub fn flush_string_events(lua: &Lua) {
 // Registration
 // ===================================================================
 
-pub fn register(lua: &Lua) -> LuaResult<()> {
+pub fn populate(lua: &Lua, unison: &LuaTable) -> LuaResult<()> {
     let sys = init_event_system();
     let events = lua.create_table()?;
 
@@ -290,7 +290,7 @@ pub fn register(lua: &Lua) -> LuaResult<()> {
         Ok(())
     })?)?;
 
-    lua.globals().set("events", events)?;
+    unison.set("events", events)?;
     Ok(())
 }
 

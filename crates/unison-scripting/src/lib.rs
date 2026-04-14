@@ -207,7 +207,7 @@ impl Game for ScriptedGame {
         // Update screen size before script runs.
         if let Some(r) = engine.renderer_mut() {
             let (w, h) = r.screen_size();
-            bindings::engine::set_screen_size(w, h);
+            bindings::engine_state::set_screen_size(w, h);
         }
 
         // Execute the script. It must return a table.
@@ -234,7 +234,7 @@ impl Game for ScriptedGame {
 
         // Set engine pointer so Lua closures can call load_texture synchronously.
         // The guard clears the pointer automatically when it drops at end of scope.
-        let _engine_guard = bindings::engine::set_engine_ptr(engine);
+        let _engine_guard = bindings::engine_state::set_engine_ptr(engine);
 
         // Call the script's init().
         if let Err(e) = self.call_lifecycle("init", ()) {
@@ -247,7 +247,7 @@ impl Game for ScriptedGame {
         drop(_engine_guard);
 
         // Apply anti-aliasing request if set.
-        if let Some(aa) = bindings::engine::take_aa_request() {
+        if let Some(aa) = bindings::engine_state::take_aa_request() {
             let mode = match aa.as_str() {
                 "none" => AntiAliasing::None,
                 "msaa2x" | "MSAAx2" => AntiAliasing::MSAAx2,
@@ -268,7 +268,7 @@ impl Game for ScriptedGame {
         // Refresh screen size.
         if let Some(r) = engine.renderer_mut() {
             let (w, h) = r.screen_size();
-            bindings::engine::set_screen_size(w, h);
+            bindings::engine_state::set_screen_size(w, h);
         }
 
         // Refresh input snapshot.
@@ -279,7 +279,7 @@ impl Game for ScriptedGame {
         // after event flushing so that event handlers (e.g. level_complete
         // → switch_scene → on_enter → load_texture) can still reach the engine.
         // The guard clears the pointer when it drops at end of this block.
-        let _engine_guard = bindings::engine::set_engine_ptr(engine);
+        let _engine_guard = bindings::engine_state::set_engine_ptr(engine);
 
         // Dispatch update: scene system takes priority if active.
         if bindings::scene::is_active() {
@@ -300,7 +300,7 @@ impl Game for ScriptedGame {
 
         // Flush collision events from world into Lua callbacks.
         if let Some(lua) = &self.lua {
-            if let Some(world_rc) = bindings::engine::peek_auto_render_world() {
+            if let Some(world_rc) = bindings::engine_state::peek_auto_render_world() {
                 let mut world = world_rc.borrow_mut();
                 bindings::events::flush_collision_events(lua, &mut world);
             }
@@ -314,7 +314,7 @@ impl Game for ScriptedGame {
         // Apply any anti-aliasing request made during scene on_enter() callbacks.
         // Scenes switch during update(), so AA requests from on_enter() arrive
         // here rather than in init().
-        if let Some(aa) = bindings::engine::take_aa_request() {
+        if let Some(aa) = bindings::engine_state::take_aa_request() {
             let mode = match aa.as_str() {
                 "none" => AntiAliasing::None,
                 "msaa2x" | "MSAAx2" => AntiAliasing::MSAAx2,
@@ -333,7 +333,7 @@ impl Game for ScriptedGame {
         // Make engine available to Lua closures during render.
         // The guard clears the pointer when dropped.
         {
-            let _engine_guard = bindings::engine::set_engine_ptr(engine);
+            let _engine_guard = bindings::engine_state::set_engine_ptr(engine);
 
             // Dispatch render: scene system takes priority if active.
             if bindings::scene::is_active() {
@@ -359,7 +359,7 @@ impl Game for ScriptedGame {
         // before the main render pass. This needs the engine (renderer +
         // assets + input), so it has to happen before we take the renderer
         // borrow below.
-        if let Some(world_rc) = bindings::engine::peek_auto_render_world() {
+        if let Some(world_rc) = bindings::engine_state::peek_auto_render_world() {
             let mut world = world_rc.borrow_mut();
             bindings::ui::render_pending_ui(engine, &mut world);
             drop(world);
@@ -367,7 +367,7 @@ impl Game for ScriptedGame {
 
         if let Some(r) = engine.renderer_mut() {
             // Check if Lua called world:render().
-            if let Some(world_rc) = bindings::engine::take_auto_render_world() {
+            if let Some(world_rc) = bindings::engine_state::take_auto_render_world() {
                 let mut world = world_rc.borrow_mut();
                 world.snapshot_for_render();
 
@@ -398,7 +398,7 @@ impl Game for ScriptedGame {
                 }
             } else {
                 // Fallback: Phase 1 style — manual clear + draw_rect commands.
-                let clear = bindings::engine::get_clear_color();
+                let clear = bindings::engine_state::get_clear_color();
                 let cam = unison2d::render::Camera::new(2.0, 2.0);
                 r.begin_frame(&cam);
                 r.clear(clear);
@@ -425,7 +425,7 @@ impl Drop for ScriptedGame {
         // a subsequent ScriptedGame constructed on the same thread starts clean.
         bindings::events::reset();
         bindings::scene::reset();
-        bindings::engine::reset();
+        bindings::engine_state::reset();
         bindings::render_targets::reset();
         bindings::ui::reset();
     }

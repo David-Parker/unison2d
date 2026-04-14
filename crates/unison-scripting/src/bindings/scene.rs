@@ -10,8 +10,7 @@
 //!     on_exit = function() ... end,
 //! }
 //!
-//! engine.set_scene(gameplay)
-//! engine.switch_scene(menu)
+//! unison.scenes.set(gameplay)
 //! ```
 //!
 //! The scene system stores the current scene table in a thread-local. The
@@ -93,38 +92,18 @@ pub fn reset() {
 }
 
 // ===================================================================
-// Registration (on the engine table)
+// Registration under unison.scenes
 // ===================================================================
 
-/// Register scene functions on the `engine` global table.
-/// Must be called after `engine::register()` since it modifies the existing table.
-pub fn register(lua: &Lua) -> LuaResult<()> {
-    let engine: LuaTable = lua.globals().get("engine")?;
+/// Populate `unison.scenes` on the given `unison` table.
+pub fn populate(lua: &Lua, unison: &LuaTable) -> LuaResult<()> {
+    let scenes = lua.create_table()?;
 
-    // engine.set_scene(scene_table)
-    engine.set("set_scene", lua.create_function(|lua, scene: LuaTable| {
-        // Call on_enter if present
-        if let Ok(func) = scene.get::<LuaFunction>("on_enter") {
-            func.call::<()>(())?;
-        }
-
-        // Store as current scene
-        let key = lua.create_registry_value(scene)?;
-        CURRENT_SCENE.with(|cell| {
-            // Remove old key if present
-            if let Some(old) = cell.borrow_mut().take() {
-                lua.remove_registry_value(old).ok();
-            }
-            *cell.borrow_mut() = Some(key);
-        });
-        SCENES_ACTIVE.with(|c| c.set(true));
-
-        Ok(())
-    })?)?;
-
-    // engine.switch_scene(new_scene_table)
-    engine.set("switch_scene", lua.create_function(|lua, new_scene: LuaTable| {
-        // Call on_exit on old scene
+    // unison.scenes.set(scene_table)
+    // Unified set+switch: calls on_exit on the current scene (if any),
+    // then on_enter on the new scene.
+    scenes.set("set", lua.create_function(|lua, new_scene: LuaTable| {
+        // Call on_exit on the old scene, if one is active.
         CURRENT_SCENE.with(|cell| -> LuaResult<()> {
             if let Some(old_key) = cell.borrow().as_ref() {
                 if let Ok(old_scene) = lua.registry_value::<LuaTable>(old_key) {
@@ -136,12 +115,12 @@ pub fn register(lua: &Lua) -> LuaResult<()> {
             Ok(())
         })?;
 
-        // Call on_enter on new scene
+        // Call on_enter on new scene.
         if let Ok(func) = new_scene.get::<LuaFunction>("on_enter") {
             func.call::<()>(())?;
         }
 
-        // Store new scene
+        // Store new scene.
         let key = lua.create_registry_value(new_scene)?;
         CURRENT_SCENE.with(|cell| {
             if let Some(old) = cell.borrow_mut().take() {
@@ -154,5 +133,19 @@ pub fn register(lua: &Lua) -> LuaResult<()> {
         Ok(())
     })?)?;
 
+    // unison.scenes.current() → scene table or nil
+    scenes.set("current", lua.create_function(|lua, ()| -> LuaResult<LuaValue> {
+        CURRENT_SCENE.with(|cell| {
+            match cell.borrow().as_ref() {
+                Some(key) => match lua.registry_value::<LuaTable>(key) {
+                    Ok(t) => Ok(LuaValue::Table(t)),
+                    Err(_) => Ok(LuaValue::Nil),
+                },
+                None => Ok(LuaValue::Nil),
+            }
+        })
+    })?)?;
+
+    unison.set("scenes", scenes)?;
     Ok(())
 }

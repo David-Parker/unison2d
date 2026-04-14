@@ -1,19 +1,20 @@
 //! Render target & compositing bindings.
 //!
 //! ```lua
-//! local target, tex = engine.create_render_target(256, 256)
+//! local target, tex = unison.renderer.create_target(256, 256)
 //!
 //! -- In render:
 //! world:render_to_targets({
 //!     {"main", "screen"},
 //!     {"overview", target},
 //! })
-//! engine.draw_overlay(tex, 0.7, 0.7, 0.25, 0.25)
+//! world:draw_overlay(tex, 0.7, 0.7, 0.25, 0.25)
 //! ```
 //!
-//! `create_render_target` is synchronous — it calls the engine directly via
-//! the thread-local engine pointer (same pattern as `load_texture`).
-//! `draw_overlay` and `render_to_targets` are deferred into thread-local queues
+//! `create_target` is in `renderer.rs` (synchronous, engine-ptr pattern).
+//! `draw_overlay` / `draw_overlay_bordered` are methods on World userdata (world.rs).
+//! `render_to_targets` is registered as a World method here.
+//! Overlay and render-to-target requests are deferred into thread-local queues
 //! that `ScriptedGame` drains during the render phase.
 
 use std::cell::RefCell;
@@ -42,9 +43,15 @@ pub struct OverlayBorder {
 
 thread_local! {
     /// Pending overlay draw requests, consumed during render.
-    static OVERLAY_REQUESTS: RefCell<Vec<OverlayRequest>> = const { RefCell::new(Vec::new()) };
+    pub(super) static OVERLAY_REQUESTS: RefCell<Vec<OverlayRequest>> = const { RefCell::new(Vec::new()) };
     /// Pending render_to_targets calls: list of (camera_name, target_id_raw).
     static RENDER_TO_TARGETS: RefCell<Option<Vec<(String, u32)>>> = const { RefCell::new(None) };
+}
+
+// -- Public helpers for pushing overlay requests (called from world.rs methods) --
+
+pub fn push_overlay(request: OverlayRequest) {
+    OVERLAY_REQUESTS.with(|cell| cell.borrow_mut().push(request));
 }
 
 // -- Public accessors for ScriptedGame --
@@ -65,58 +72,8 @@ pub fn reset() {
 }
 
 // ===================================================================
-// Registration
+// World method registration
 // ===================================================================
-
-/// Register render target functions on the `engine` global table.
-/// Must be called after `engine::register()`.
-pub fn register(lua: &Lua) -> LuaResult<()> {
-    let engine: LuaTable = lua.globals().get("engine")?;
-
-    // engine.create_render_target(w, h) → target_id, texture_id
-    // Calls through ENGINE_PTR synchronously, following the same pattern as
-    // load_texture. Must be called during init() or on_enter() when the engine
-    // pointer is live.
-    engine.set("create_render_target", lua.create_function(|_, (w, h): (u32, u32)| {
-        match super::engine::with_engine_ptr(|engine| engine.create_render_target(w, h)) {
-            Some(Ok((target_id, texture_id))) => Ok((target_id.raw(), texture_id.raw())),
-            Some(Err(e)) => {
-                eprintln!("[unison-scripting] create_render_target failed: {e}");
-                Ok((0u32, 0u32))
-            }
-            None => {
-                eprintln!("[unison-scripting] engine.create_render_target() called outside init — engine not available");
-                Ok((0u32, 0u32))
-            }
-        }
-    })?)?;
-
-    // engine.draw_overlay(texture_id, x, y, w, h)
-    engine.set("draw_overlay", lua.create_function(|_, (tex, x, y, w, h): (u32, f32, f32, f32, f32)| {
-        OVERLAY_REQUESTS.with(|cell| {
-            cell.borrow_mut().push(OverlayRequest {
-                texture_id: tex,
-                x, y, w, h,
-                border: None,
-            });
-        });
-        Ok(())
-    })?)?;
-
-    // engine.draw_overlay_bordered(texture_id, x, y, w, h, border_width, border_color)
-    engine.set("draw_overlay_bordered", lua.create_function(|_, (tex, x, y, w, h, bw, bc): (u32, f32, f32, f32, f32, f32, u32)| {
-        OVERLAY_REQUESTS.with(|cell| {
-            cell.borrow_mut().push(OverlayRequest {
-                texture_id: tex,
-                x, y, w, h,
-                border: Some(OverlayBorder { width: bw, color: bc }),
-            });
-        });
-        Ok(())
-    })?)?;
-
-    Ok(())
-}
 
 /// Register render_to_targets as a method on World userdata.
 pub fn add_world_methods<M: LuaUserDataMethods<super::world::LuaWorld>>(methods: &mut M) {
@@ -144,7 +101,7 @@ pub fn add_world_methods<M: LuaUserDataMethods<super::world::LuaWorld>>(methods:
 
         // Ensure the render pass runs even when the script uses multi-camera
         // rendering instead of world:render().
-        super::engine::request_auto_render(this.0.clone());
+        super::engine_state::request_auto_render(this.0.clone());
 
         Ok(())
     });

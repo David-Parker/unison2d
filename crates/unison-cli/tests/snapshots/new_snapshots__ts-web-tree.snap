@@ -1,5 +1,6 @@
 ---
 source: crates/unison-cli/tests/new_snapshots.rs
+assertion_line: 51
 expression: file_tree(&root)
 ---
 .cargo/config.toml
@@ -28,5 +29,6 @@ project/scripts-src/types/unison2d/package.json
 project/scripts-src/types/unison2d/rng.d.ts
 project/scripts-src/types/unison2d/scene.d.ts
 project/scripts-src/types/unison2d/ui.d.ts
+project/scripts-src/types/unison2d/unison.d.ts
 project/scripts-src/types/unison2d/world.d.ts
 unison.toml

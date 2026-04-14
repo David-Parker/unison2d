@@ -70,7 +70,7 @@ declare interface UIButtonNode extends UINodeBase {
   type: "button";
   /** Button label text. */
   text: string;
-  /** Event name to emit when clicked. Listen with events.on(). */
+  /** Event name to emit when clicked. Listen with unison.events.on(). */
   on_click?: string;
   /** Button width in pixels. */
   width?: number;
@@ -88,7 +88,7 @@ declare interface UIButtonNode extends UINodeBase {
 declare interface UIIconNode extends UINodeBase {
   /** Node type identifier. */
   type: "icon";
-  /** Texture ID from engine.load_texture(). */
+  /** Texture ID from unison.assets.load_texture(). */
   texture: TextureId;
 }
 
@@ -117,8 +117,11 @@ declare type UINode =
   | UIColumnNode | UIRowNode | UIPanelNode | UILabelNode
   | UIButtonNode | UIIconNode | UIProgressBarNode | UISpacerNode;
 
-/** UI handle created by engine.create_ui(). */
+/** UI handle created by unison.UI.new(). */
 declare interface UI {
   /** Render one frame of UI from a nested node table. Call in render. */
   frame(this: UI, tree: UINode[]): void;
 }
+
+// UI factory is now unison.UI.new(font_path)
+// See unison.d.ts.

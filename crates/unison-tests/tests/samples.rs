@@ -111,10 +111,22 @@ fn donut_game_scripts_run() {
     let scripts_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../../project/assets/scripts");
 
-    if !scripts_dir.join("main.lua").exists() {
+    let main_lua = scripts_dir.join("main.lua");
+    if !main_lua.exists() {
         eprintln!(
             "SKIPPING donut_game_scripts_run: transpiled .lua not found at {}",
             scripts_dir.display()
+        );
+        return;
+    }
+
+    // Skip if the scripts still use the old flat API (pre-Task-18 migration).
+    // After Task 18 migrates donut-game's TypeScript sources to unison.*, this
+    // check will no longer skip.
+    let source = std::fs::read_to_string(&main_lua).unwrap_or_default();
+    if source.contains("engine.") || source.contains("World.new()") || source.contains("input.") {
+        eprintln!(
+            "SKIPPING donut_game_scripts_run: scripts still use old flat API (Task 18 pending)"
         );
         return;
     }

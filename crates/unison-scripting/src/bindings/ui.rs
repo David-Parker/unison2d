@@ -113,14 +113,15 @@ impl LuaUserData for LuaUi {
 // Registration
 // ===================================================================
 
-/// Register `engine.create_ui()` on the existing engine table.
-pub fn register(lua: &Lua) -> LuaResult<()> {
-    let engine: LuaTable = lua.globals().get("engine")?;
+/// Populate `unison.UI` (with `new(font_path)` constructor) on the given `unison` table.
+pub fn populate(lua: &Lua, unison: &LuaTable) -> LuaResult<()> {
+    let ui_table = lua.create_table()?;
 
-    engine.set("create_ui", lua.create_function(|_, font_path: String| {
+    ui_table.set("new", lua.create_function(|_, font_path: String| {
         Ok(LuaUi { font_path })
     })?)?;
 
+    unison.set("UI", ui_table)?;
     Ok(())
 }
 
@@ -328,7 +329,7 @@ pub fn render_pending_ui(
     let tree = convert_tree(&frame_request.nodes);
 
     // Screen size and dt.
-    let (sw, sh) = super::engine::get_screen_size();
+    let (sw, sh) = super::engine_state::get_screen_size();
     let screen_size = Vec2::new(sw, sh);
     let dt = engine.dt();
 

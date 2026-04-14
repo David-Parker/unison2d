@@ -1,17 +1,17 @@
-//! Math utility bindings — Color, Rng, and math extensions.
+//! Math utility bindings — Color, Rng, and math extensions under `unison.*`.
 //!
 //! ```lua
-//! local c = Color.hex(0xFF0000)
-//! local c2 = Color.rgba(0, 1, 0, 1)
+//! local c = unison.Color.hex(0xFF0000)
+//! local c2 = unison.Color.rgba(0, 1, 0, 1)
 //! local blended = c:lerp(c2, 0.5)
 //!
-//! local rng = Rng.new(42)
+//! local rng = unison.Rng.new(42)
 //! local x = rng:range(0, 10)
 //! local n = rng:range_int(1, 6)
 //!
-//! local v = math.lerp(0, 100, 0.5)       -- 50
-//! local s = math.smoothstep(0, 1, 0.5)   -- 0.5
-//! local c = math.clamp(15, 0, 10)        -- 10
+//! local v = unison.math.lerp(0, 100, 0.5)       -- 50
+//! local s = unison.math.smoothstep(0, 1, 0.5)   -- 0.5
+//! local c = unison.math.clamp(15, 0, 10)        -- 10
 //! ```
 
 use mlua::prelude::*;
@@ -88,8 +88,9 @@ impl LuaUserData for LuaRng {
 // Registration
 // ===================================================================
 
-pub fn register(lua: &Lua) -> LuaResult<()> {
-    // -- Color global --
+/// Populate `unison.Color`, `unison.Rng`, and `unison.math` on the given `unison` table.
+pub fn populate(lua: &Lua, unison: &LuaTable) -> LuaResult<()> {
+    // -- unison.Color --
     let color_table = lua.create_table()?;
 
     color_table.set("hex", lua.create_function(|_, hex: u32| {
@@ -100,9 +101,9 @@ pub fn register(lua: &Lua) -> LuaResult<()> {
         Ok(LuaColor(Color::new(r, g, b, a)))
     })?)?;
 
-    lua.globals().set("Color", color_table)?;
+    unison.set("Color", color_table)?;
 
-    // -- Rng global --
+    // -- unison.Rng --
     let rng_table = lua.create_table()?;
 
     rng_table.set("new", lua.create_function(|_, seed: u64| {
@@ -111,23 +112,25 @@ pub fn register(lua: &Lua) -> LuaResult<()> {
         Ok(LuaRng { state })
     })?)?;
 
-    lua.globals().set("Rng", rng_table)?;
+    unison.set("Rng", rng_table)?;
 
-    // -- math extensions --
-    let math: LuaTable = lua.globals().get("math")?;
+    // -- unison.math --
+    let math_table = lua.create_table()?;
 
-    math.set("lerp", lua.create_function(|_, (a, b, t): (f64, f64, f64)| {
+    math_table.set("lerp", lua.create_function(|_, (a, b, t): (f64, f64, f64)| {
         Ok(a + (b - a) * t)
     })?)?;
 
-    math.set("smoothstep", lua.create_function(|_, (edge0, edge1, x): (f64, f64, f64)| {
+    math_table.set("smoothstep", lua.create_function(|_, (edge0, edge1, x): (f64, f64, f64)| {
         let t = ((x - edge0) / (edge1 - edge0)).clamp(0.0, 1.0);
         Ok(t * t * (3.0 - 2.0 * t))
     })?)?;
 
-    math.set("clamp", lua.create_function(|_, (x, min, max): (f64, f64, f64)| {
+    math_table.set("clamp", lua.create_function(|_, (x, min, max): (f64, f64, f64)| {
         Ok(x.clamp(min, max))
     })?)?;
+
+    unison.set("math", math_table)?;
 
     Ok(())
 }

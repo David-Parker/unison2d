@@ -12,10 +12,5 @@ declare interface Color {
   lerp(this: Color, other: Color, t: number): Color;
 }
 
-/** Color constructor table. */
-declare const Color: {
-  /** Create a Color from a hex integer (e.g. `0xFF8800`). */
-  hex(this: void, hex: number): Color;
-  /** Create a Color from RGBA floats in [0, 1]. */
-  rgba(this: void, r: number, g: number, b: number, a: number): Color;
-};
+// Color constructor is now unison.Color.hex / unison.Color.rgba
+// See unison.d.ts.

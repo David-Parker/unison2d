@@ -5,7 +5,7 @@ local world
 local box_id
 
 function scene.on_enter()
-    world = World.new()
+    world = unison.World.new()
     world:set_background(0x1a1a2e)
     world:set_gravity(-9.8)
     world:set_ground(-4.5)
@@ -20,19 +20,19 @@ function scene.on_enter()
 
     world:camera_follow("main", box_id, 0.1)
 
-    events.on("test_event", function(data)
-        debug.log("received test_event")
+    unison.events.on("test_event", function(data)
+        unison.debug.log("received test_event")
     end)
 end
 
 function scene.update(dt)
-    if input.is_key_pressed("ArrowLeft") or input.is_key_pressed("A") then
+    if unison.input.is_key_pressed("ArrowLeft") or unison.input.is_key_pressed("A") then
         world:apply_force(box_id, -5, 0)
     end
-    if input.is_key_pressed("ArrowRight") or input.is_key_pressed("D") then
+    if unison.input.is_key_pressed("ArrowRight") or unison.input.is_key_pressed("D") then
         world:apply_force(box_id, 5, 0)
     end
-    if input.is_key_just_pressed("Space") and world:is_grounded(box_id) then
+    if unison.input.is_key_just_pressed("Space") and world:is_grounded(box_id) then
         world:apply_impulse(box_id, 0, 5)
     end
 
@@ -40,11 +40,11 @@ function scene.update(dt)
 end
 
 function scene.render()
-    world:auto_render()
+    world:render()
 end
 
 function scene.on_exit()
-    events.clear()
+    unison.events.clear()
     world = nil
     box_id = nil
 end

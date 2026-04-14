@@ -1,13 +1,22 @@
 //! Lua bindings for the Unison 2D engine.
 //!
-//! Each submodule exposes one domain of the engine to Lua scripts.
-//! All bindings are registered during [`ScriptedGame::init`] via [`register_all`].
+//! All subsystems are registered under the `unison` global via [`register_all`].
+//! The old flat globals (`engine`, `input`, `events`, `World`, `Color`, `Rng`,
+//! `debug`) are gone — everything lives under `unison.*`.
 
+// Internal state (no Lua registration)
+pub mod engine_state;
+
+// New top-level modules
+pub mod assets;
+pub mod renderer;
+pub mod unison_root;
+
+// Per-subsystem modules (each exposes `populate(lua, unison)`)
 pub mod world;
 pub mod objects;
 pub mod input;
 pub mod camera;
-pub mod engine;
 pub mod lighting;
 pub mod events;
 pub mod scene;
@@ -19,24 +28,7 @@ pub mod debug;
 
 use mlua::prelude::*;
 
-/// Register all bindings into the Lua VM.
+/// Register all bindings into the Lua VM under `unison.*`.
 pub fn register_all(lua: &Lua) -> LuaResult<()> {
-    // Core globals (World, input, engine)
-    world::register(lua)?;
-    input::register(lua)?;
-    engine::register(lua)?;
-
-    // Phase 3 globals
-    events::register(lua)?;
-    math::register(lua)?;
-
-    // Extensions to existing globals (engine.set_scene, engine.create_ui, etc.)
-    scene::register(lua)?;
-    render_targets::register(lua)?;
-    ui::register(lua)?;
-
-    // Debug utilities
-    debug::register(lua)?;
-
-    Ok(())
+    unison_root::register(lua)
 }

@@ -14,10 +14,10 @@ const game: Game = {
     init() {
         print("{{PROJECT_NAME}} loaded");
 
-        const logo_tex = engine.load_texture("textures/logo.png");
-        ui = engine.create_ui("fonts/DejaVuSans-Bold.ttf");
+        const logo_tex = unison.assets.load_texture("textures/logo.png");
+        ui = unison.UI.new("fonts/DejaVuSans-Bold.ttf");
 
-        world = World.new();
+        world = unison.World.new();
         world.set_background(0x1a1a2e);
         world.set_gravity(-9.8);
         world.set_ground(-4.5);
@@ -33,7 +33,7 @@ const game: Game = {
     },
 
     update(dt: number) {
-        const [sx, sy] = input.pointer_position();
+        const [sx, sy] = unison.input.pointer_position();
         if (sx !== undefined && sy !== undefined) {
             const [tx, ty] = world.screen_to_world(sx, sy);
             const [px, py] = world.get_position(logo_id);

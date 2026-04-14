@@ -190,15 +190,18 @@ fn has_this_parameter(node: &tree_sitter::Node, source: &str) -> bool {
     check_params(node, source)
 }
 
-/// Extract method/function names from table/object type in `declare const X: { ... }`.
-/// These are the methods on table-style globals like `engine`, `input`, `events`.
-fn extract_table_methods_from_dts(types_dir: &Path) -> HashMap<String, Vec<String>> {
+/// Extract property (sub-table) names from the object type of `declare const unison: { ... }`.
+/// Returns a map of property name → list of method names on that property's interface type.
+fn extract_unison_sub_tables(types_dir: &Path) -> HashMap<String, Vec<String>> {
     let mut parser = tree_sitter::Parser::new();
     parser
         .set_language(&tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into())
         .expect("failed to set TypeScript language");
 
     let mut result: HashMap<String, Vec<String>> = HashMap::new();
+
+    // Build an index of all interface declarations so we can resolve named types.
+    let mut iface_index: HashMap<String, Vec<String>> = HashMap::new();
 
     for entry in fs::read_dir(types_dir).expect("cannot read types/ dir") {
         let entry = entry.unwrap();
@@ -216,48 +219,60 @@ fn extract_table_methods_from_dts(types_dir: &Path) -> HashMap<String, Vec<Strin
             if child.kind() != "ambient_declaration" {
                 continue;
             }
-
             let mut inner_cursor = child.walk();
             for inner in child.children(&mut inner_cursor) {
-                if inner.kind() == "lexical_declaration" {
-                    // `declare const X: { method1(...): T; method2(...): T; }`
-                    let mut vc = inner.walk();
-                    for vd in inner.children(&mut vc) {
-                        if vd.kind() != "variable_declarator" {
-                            continue;
-                        }
-                        let name = match vd.child_by_field_name("name") {
-                            Some(n) => source[n.byte_range()].to_string(),
-                            None => continue,
-                        };
-
-                        // Get the type annotation, find object_type
-                        if let Some(type_ann) = vd.child_by_field_name("type") {
-                            let methods = collect_object_type_methods(&type_ann, &source);
-                            if !methods.is_empty() {
-                                result.insert(name, methods);
-                            }
-                        }
+                if inner.kind() == "interface_declaration" {
+                    if let Some(name_node) = inner.child_by_field_name("name") {
+                        let iface_name = source[name_node.byte_range()].to_string();
+                        // Collect ALL method_signature and property_signature names
+                        let methods = collect_all_interface_members(&inner, &source);
+                        iface_index.insert(iface_name, methods);
                     }
-                } else if inner.kind() == "internal_module" {
-                    // `declare namespace X { function foo(...): T; }`
-                    let name = match inner.child_by_field_name("name") {
+                }
+            }
+        }
+    }
+
+    // Now find `declare const unison: { ... }` and extract sub-table method lists.
+    for entry in fs::read_dir(types_dir).expect("cannot read types/ dir") {
+        let entry = entry.unwrap();
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("ts") {
+            continue;
+        }
+
+        let source = fs::read_to_string(&path).unwrap();
+        let tree = parser.parse(&source, None).unwrap();
+        let root = tree.root_node();
+
+        let mut cursor = root.walk();
+        for child in root.children(&mut cursor) {
+            if child.kind() != "ambient_declaration" {
+                continue;
+            }
+            let mut inner_cursor = child.walk();
+            for inner in child.children(&mut inner_cursor) {
+                if inner.kind() != "lexical_declaration" {
+                    continue;
+                }
+                let mut vc = inner.walk();
+                for vd in inner.children(&mut vc) {
+                    if vd.kind() != "variable_declarator" {
+                        continue;
+                    }
+                    let name = match vd.child_by_field_name("name") {
                         Some(n) => source[n.byte_range()].to_string(),
                         None => continue,
                     };
-
-                    if let Some(body) = inner.child_by_field_name("body") {
-                        let mut methods = Vec::new();
-                        let mut bc = body.walk();
-                        for stmt in body.children(&mut bc) {
-                            if stmt.kind() == "function_signature" {
-                                if let Some(fn_name) = stmt.child_by_field_name("name") {
-                                    methods.push(source[fn_name.byte_range()].to_string());
-                                }
-                            }
-                        }
-                        if !methods.is_empty() {
-                            result.insert(name, methods);
+                    if name != "unison" {
+                        continue;
+                    }
+                    // Parse the type annotation of `unison: { ... }`
+                    if let Some(type_ann) = vd.child_by_field_name("type") {
+                        // Find object_type
+                        let sub_props = collect_object_properties(&type_ann, &source, &iface_index);
+                        for (prop_name, methods) in sub_props {
+                            result.insert(prop_name, methods);
                         }
                     }
                 }
@@ -268,27 +283,86 @@ fn extract_table_methods_from_dts(types_dir: &Path) -> HashMap<String, Vec<Strin
     result
 }
 
-/// Collect method names from an object_type node (recursing through type_annotation).
-fn collect_object_type_methods(node: &tree_sitter::Node, source: &str) -> Vec<String> {
-    let mut methods = Vec::new();
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        if child.kind() == "object_type" {
-            let mut oc = child.walk();
-            for member in child.children(&mut oc) {
-                if member.kind() == "method_signature" || member.kind() == "property_signature" {
-                    if let Some(name_node) = member.child_by_field_name("name") {
-                        methods.push(source[name_node.byte_range()].to_string());
+/// Collect all property/method names from an interface body (without `this` filter).
+fn collect_all_interface_members(iface_node: &tree_sitter::Node, source: &str) -> Vec<String> {
+    let mut members = Vec::new();
+    if let Some(body) = iface_node.child_by_field_name("body") {
+        let mut cursor = body.walk();
+        for member in body.children(&mut cursor) {
+            if member.kind() == "method_signature" || member.kind() == "property_signature" {
+                if let Some(name_node) = member.child_by_field_name("name") {
+                    members.push(source[name_node.byte_range()].to_string());
+                }
+            }
+        }
+    }
+    members
+}
+
+/// Parse an object_type node and return a map of property_name → method_names.
+/// Uses `iface_index` to resolve named type references like `UnisonAssets`.
+fn collect_object_properties(
+    node: &tree_sitter::Node,
+    source: &str,
+    iface_index: &HashMap<String, Vec<String>>,
+) -> Vec<(String, Vec<String>)> {
+    let mut result = Vec::new();
+
+    let mut walk_node = |n: &tree_sitter::Node| {
+        if n.kind() == "object_type" {
+            let mut oc = n.walk();
+            for member in n.children(&mut oc) {
+                if member.kind() == "property_signature" {
+                    let prop_name = match member.child_by_field_name("name") {
+                        Some(nn) => source[nn.byte_range()].to_string(),
+                        None => continue,
+                    };
+                    // Get the type annotation of this property
+                    if let Some(type_ann) = member.child_by_field_name("type") {
+                        // Look for a type_identifier (named interface)
+                        let type_name = find_type_identifier(&type_ann, source);
+                        if let Some(tname) = type_name {
+                            if let Some(methods) = iface_index.get(&tname) {
+                                result.push((prop_name, methods.clone()));
+                            }
+                        }
                     }
                 }
             }
         }
-        // Recurse into type_annotation wrapper
-        if child.kind() == "type_annotation" {
-            methods.extend(collect_object_type_methods(&child, source));
+    };
+
+    // Traverse into type_annotation → object_type
+    traverse_for_object_type(node, source, iface_index, &mut walk_node);
+
+    result
+}
+
+fn traverse_for_object_type(
+    node: &tree_sitter::Node,
+    source: &str,
+    _iface_index: &HashMap<String, Vec<String>>,
+    visitor: &mut dyn FnMut(&tree_sitter::Node),
+) {
+    visitor(node);
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        traverse_for_object_type(&child, source, _iface_index, visitor);
+    }
+}
+
+/// Find the first `type_identifier` (like `UnisonAssets`) in a type annotation subtree.
+fn find_type_identifier(node: &tree_sitter::Node, source: &str) -> Option<String> {
+    if node.kind() == "type_identifier" {
+        return Some(source[node.byte_range()].to_string());
+    }
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        if let Some(found) = find_type_identifier(&child, source) {
+            return Some(found);
         }
     }
-    methods
+    None
 }
 
 // ===================================================================
@@ -316,16 +390,9 @@ fn lua_stdlib_globals() -> BTreeSet<&'static str> {
         "pcall", "print", "rawequal", "rawget", "rawlen", "rawset",
         "require", "select", "setmetatable", "string", "table",
         "tonumber", "tostring", "type", "utf8", "warn", "xpcall",
-        // debug is stdlib but we extend it, so we exclude it from filtering
-        // (it will be checked separately)
+        // debug is stdlib — engine utilities are now under unison.debug
+        "debug",
     ].into_iter().collect()
-}
-
-/// Globals that are part of Lua stdlib AND we extend with engine methods.
-/// These should be in the .d.ts as namespaces, but we don't require them
-/// to be absent from the stdlib filter.
-fn extended_stdlib_globals() -> BTreeSet<&'static str> {
-    ["math", "debug"].into_iter().collect()
 }
 
 // ===================================================================
@@ -365,32 +432,33 @@ fn dts_globals_exist_in_vm() {
     );
 }
 
-/// Direction 1 (cont'd): every method declared on table-style globals
-/// (engine, input, events) and namespace globals (math, debug) must exist
-/// as a field on that global in the VM.
+/// Direction 1 (cont'd): every method declared on `unison.*` sub-namespaces
+/// (assets, renderer, input, scenes, events, UI, debug, math, World, Color, Rng)
+/// must exist as a field at the correct path in the VM.
 #[test]
-fn dts_table_methods_exist_in_vm() {
+fn dts_unison_submethods_exist_in_vm() {
     let types_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("types");
-    let table_methods = extract_table_methods_from_dts(&types_dir);
+    let sub_tables = extract_unison_sub_tables(&types_dir);
 
     assert!(
-        !table_methods.is_empty(),
-        "parsed zero table methods — is types/ empty?"
+        !sub_tables.is_empty(),
+        "parsed zero unison sub-tables — is unison.d.ts present?"
     );
 
     let lua = create_vm_with_bindings();
 
     let mut missing = Vec::new();
-    for (global_name, methods) in &table_methods {
+    for (sub_name, methods) in &sub_tables {
         for method in methods {
+            // Methods are either functions or (for constructors like World.new) checked as non-nil.
             let check = format!(
-                "return type({global}.{method}) == 'function'",
-                global = global_name,
-                method = method
+                "return unison.{sub}.{method} ~= nil",
+                sub = sub_name,
+                method = method,
             );
             let exists: bool = lua.load(&check).eval().unwrap_or(false);
             if !exists {
-                missing.push(format!("{global_name}.{method}"));
+                missing.push(format!("unison.{sub_name}.{method}"));
             }
         }
     }
@@ -414,9 +482,9 @@ fn dts_instance_methods_exist_on_userdata() {
     // Map interface names to Lua code that creates an instance.
     // Only test interfaces that correspond to actual userdata.
     let instance_creators: HashMap<&str, &str> = [
-        ("World", "World.new()"),
-        ("Color", "Color.hex(0xFF0000)"),
-        ("Rng", "Rng.new(42)"),
+        ("World", "unison.World.new()"),
+        ("Color", "unison.Color.hex(0xFF0000)"),
+        ("Rng", "unison.Rng.new(42)"),
     ]
     .into_iter()
     .collect();
@@ -461,7 +529,6 @@ fn vm_globals_declared_in_dts() {
 
     let declared_names: BTreeSet<String> = globals.iter().map(|g| g.name.clone()).collect();
     let stdlib = lua_stdlib_globals();
-    let extended = extended_stdlib_globals();
 
     let lua = create_vm_with_bindings();
 
@@ -489,14 +556,6 @@ fn vm_globals_declared_in_dts() {
         if stdlib.contains(name.as_str()) {
             continue;
         }
-        // Skip extended stdlib that are only in .d.ts as namespaces
-        if extended.contains(name.as_str()) {
-            // These should still be declared; check them
-            if !declared_names.contains(name) {
-                undeclared.push(name.clone());
-            }
-            continue;
-        }
         // Skip internal/private globals (prefixed with __)
         if name.starts_with("__") {
             continue;
@@ -513,55 +572,52 @@ fn vm_globals_declared_in_dts() {
     );
 }
 
-/// Direction 2 (cont'd): methods on table-style globals (engine, input,
-/// events) should be declared in the corresponding .d.ts.
+/// Direction 2 (cont'd): methods on `unison.*` sub-tables in the Lua VM
+/// should be declared in the corresponding interface in the .d.ts.
 #[test]
-fn vm_table_methods_declared_in_dts() {
+fn vm_unison_submethods_declared_in_dts() {
     let types_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("types");
-    let table_methods = extract_table_methods_from_dts(&types_dir);
+    let declared_sub_tables = extract_unison_sub_tables(&types_dir);
 
     let lua = create_vm_with_bindings();
 
-    // Table globals to check: those that appear as `declare const X: { ... }`
-    // with method bodies in the .d.ts.
-    let table_globals = ["engine", "input", "events"];
+    // Sub-tables to verify: those we know are present on unison.*
+    let sub_names = ["assets", "renderer", "input", "scenes", "events", "UI", "debug", "math", "World", "Color", "Rng"];
 
     let mut undeclared = Vec::new();
 
-    for global_name in &table_globals {
-        // Get all function keys from this global table in the VM
-        let vm_methods: Vec<String> = lua
+    for sub_name in &sub_names {
+        // Get all keys from this sub-table in the VM
+        let vm_keys: Vec<String> = lua
             .load(format!(
                 r#"
                 local names = {{}}
-                local t = {global}
+                local t = unison.{sub}
                 if type(t) == "table" then
-                    for k, v in pairs(t) do
-                        if type(v) == "function" then
-                            table.insert(names, k)
-                        end
+                    for k, _ in pairs(t) do
+                        table.insert(names, tostring(k))
                     end
                 end
                 table.sort(names)
                 return names
                 "#,
-                global = global_name
+                sub = sub_name
             ))
             .eval::<LuaTable>()
-            .expect("failed to iterate table")
+            .expect("failed to iterate sub-table")
             .sequence_values::<String>()
             .filter_map(|r| r.ok())
             .collect();
 
-        let declared = table_methods
-            .get(*global_name)
+        let declared = declared_sub_tables
+            .get(*sub_name)
             .cloned()
             .unwrap_or_default();
         let declared_set: BTreeSet<&str> = declared.iter().map(|s| s.as_str()).collect();
 
-        for method in &vm_methods {
-            if !declared_set.contains(method.as_str()) {
-                undeclared.push(format!("{global_name}.{method}"));
+        for key in &vm_keys {
+            if !declared_set.contains(key.as_str()) {
+                undeclared.push(format!("unison.{sub_name}.{key}"));
             }
         }
     }
@@ -569,89 +625,6 @@ fn vm_table_methods_declared_in_dts() {
     assert!(
         undeclared.is_empty(),
         "Methods in Lua VM but missing from .d.ts declarations:\n  {}",
-        undeclared.join("\n  ")
-    );
-}
-
-/// Direction 2 (cont'd): namespace extension methods (math.lerp, etc.)
-/// should be declared in the .d.ts.
-#[test]
-fn vm_namespace_methods_declared_in_dts() {
-    let types_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("types");
-    let table_methods = extract_table_methods_from_dts(&types_dir);
-
-    let lua = create_vm_with_bindings();
-
-    // For namespaces that extend stdlib, we only need to check engine-added methods.
-    // We do this by creating a pristine Lua and diffing.
-    let pristine = Lua::new();
-
-    let namespace_globals = ["math", "debug"];
-    let mut undeclared = Vec::new();
-
-    for ns in &namespace_globals {
-        // Get methods from VM with bindings
-        let vm_methods: BTreeSet<String> = lua
-            .load(format!(
-                r#"
-                local names = {{}}
-                local t = {ns}
-                if type(t) == "table" then
-                    for k, v in pairs(t) do
-                        if type(v) == "function" then
-                            table.insert(names, k)
-                        end
-                    end
-                end
-                return names
-                "#,
-                ns = ns
-            ))
-            .eval::<LuaTable>()
-            .expect("failed to iterate namespace")
-            .sequence_values::<String>()
-            .filter_map(|r| r.ok())
-            .collect();
-
-        // Get methods from pristine Lua (stdlib only)
-        let stdlib_methods: BTreeSet<String> = pristine
-            .load(format!(
-                r#"
-                local names = {{}}
-                local t = {ns}
-                if type(t) == "table" then
-                    for k, v in pairs(t) do
-                        if type(v) == "function" then
-                            table.insert(names, k)
-                        end
-                    end
-                end
-                return names
-                "#,
-                ns = ns
-            ))
-            .eval::<LuaTable>()
-            .expect("failed to iterate pristine namespace")
-            .sequence_values::<String>()
-            .filter_map(|r| r.ok())
-            .collect();
-
-        // Engine-added methods = vm_methods - stdlib_methods
-        let engine_added: BTreeSet<&String> = vm_methods.difference(&stdlib_methods).collect();
-
-        let declared = table_methods.get(*ns).cloned().unwrap_or_default();
-        let declared_set: BTreeSet<&str> = declared.iter().map(|s| s.as_str()).collect();
-
-        for method in engine_added {
-            if !declared_set.contains(method.as_str()) {
-                undeclared.push(format!("{ns}.{method}"));
-            }
-        }
-    }
-
-    assert!(
-        undeclared.is_empty(),
-        "Namespace methods in Lua VM but missing from .d.ts:\n  {}",
         undeclared.join("\n  ")
     );
 }

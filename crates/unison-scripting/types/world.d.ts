@@ -83,7 +83,7 @@ declare interface SoftBodyDescriptor {
   position: [number, number];
   /** Optional hex color tint. Defaults to white. */
   color?: number;
-  /** Optional texture ID from engine.load_texture(). */
+  /** Optional texture ID from unison.assets.load_texture(). */
   texture?: TextureId;
 }
 
@@ -110,7 +110,7 @@ declare interface RigidBodyDescriptor {
 
 /** Descriptor for spawning a visual-only sprite (no physics). */
 declare interface SpriteDescriptor {
-  /** Texture ID from engine.load_texture(). */
+  /** Texture ID from unison.assets.load_texture(). */
   texture?: TextureId;
   /** World position as [x, y]. */
   position: [number, number];
@@ -285,6 +285,15 @@ declare interface World {
   render(this: World): void;
   /** Render each named camera to a specific render target. */
   render_to_targets(this: World, mapping: RenderTargetMapping[]): void;
+  /** Composite a render-target texture onto the screen. Coordinates are in screen-space. */
+  draw_overlay(this: World, texture_id: TextureId, x: number, y: number, w: number, h: number): void;
+  /** Like draw_overlay but with a colored border. border_color is a hex integer. */
+  draw_overlay_bordered(
+    this: World,
+    texture_id: TextureId,
+    x: number, y: number, w: number, h: number,
+    border_width: number, border_color: number
+  ): void;
 
   // --- Object Spawning ---
 
@@ -311,9 +320,9 @@ declare interface World {
   // --- Queries ---
 
   /** Get object center position. Returns [x, y]. */
-  get_position(this: World, id: ObjectId): Tuple<[number, number]>;
+  get_position(this: World, id: ObjectId): LuaMultiReturn<[number, number]>;
   /** Get object velocity. Returns [vx, vy]. */
-  get_velocity(this: World, id: ObjectId): Tuple<[number, number]>;
+  get_velocity(this: World, id: ObjectId): LuaMultiReturn<[number, number]>;
   /** True if the object is resting on the ground plane. */
   is_grounded(this: World, id: ObjectId): boolean;
   /** True if objects a and b are in contact. */
@@ -337,12 +346,12 @@ declare interface World {
   /** Add a named camera with the given viewport size in world units. */
   camera_add(this: World, name: string, width: number, height: number): void;
   /** Get the current camera center position. Returns [x, y]. */
-  camera_get_position(this: World, name: string): Tuple<[number, number]>;
+  camera_get_position(this: World, name: string): LuaMultiReturn<[number, number]>;
   /**
-   * Convert a screen-space point (e.g. from `input.pointer_just_pressed()`) to
+   * Convert a screen-space point (e.g. from `unison.input.pointer_just_pressed()`) to
    * world-space using the `"main"` camera. Returns [world_x, world_y].
    */
-  screen_to_world(this: World, screen_x: number, screen_y: number): Tuple<[number, number]>;
+  screen_to_world(this: World, screen_x: number, screen_y: number): LuaMultiReturn<[number, number]>;
 
   // --- Lighting: System Configuration ---
 
@@ -391,11 +400,5 @@ declare interface World {
   draw_unlit(this: World, shape: DrawShape, params: DrawParams, z: number): void;
 }
 
-/** World constructor table. */
-declare interface WorldConstructor {
-  /** Create a new World. Default: "main" camera, gravity -9.8. */
-  new: (this: void) => World;
-}
-
-/** @noSelf */
-declare const World: WorldConstructor;
+// World constructor is now unison.World.new()
+// See unison.d.ts.

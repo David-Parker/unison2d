@@ -15,10 +15,10 @@ local ui
 function game.init()
     print("{{PROJECT_NAME}} loaded")
 
-    local logo_tex = engine.load_texture("textures/logo.png")
-    ui = engine.create_ui("fonts/DejaVuSans-Bold.ttf")
+    local logo_tex = unison.assets.load_texture("textures/logo.png")
+    ui = unison.UI.new("fonts/DejaVuSans-Bold.ttf")
 
-    world = World.new()
+    world = unison.World.new()
     world:set_background(0x1a1a2e)
     world:set_gravity(-9.8)
     world:set_ground(-4.5)
@@ -34,7 +34,7 @@ function game.init()
 end
 
 function game.update(dt)
-    local sx, sy = input.pointer_position()
+    local sx, sy = unison.input.pointer_position()
     if sx then
         local tx, ty = world:screen_to_world(sx, sy)
         local px, py = world:get_position(logo_id)

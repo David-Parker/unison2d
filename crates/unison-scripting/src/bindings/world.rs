@@ -1,7 +1,7 @@
 //! `World` userdata — Lua scripts create and interact with a World instance.
 //!
 //! ```lua
-//! local world = World.new()
+//! local world = unison.World.new()
 //! world:set_gravity(-9.8)
 //! world:set_ground(-4.5)
 //! world:step(dt)
@@ -58,7 +58,31 @@ impl LuaUserData for LuaWorld {
         // render is handled specially: we buffer the request and the
         // ScriptedGame render phase submits it with the actual renderer.
         methods.add_method("render", |_, this, ()| {
-            super::engine::request_auto_render(this.0.clone());
+            super::engine_state::request_auto_render(this.0.clone());
+            Ok(())
+        });
+
+        // -- Overlay drawing (moved from engine.draw_overlay) --
+
+        // world:draw_overlay(texture_id, x, y, w, h)
+        methods.add_method("draw_overlay", |_, _this, (tex, x, y, w, h): (u32, f32, f32, f32, f32)| {
+            use super::render_targets::{push_overlay, OverlayRequest};
+            push_overlay(OverlayRequest {
+                texture_id: tex,
+                x, y, w, h,
+                border: None,
+            });
+            Ok(())
+        });
+
+        // world:draw_overlay_bordered(texture_id, x, y, w, h, border_width, border_color)
+        methods.add_method("draw_overlay_bordered", |_, _this, (tex, x, y, w, h, bw, bc): (u32, f32, f32, f32, f32, f32, u32)| {
+            use super::render_targets::{push_overlay, OverlayRequest, OverlayBorder};
+            push_overlay(OverlayRequest {
+                texture_id: tex,
+                x, y, w, h,
+                border: Some(OverlayBorder { width: bw, color: bc }),
+            });
             Ok(())
         });
 
@@ -79,14 +103,14 @@ impl LuaUserData for LuaWorld {
     }
 }
 
-/// Register the `World` constructor as a global.
-pub fn register(lua: &Lua) -> LuaResult<()> {
+/// Populate `unison.World` constructor on the given `unison` table.
+pub fn populate(lua: &Lua, unison: &LuaTable) -> LuaResult<()> {
     let world_table = lua.create_table()?;
 
     world_table.set("new", lua.create_function(|_, ()| {
         Ok(LuaWorld(Rc::new(RefCell::new(World::new()))))
     })?)?;
 
-    lua.globals().set("World", world_table)?;
+    unison.set("World", world_table)?;
     Ok(())
 }

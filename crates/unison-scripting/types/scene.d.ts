@@ -1,7 +1,7 @@
 /**
  * A scene is a table with optional lifecycle hooks.
- * When active via `engine.set_scene()` or `engine.switch_scene()`,
- * the scene's update/render replace game.update/game.render.
+ * Set the active scene via `unison.scenes.set(scene)`.
+ * The scene's update/render replace game.update/game.render while it is active.
  */
 declare interface Scene {
   /** Called when the scene becomes active. */

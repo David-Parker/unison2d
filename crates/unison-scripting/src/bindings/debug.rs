@@ -14,22 +14,12 @@
 
 use mlua::prelude::*;
 
-/// Register debug utilities into the Lua `debug` table.
+/// Populate `unison.debug` on the given `unison` table.
 ///
-/// If the standard `debug` library is loaded (native builds), we extend it
-/// in-place so `debug.traceback`, `debug.getinfo`, etc. remain available.
-/// If it is absent (e.g. some WASM sandbox configurations), we create a fresh
-/// table and install it as the `debug` global.
-pub fn register(lua: &Lua) -> LuaResult<()> {
-    // Extend the existing debug table if present, otherwise create one.
-    let debug: LuaTable = match lua.globals().get("debug")? {
-        LuaValue::Table(t) => t,
-        _ => {
-            let t = lua.create_table()?;
-            lua.globals().set("debug", t.clone())?;
-            t
-        }
-    };
+/// The Lua standard `debug` table (with traceback, getinfo, etc.) is left
+/// untouched; engine-specific helpers live under `unison.debug` instead.
+pub fn populate(lua: &Lua, unison: &LuaTable) -> LuaResult<()> {
+    let debug = lua.create_table()?;
 
     // debug.log(...) — print varargs to platform console, joined with tab.
     debug.set("log", lua.create_function(|lua, args: LuaMultiValue| {
@@ -74,5 +64,6 @@ pub fn register(lua: &Lua) -> LuaResult<()> {
         Ok(())
     })?)?;
 
+    unison.set("debug", debug)?;
     Ok(())
 }
