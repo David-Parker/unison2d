@@ -3,8 +3,8 @@
 //! ```lua
 //! if input.is_key_pressed("Space") then ... end
 //! if input.is_key_just_pressed("W") then ... end
-//! local ax, ay = input.axis()
-//! local touches = input.touches_just_began()
+//! if input.is_mouse_button_just_pressed(0) then ... end
+//! local touches = input.touches_started()
 //! ```
 
 use std::cell::RefCell;
@@ -23,13 +23,12 @@ pub struct InputStateSnapshot {
     pub keys_pressed: Vec<KeyCode>,
     pub keys_just_pressed: Vec<KeyCode>,
     pub keys_just_released: Vec<KeyCode>,
-    pub axis: (f32, f32),
     pub touches_began: Vec<(f32, f32)>,
     pub active_touch: Option<(f32, f32)>,
     pub mouse_pos: (f32, f32),
-    pub mouse_left_just_pressed: bool,
-    pub mouse_left_pressed: bool,
-    pub mouse_left_just_released: bool,
+    pub mouse_buttons_pressed: Vec<MouseButton>,
+    pub mouse_buttons_just_pressed: Vec<MouseButton>,
+    pub mouse_buttons_just_released: Vec<MouseButton>,
 }
 
 impl InputStateSnapshot {
@@ -48,7 +47,6 @@ impl InputStateSnapshot {
             .filter(|k| input.is_key_just_released(**k))
             .copied()
             .collect();
-        let axis_vec = input.axis();
         let touches_began: Vec<(f32, f32)> = input.touches_just_began()
             .iter()
             .map(|t| (t.position.x, t.position.y))
@@ -57,17 +55,31 @@ impl InputStateSnapshot {
             .map(|t| (t.position.x, t.position.y));
         let mouse_pos_vec = input.mouse_position();
 
+        // Capture all mouse button states
+        let all_buttons = [MouseButton::Left, MouseButton::Right, MouseButton::Middle];
+        let mouse_buttons_pressed: Vec<MouseButton> = all_buttons.iter()
+            .filter(|b| input.is_mouse_pressed(**b))
+            .copied()
+            .collect();
+        let mouse_buttons_just_pressed: Vec<MouseButton> = all_buttons.iter()
+            .filter(|b| input.is_mouse_just_pressed(**b))
+            .copied()
+            .collect();
+        let mouse_buttons_just_released: Vec<MouseButton> = all_buttons.iter()
+            .filter(|b| input.is_mouse_just_released(**b))
+            .copied()
+            .collect();
+
         Self {
             keys_pressed,
             keys_just_pressed,
             keys_just_released,
-            axis: (axis_vec.x, axis_vec.y),
             touches_began,
             active_touch,
             mouse_pos: (mouse_pos_vec.x, mouse_pos_vec.y),
-            mouse_left_just_pressed: input.is_mouse_just_pressed(MouseButton::Left),
-            mouse_left_pressed: input.is_mouse_pressed(MouseButton::Left),
-            mouse_left_just_released: input.is_mouse_just_released(MouseButton::Left),
+            mouse_buttons_pressed,
+            mouse_buttons_just_pressed,
+            mouse_buttons_just_released,
         }
     }
 }
@@ -125,24 +137,8 @@ pub fn populate(lua: &Lua, unison: &LuaTable) -> LuaResult<()> {
         })
     })?)?;
 
-    // input.axis_x() → f32
-    input.set("axis_x", lua.create_function(|_, ()| {
-        INPUT_STATE.with(|cell| {
-            let snap = cell.borrow();
-            Ok(snap.as_ref().map(|s| s.axis.0).unwrap_or(0.0))
-        })
-    })?)?;
-
-    // input.axis_y() → f32
-    input.set("axis_y", lua.create_function(|_, ()| {
-        INPUT_STATE.with(|cell| {
-            let snap = cell.borrow();
-            Ok(snap.as_ref().map(|s| s.axis.1).unwrap_or(0.0))
-        })
-    })?)?;
-
-    // input.touches_just_began() → array of {x, y} tables
-    input.set("touches_just_began", lua.create_function(|lua, ()| {
+    // input.touches_started() → array of {x, y} tables
+    input.set("touches_started", lua.create_function(|lua, ()| {
         INPUT_STATE.with(|cell| {
             let snap = cell.borrow();
             let touches = snap.as_ref().map(|s| &s.touches_began[..]).unwrap_or(&[]);
@@ -157,17 +153,42 @@ pub fn populate(lua: &Lua, unison: &LuaTable) -> LuaResult<()> {
         })
     })?)?;
 
-    // input.is_mouse_just_pressed() → bool (left button, this frame)
-    input.set("is_mouse_just_pressed", lua.create_function(|_, ()| {
+    // input.is_mouse_button_pressed(button: int) → bool (0=Left, 1=Right, 2=Middle)
+    input.set("is_mouse_button_pressed", lua.create_function(|_, button: i32| {
+        let mb = match button {
+            0 => MouseButton::Left,
+            1 => MouseButton::Right,
+            2 => MouseButton::Middle,
+            _ => return Ok(false),
+        };
         INPUT_STATE.with(|cell| {
-            Ok(cell.borrow().as_ref().is_some_and(|s| s.mouse_left_just_pressed))
+            Ok(cell.borrow().as_ref().is_some_and(|s| s.mouse_buttons_pressed.contains(&mb)))
         })
     })?)?;
 
-    // input.is_mouse_button_just_released() → bool (left button, this frame)
-    input.set("is_mouse_button_just_released", lua.create_function(|_, ()| {
+    // input.is_mouse_button_just_pressed(button: int) → bool (0=Left, 1=Right, 2=Middle)
+    input.set("is_mouse_button_just_pressed", lua.create_function(|_, button: i32| {
+        let mb = match button {
+            0 => MouseButton::Left,
+            1 => MouseButton::Right,
+            2 => MouseButton::Middle,
+            _ => return Ok(false),
+        };
         INPUT_STATE.with(|cell| {
-            Ok(cell.borrow().as_ref().is_some_and(|s| s.mouse_left_just_released))
+            Ok(cell.borrow().as_ref().is_some_and(|s| s.mouse_buttons_just_pressed.contains(&mb)))
+        })
+    })?)?;
+
+    // input.is_mouse_button_just_released(button: int) → bool (0=Left, 1=Right, 2=Middle)
+    input.set("is_mouse_button_just_released", lua.create_function(|_, button: i32| {
+        let mb = match button {
+            0 => MouseButton::Left,
+            1 => MouseButton::Right,
+            2 => MouseButton::Middle,
+            _ => return Ok(false),
+        };
+        INPUT_STATE.with(|cell| {
+            Ok(cell.borrow().as_ref().is_some_and(|s| s.mouse_buttons_just_released.contains(&mb)))
         })
     })?)?;
 
@@ -178,40 +199,35 @@ pub fn populate(lua: &Lua, unison: &LuaTable) -> LuaResult<()> {
         })
     })?)?;
 
-    // input.pointer_just_pressed() → x, y or nil, nil
-    // Unified cross-platform "tap/click": returns the position of a touch that
-    // began this frame, OR the mouse position if the primary button was just
-    // pressed. Returns `nil, nil` when neither is active.
-    input.set("pointer_just_pressed", lua.create_function(|_, ()| -> LuaResult<(Option<f32>, Option<f32>)> {
+    // input.is_pointer_just_pressed() → bool
+    // Unified cross-platform "tap/click" detector: returns true if a touch began
+    // this frame OR the primary mouse button was just pressed.
+    input.set("is_pointer_just_pressed", lua.create_function(|_, ()| {
         INPUT_STATE.with(|cell| {
             let snap = cell.borrow();
             let Some(s) = snap.as_ref() else {
-                return Ok((None, None));
+                return Ok(false);
             };
-            if let Some(&(x, y)) = s.touches_began.first() {
-                return Ok((Some(x), Some(y)));
+            if !s.touches_began.is_empty() {
+                return Ok(true);
             }
-            if s.mouse_left_just_pressed {
-                return Ok((Some(s.mouse_pos.0), Some(s.mouse_pos.1)));
-            }
-            Ok((None, None))
+            Ok(s.mouse_buttons_just_pressed.contains(&MouseButton::Left))
         })
     })?)?;
 
-    // input.pointer_position() → x, y or nil, nil
-    // "While held" counterpart to `pointer_just_pressed`: returns the position
-    // of an active touch OR the mouse position if the primary button is
-    // currently held. Returns `nil, nil` when no pointer is active.
-    input.set("pointer_position", lua.create_function(|_, ()| -> LuaResult<(Option<f32>, Option<f32>)> {
+    // input.pointer_position() → (x, y) or (nil, nil)
+    // Returns the position of an active touch OR the mouse position if the
+    // primary button is currently held. Returns (nil, nil) when no pointer is active.
+    input.set("pointer_position", lua.create_function(|_, ()| {
         INPUT_STATE.with(|cell| {
             let snap = cell.borrow();
             let Some(s) = snap.as_ref() else {
-                return Ok((None, None));
+                return Ok((None::<f32>, None::<f32>));
             };
             if let Some((x, y)) = s.active_touch {
                 return Ok((Some(x), Some(y)));
             }
-            if s.mouse_left_pressed {
+            if s.mouse_buttons_pressed.contains(&MouseButton::Left) {
                 return Ok((Some(s.mouse_pos.0), Some(s.mouse_pos.1)));
             }
             Ok((None, None))

@@ -330,12 +330,10 @@ fn input_functions_exist_and_return_defaults() {
             local just = unison.input.is_key_just_pressed("W")
             assert(not just, "no keys should be just pressed by default")
 
-            local ax = unison.input.axis_x()
-            local ay = unison.input.axis_y()
-            assert(ax == 0, "axis_x should be 0 by default")
-            assert(ay == 0, "axis_y should be 0 by default")
+            local mouse_left = unison.input.is_mouse_button_pressed(0)
+            assert(not mouse_left, "left mouse button should not be pressed by default")
 
-            local touches = unison.input.touches_just_began()
+            local touches = unison.input.touches_started()
             assert(#touches == 0, "no touches by default")
         end
         function game.update(dt) end

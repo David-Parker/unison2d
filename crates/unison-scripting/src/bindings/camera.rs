@@ -90,7 +90,7 @@ pub fn build_cameras_facade(lua: &Lua, world_rc: Rc<RefCell<World>>) -> LuaResul
     // ---------------------------------------------------------------
     // screen_to_world(sx, sy) → wx, wy
     //
-    // Converts a screen-space point (e.g. from input.pointer_just_pressed()
+    // Converts a screen-space point (e.g. from input.pointer_position()
     // or input.mouse_position()) to world-space using the active "main" camera.
     // Uses the current screen size captured by the engine layer each frame.
     // ---------------------------------------------------------------

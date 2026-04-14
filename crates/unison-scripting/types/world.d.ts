@@ -300,7 +300,7 @@ declare interface WorldCameras {
   position(this: WorldCameras, name: string): LuaMultiReturn<[number, number]>;
 
   /**
-   * Convert a screen-space point (e.g. from `unison.input.pointer_just_pressed()`) to
+   * Convert a screen-space point (e.g. from `unison.input.pointer_position()`) to
    * world-space using the `"main"` camera. Returns [world_x, world_y].
    */
   screen_to_world(this: WorldCameras, screen_x: number, screen_y: number): LuaMultiReturn<[number, number]>;

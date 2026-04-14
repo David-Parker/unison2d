@@ -39,24 +39,21 @@ declare interface UnisonInput {
   is_key_just_pressed(this: void, key: KeyName): boolean;
   /** True only on the frame the key was released. */
   is_key_just_released(this: void, key: KeyName): boolean;
-  /** Horizontal axis in [-1, 1] from joystick or touch joystick. */
-  axis_x(this: void): number;
-  /** Vertical axis in [-1, 1] from joystick or touch joystick. */
-  axis_y(this: void): number;
   /** Array of new touch-start positions this frame. */
-  touches_just_began(this: void): TouchPosition[];
-  /** True on the frame the primary (left) mouse button was first pressed. */
-  is_mouse_just_pressed(this: void): boolean;
-  /** True on the frame the primary (left) mouse button was released. */
-  is_mouse_button_just_released(this: void): boolean;
+  touches_started(this: void): TouchPosition[];
+  /** True while a mouse button is held. Button: 0=Left, 1=Right, 2=Middle. */
+  is_mouse_button_pressed(this: void, button: number): boolean;
+  /** True on the frame a mouse button was first pressed. Button: 0=Left, 1=Right, 2=Middle. */
+  is_mouse_button_just_pressed(this: void, button: number): boolean;
+  /** True on the frame a mouse button was released. Button: 0=Left, 1=Right, 2=Middle. */
+  is_mouse_button_just_released(this: void, button: number): boolean;
   /** Current mouse position in screen space: `[x, y]`. */
   mouse_position(this: void): LuaMultiReturn<[number, number]>;
   /**
-   * Cross-platform tap/click: returns `[x, y]` of a just-began touch, or the
-   * mouse position if the primary button was just pressed. Returns
-   * `[undefined, undefined]` when neither happened this frame.
+   * Cross-platform tap/click detector: returns true if a touch began
+   * this frame OR the primary (left) mouse button was just pressed.
    */
-  pointer_just_pressed(this: void): LuaMultiReturn<[number | undefined, number | undefined]>;
+  is_pointer_just_pressed(this: void): boolean;
   /**
    * Cross-platform "pointer is currently held" position: returns `[x, y]` of
    * an active touch, or the mouse position if the primary button is held.
