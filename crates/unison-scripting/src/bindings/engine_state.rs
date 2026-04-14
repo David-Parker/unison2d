@@ -132,4 +132,5 @@ pub fn reset() {
     AUTO_RENDER_WORLD.with(|cell| *cell.borrow_mut() = None);
     AA_REQUEST.with(|cell| *cell.borrow_mut() = None);
     ENGINE_PTR.with(|c| c.set(None));
+    super::action_map::reset();
 }

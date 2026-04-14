@@ -16,6 +16,7 @@ pub mod unison_root;
 pub mod world;
 pub mod objects;
 pub mod input;
+pub mod action_map;
 pub mod camera;
 pub mod lighting;
 pub mod collisions;

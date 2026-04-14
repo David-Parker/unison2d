@@ -31,6 +31,20 @@ declare interface UnisonRenderer {
   create_target(this: void, w: number, h: number): LuaMultiReturn<[RenderTargetId, TextureId]>;
 }
 
+/** Options for bind_action. */
+declare interface BindActionOpts {
+  keys?: string[];
+  mouse_buttons?: number[];
+}
+
+/** Options for bind_axis. */
+declare interface BindAxisOpts {
+  negative?: string;
+  positive?: string;
+  /** "x" or "y" */
+  joystick_axis?: string;
+}
+
 /** Raw input state, refreshed automatically before each update. */
 declare interface UnisonInput {
   /** True while the key is held down. */
@@ -60,6 +74,18 @@ declare interface UnisonInput {
    * Returns `[undefined, undefined]` when no pointer is active.
    */
   pointer_position(this: void): LuaMultiReturn<[number | undefined, number | undefined]>;
+  /** Bind a named action to a set of keys and/or mouse buttons. */
+  bind_action(this: void, name: string, opts: BindActionOpts): void;
+  /** Bind a named axis to negative/positive actions and/or a joystick axis. */
+  bind_axis(this: void, name: string, opts: BindAxisOpts): void;
+  /** True while any input bound to `name` is held. */
+  is_action_pressed(this: void, name: string): boolean;
+  /** True only on the frame the action was first triggered. */
+  is_action_just_pressed(this: void, name: string): boolean;
+  /** True only on the frame all bound inputs were released. */
+  is_action_just_released(this: void, name: string): boolean;
+  /** Digital axis value in [-1, 1] from negative/positive actions, plus raw joystick if bound. */
+  axis(this: void, name: string): number;
 }
 
 /** Scene management service. */

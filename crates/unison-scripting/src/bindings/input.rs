@@ -12,6 +12,8 @@ use std::cell::RefCell;
 use mlua::prelude::*;
 use unison2d::input::{InputState, KeyCode, MouseButton};
 
+use super::action_map::{self, ActionBinding, AxisBinding};
+
 thread_local! {
     /// Snapshot of the input state, refreshed each frame by `ScriptedGame::update`.
     static INPUT_STATE: RefCell<Option<InputStateSnapshot>> = const { RefCell::new(None) };
@@ -29,6 +31,8 @@ pub struct InputStateSnapshot {
     pub mouse_buttons_pressed: Vec<MouseButton>,
     pub mouse_buttons_just_pressed: Vec<MouseButton>,
     pub mouse_buttons_just_released: Vec<MouseButton>,
+    /// Raw joystick axis: (x, y), each in -1.0..=1.0.
+    pub joystick: (f32, f32),
 }
 
 impl InputStateSnapshot {
@@ -70,6 +74,7 @@ impl InputStateSnapshot {
             .copied()
             .collect();
 
+        let axis_vec = input.axis();
         Self {
             keys_pressed,
             keys_just_pressed,
@@ -80,8 +85,14 @@ impl InputStateSnapshot {
             mouse_buttons_pressed,
             mouse_buttons_just_pressed,
             mouse_buttons_just_released,
+            joystick: (axis_vec.x, axis_vec.y),
         }
     }
+}
+
+/// Call `f` with an optional reference to the current input snapshot.
+pub(crate) fn with_snapshot<R>(f: impl FnOnce(Option<&InputStateSnapshot>) -> R) -> R {
+    INPUT_STATE.with(|cell| f(cell.borrow().as_ref()))
 }
 
 /// Update the thread-local input snapshot. Called each frame by `ScriptedGame::update`.
@@ -234,12 +245,78 @@ pub fn populate(lua: &Lua, unison: &LuaTable) -> LuaResult<()> {
         })
     })?)?;
 
+    // ---------------------------------------------------------------
+    // Action map
+    // ---------------------------------------------------------------
+
+    // input.bind_action(name, { keys = {...}, mouse_buttons = {...} })
+    input.set("bind_action", lua.create_function(|_, (name, opts): (String, LuaTable)| {
+        let mut binding = ActionBinding::default();
+        if let Ok(keys_tbl) = opts.get::<LuaTable>("keys") {
+            for pair in keys_tbl.sequence_values::<String>() {
+                let k = pair?;
+                if let Some(kc) = parse_key_code(&k) {
+                    binding.keys.push(kc);
+                }
+            }
+        }
+        if let Ok(mb_tbl) = opts.get::<LuaTable>("mouse_buttons") {
+            for pair in mb_tbl.sequence_values::<i32>() {
+                let b = pair?;
+                let mb = match b {
+                    0 => MouseButton::Left,
+                    1 => MouseButton::Right,
+                    2 => MouseButton::Middle,
+                    _ => continue,
+                };
+                binding.mouse_buttons.push(mb);
+            }
+        }
+        action_map::bind_action(&name, binding);
+        Ok(())
+    })?)?;
+
+    // input.bind_axis(name, { negative = "action", positive = "action", joystick_axis = "x"|"y" })
+    input.set("bind_axis", lua.create_function(|_, (name, opts): (String, LuaTable)| {
+        let binding = AxisBinding {
+            negative: opts.get::<String>("negative").ok(),
+            positive: opts.get::<String>("positive").ok(),
+            joystick_axis: match opts.get::<String>("joystick_axis").ok().as_deref() {
+                Some("x") | Some("X") => Some(0),
+                Some("y") | Some("Y") => Some(1),
+                _ => None,
+            },
+        };
+        action_map::bind_axis(&name, binding);
+        Ok(())
+    })?)?;
+
+    // input.is_action_pressed(name) → bool
+    input.set("is_action_pressed", lua.create_function(|_, name: String| {
+        Ok(action_map::is_action_pressed(&name))
+    })?)?;
+
+    // input.is_action_just_pressed(name) → bool
+    input.set("is_action_just_pressed", lua.create_function(|_, name: String| {
+        Ok(action_map::is_action_just_pressed(&name))
+    })?)?;
+
+    // input.is_action_just_released(name) → bool
+    input.set("is_action_just_released", lua.create_function(|_, name: String| {
+        Ok(action_map::is_action_just_released(&name))
+    })?)?;
+
+    // input.axis(name) → number
+    input.set("axis", lua.create_function(|_, name: String| {
+        Ok(action_map::axis(&name))
+    })?)?;
+
     unison.set("input", input)?;
     Ok(())
 }
 
 /// Parse a key name string into a KeyCode variant.
-fn parse_key_code(name: &str) -> Option<KeyCode> {
+pub(crate) fn parse_key_code(name: &str) -> Option<KeyCode> {
     match name {
         "ArrowUp" => Some(KeyCode::ArrowUp),
         "ArrowDown" => Some(KeyCode::ArrowDown),
