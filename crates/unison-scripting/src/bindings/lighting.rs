@@ -1,54 +1,70 @@
-//! Lighting bindings — point lights, directional lights, shadows.
-//!
-//! Registered as methods on the `LuaWorld` userdata:
+//! Lighting bindings — `world.lights` facade for point lights, directional lights,
+//! and shadow/ambient configuration.
 //!
 //! ```lua
-//! world:lighting_set_enabled(true)
-//! world:lighting_set_ambient(0.1, 0.1, 0.15, 1.0)
-//! world:lighting_set_ground_shadow(ground_y)
+//! world.lights:set_enabled(true)
+//! world.lights:set_ambient(0.1, 0.1, 0.15, 1.0)
+//! world.lights:set_ground_shadow(-4.5)   -- pass nil to disable
 //!
-//! local light = world:add_point_light({
+//! local light = world.lights:add_point({
 //!     position = {0, 5}, color = 0xFFDD44,
 //!     intensity = 2.0, radius = 8.0,
 //!     casts_shadows = true, shadow = "soft",
 //! })
 //!
-//! local dir = world:add_directional_light({
+//! local dir = world.lights:add_directional({
 //!     direction = {-0.5, -1.0}, color = 0xFFFFFF,
 //!     intensity = 0.8, casts_shadows = true,
 //! })
 //!
-//! world:set_light_intensity(light, 3.0)
-//! world:set_directional_light_direction(dir, -0.7, -1.0)
-//! world:light_follow(light, donut)
-//! world:light_follow_with_offset(light, donut, 0, 2)
-//! world:light_unfollow(light)
+//! world.lights:set_intensity(light, 3.0)
+//! world.lights:set_direction(dir, -0.7, -1.0)
+//! world.lights:follow(light, donut)
+//! world.lights:follow(light, donut, { offset = {0, 2} })
+//! world.lights:unfollow(light)
 //! ```
+
+use std::cell::RefCell;
+use std::rc::Rc;
 
 use mlua::prelude::*;
 use unison2d::core::{Color, Vec2};
 use unison2d::lighting::{LightId, PointLight, DirectionalLight, ShadowSettings};
 use unison2d::lighting::occluder::ShadowFilter;
-use unison2d::ObjectId;
+use unison2d::{ObjectId, World};
 
-use super::world::LuaWorld;
+/// Build the `world.lights` facade table.
+///
+/// Each closure clones the `Rc<RefCell<World>>` and dispatches into the Rust API.
+/// Lua callers use colon syntax (`world.lights:follow(light, id, opts)`); the
+/// table itself is passed as the first argument and is discarded (`_self`).
+pub fn build_lights_facade(lua: &Lua, world_rc: Rc<RefCell<World>>) -> LuaResult<LuaTable> {
+    let tbl = lua.create_table()?;
 
-/// Register lighting-related methods on the LuaWorld userdata.
-pub fn add_world_methods<M: LuaUserDataMethods<LuaWorld>>(methods: &mut M) {
-    // -- System config --
-
-    methods.add_method("lighting_set_enabled", |_, this, enabled: bool| {
-        this.0.borrow_mut().lighting.set_enabled(enabled);
+    // ---------------------------------------------------------------
+    // set_enabled(bool) — enable or disable the lighting system
+    // ---------------------------------------------------------------
+    let w = world_rc.clone();
+    tbl.set("set_enabled", lua.create_function(move |_, (_self, enabled): (LuaTable, bool)| {
+        w.borrow_mut().lighting.set_enabled(enabled);
         Ok(())
-    });
+    })?)?;
 
-    methods.add_method("lighting_set_ambient", |_, this, (r, g, b, a): (f32, f32, f32, f32)| {
-        this.0.borrow_mut().lighting.set_ambient(Color::new(r, g, b, a));
+    // ---------------------------------------------------------------
+    // set_ambient(r, g, b, a) — set ambient light color
+    // ---------------------------------------------------------------
+    let w = world_rc.clone();
+    tbl.set("set_ambient", lua.create_function(move |_, (_self, r, g, b, a): (LuaTable, f32, f32, f32, f32)| {
+        w.borrow_mut().lighting.set_ambient(Color::new(r, g, b, a));
         Ok(())
-    });
+    })?)?;
 
-    methods.add_method("lighting_set_ground_shadow", |_, this, y: LuaValue| {
-        let mut world = this.0.borrow_mut();
+    // ---------------------------------------------------------------
+    // set_ground_shadow(y | nil) — add/remove a ground shadow plane
+    // ---------------------------------------------------------------
+    let w = world_rc.clone();
+    tbl.set("set_ground_shadow", lua.create_function(move |_, (_self, y): (LuaTable, LuaValue)| {
+        let mut world = w.borrow_mut();
         match y {
             LuaValue::Nil | LuaValue::Boolean(false) => {
                 world.lighting.set_ground_shadow(None);
@@ -68,11 +84,13 @@ pub fn add_world_methods<M: LuaUserDataMethods<LuaWorld>>(methods: &mut M) {
             }
         }
         Ok(())
-    });
+    })?)?;
 
-    // -- Add lights --
-
-    methods.add_method("add_point_light", |_, this, desc: LuaTable| {
+    // ---------------------------------------------------------------
+    // add_point(desc) → light_id — add a point light
+    // ---------------------------------------------------------------
+    let w = world_rc.clone();
+    tbl.set("add_point", lua.create_function(move |_, (_self, desc): (LuaTable, LuaTable)| {
         let position = read_vec2(&desc, "position")?;
         let color = read_light_color(&desc)?;
         let intensity: f32 = desc.get("intensity").unwrap_or(1.0);
@@ -82,11 +100,15 @@ pub fn add_world_methods<M: LuaUserDataMethods<LuaWorld>>(methods: &mut M) {
         light.casts_shadows = desc.get("casts_shadows").unwrap_or(false);
         light.shadow = resolve_shadow_settings(&desc)?;
 
-        let id = this.0.borrow_mut().lighting.add_light(light);
+        let id = w.borrow_mut().lighting.add_light(light);
         Ok(id.raw())
-    });
+    })?)?;
 
-    methods.add_method("add_directional_light", |_, this, desc: LuaTable| {
+    // ---------------------------------------------------------------
+    // add_directional(desc) → light_id — add a directional light
+    // ---------------------------------------------------------------
+    let w = world_rc.clone();
+    tbl.set("add_directional", lua.create_function(move |_, (_self, desc): (LuaTable, LuaTable)| {
         let direction = read_vec2(&desc, "direction")?;
         let color = read_light_color(&desc)?;
         let intensity: f32 = desc.get("intensity").unwrap_or(1.0);
@@ -95,14 +117,17 @@ pub fn add_world_methods<M: LuaUserDataMethods<LuaWorld>>(methods: &mut M) {
         light.casts_shadows = desc.get("casts_shadows").unwrap_or(false);
         light.shadow = resolve_shadow_settings(&desc)?;
 
-        let id = this.0.borrow_mut().lighting.add_directional_light(light);
+        let id = w.borrow_mut().lighting.add_directional_light(light);
         Ok(id.raw())
-    });
+    })?)?;
 
-    // -- Modify lights --
-
-    methods.add_method("set_light_intensity", |_, this, (id, intensity): (u32, f32)| {
-        let mut world = this.0.borrow_mut();
+    // ---------------------------------------------------------------
+    // set_intensity(light_id, value) — update light intensity
+    // Works for both point and directional lights.
+    // ---------------------------------------------------------------
+    let w = world_rc.clone();
+    tbl.set("set_intensity", lua.create_function(move |_, (_self, id, intensity): (LuaTable, u32, f32)| {
+        let mut world = w.borrow_mut();
         let lid = LightId::from_raw(id);
         if let Some(light) = world.lighting.get_light_mut(lid) {
             light.intensity = intensity;
@@ -110,39 +135,56 @@ pub fn add_world_methods<M: LuaUserDataMethods<LuaWorld>>(methods: &mut M) {
             light.intensity = intensity;
         }
         Ok(())
-    });
+    })?)?;
 
-    methods.add_method("set_directional_light_direction", |_, this, (id, dx, dy): (u32, f32, f32)| {
-        let mut world = this.0.borrow_mut();
+    // ---------------------------------------------------------------
+    // set_direction(light_id, dx, dy) — update directional light direction
+    // ---------------------------------------------------------------
+    let w = world_rc.clone();
+    tbl.set("set_direction", lua.create_function(move |_, (_self, id, dx, dy): (LuaTable, u32, f32, f32)| {
+        let mut world = w.borrow_mut();
         if let Some(light) = world.lighting.get_directional_light_mut(LightId::from_raw(id)) {
             light.direction = Vec2::new(dx, dy).normalized();
         }
         Ok(())
-    });
+    })?)?;
 
-    // -- Light follow --
-
-    methods.add_method("light_follow", |_, this, (light_id, obj_id): (u32, u64)| {
-        this.0.borrow_mut().light_follow(
+    // ---------------------------------------------------------------
+    // follow(light_id, obj_id, opts?) — make light track an object
+    //   opts = { offset? = {ox, oy} }
+    //   Consolidates light_follow + light_follow_with_offset.
+    // ---------------------------------------------------------------
+    let w = world_rc.clone();
+    tbl.set("follow", lua.create_function(move |_, (_self, light_id, obj_id, opts): (LuaTable, u32, u64, Option<LuaTable>)| {
+        let offset = match opts {
+            Some(t) => match t.get::<Option<LuaTable>>("offset")? {
+                Some(ot) => {
+                    let ox: f32 = ot.get(1)?;
+                    let oy: f32 = ot.get(2)?;
+                    Vec2::new(ox, oy)
+                }
+                None => Vec2::ZERO,
+            },
+            None => Vec2::ZERO,
+        };
+        w.borrow_mut().light_follow_with_offset(
             LightId::from_raw(light_id),
             ObjectId::from_raw(obj_id),
+            offset,
         );
         Ok(())
-    });
+    })?)?;
 
-    methods.add_method("light_follow_with_offset", |_, this, (light_id, obj_id, ox, oy): (u32, u64, f32, f32)| {
-        this.0.borrow_mut().light_follow_with_offset(
-            LightId::from_raw(light_id),
-            ObjectId::from_raw(obj_id),
-            Vec2::new(ox, oy),
-        );
+    // ---------------------------------------------------------------
+    // unfollow(light_id) — stop a light from tracking an object
+    // ---------------------------------------------------------------
+    let w = world_rc.clone();
+    tbl.set("unfollow", lua.create_function(move |_, (_self, light_id): (LuaTable, u32)| {
+        w.borrow_mut().light_unfollow(LightId::from_raw(light_id));
         Ok(())
-    });
+    })?)?;
 
-    methods.add_method("light_unfollow", |_, this, light_id: u32| {
-        this.0.borrow_mut().light_unfollow(LightId::from_raw(light_id));
-        Ok(())
-    });
+    Ok(tbl)
 }
 
 // ── Helpers ──

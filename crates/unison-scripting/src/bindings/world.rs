@@ -18,6 +18,13 @@
 //! world.cameras:follow("main", id, { smoothing = 0.08, offset = {0, 3.5} })
 //! local cx, cy = world.cameras:position("main")
 //! local wx, wy = world.cameras:screen_to_world(sx, sy)
+//!
+//! -- Lights facade (Task 13)
+//! world.lights:set_enabled(true)
+//! world.lights:set_ambient(0.1, 0.1, 0.15, 1.0)
+//! local light = world.lights:add_point({ position = {0, 5}, color = 0xFFDD44, radius = 8.0 })
+//! world.lights:follow(light, id, { offset = {0, 2} })
+//! world.lights:unfollow(light)
 //! ```
 
 use std::cell::RefCell;
@@ -42,6 +49,11 @@ impl LuaUserData for LuaWorld {
         // Expose the `world.cameras` facade as a field.
         fields.add_field_method_get("cameras", |lua, this| {
             super::camera::build_cameras_facade(lua, this.0.clone())
+        });
+
+        // Expose the `world.lights` facade as a field.
+        fields.add_field_method_get("lights", |lua, this| {
+            super::lighting::build_lights_facade(lua, this.0.clone())
         });
     }
 
@@ -110,9 +122,6 @@ impl LuaUserData for LuaWorld {
             });
             Ok(())
         });
-
-        // Register lighting methods
-        super::lighting::add_world_methods(methods);
 
         // Register render layer methods
         super::render_layers::add_world_methods(methods);

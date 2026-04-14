@@ -188,7 +188,7 @@ declare interface DirectionalLightDescriptor {
   shadow?: ShadowOption;
 }
 
-/** Opaque light handle returned by add_point_light / add_directional_light. */
+/** Opaque light handle returned by world.lights:add_point / world.lights:add_directional. */
 declare type LightId = number;
 
 // ===================================================================
@@ -363,6 +363,49 @@ declare interface WorldObjects {
 }
 
 // ===================================================================
+// WorldLights facade — accessed as world.lights
+// ===================================================================
+
+/**
+ * Lighting management facade exposed as `world.lights`.
+ *
+ * Call methods with colon syntax: `world.lights:set_enabled(true)`.
+ */
+declare interface WorldLights {
+  /** Enable or disable the entire lighting system. */
+  set_enabled(this: WorldLights, enabled: boolean): void;
+
+  /** Set ambient light color as RGBA floats in [0, 1]. */
+  set_ambient(this: WorldLights, r: number, g: number, b: number, a: number): void;
+
+  /** Add a ground shadow plane at Y, or pass nil/false to disable. */
+  set_ground_shadow(this: WorldLights, y: number | undefined | false): void;
+
+  /** Add a point light. Returns a light handle. */
+  add_point(this: WorldLights, desc: PointLightDescriptor): LightId;
+
+  /** Add a directional light. Returns a light handle. */
+  add_directional(this: WorldLights, desc: DirectionalLightDescriptor): LightId;
+
+  /**
+   * Make a light track an object each frame.
+   *
+   * `opts.offset`: `[ox, oy]` world-space offset. Defaults to `[0, 0]`.
+   * `opts` itself may be omitted.
+   */
+  follow(this: WorldLights, handle: LightId, id: ObjectId, opts?: { offset?: [number, number] }): void;
+
+  /** Stop the light from tracking an object. */
+  unfollow(this: WorldLights, handle: LightId): void;
+
+  /** Update light intensity (multiplier). Works for both point and directional lights. */
+  set_intensity(this: WorldLights, handle: LightId, intensity: number): void;
+
+  /** Update a directional light's direction vector. Will be normalized internally. */
+  set_direction(this: WorldLights, handle: LightId, dx: number, dy: number): void;
+}
+
+// ===================================================================
 // World interface
 // ===================================================================
 
@@ -409,34 +452,10 @@ declare interface World {
   /** Camera management facade — add, follow, position, screen-to-world. */
   cameras: WorldCameras;
 
-  // --- Lighting: System Configuration ---
+  // --- Lighting Management (facade) ---
 
-  /** Enable or disable the entire lighting system. */
-  lighting_set_enabled(this: World, enabled: boolean): void;
-  /** Set ambient light color as RGBA floats in [0, 1]. */
-  lighting_set_ambient(this: World, r: number, g: number, b: number, a: number): void;
-  /** Add a ground shadow plane at Y, or pass nil/false to disable. */
-  lighting_set_ground_shadow(this: World, y: number | undefined | false): void;
-
-  // --- Lighting: Point Lights ---
-
-  /** Add a point light. Returns a light handle. */
-  add_point_light(this: World, desc: PointLightDescriptor): LightId;
-  /** Update light intensity (multiplier). Works for both point and directional lights. */
-  set_light_intensity(this: World, handle: LightId, intensity: number): void;
-  /** Make the light track an object each frame. */
-  light_follow(this: World, handle: LightId, id: ObjectId): void;
-  /** Track an object with a world-space offset. */
-  light_follow_with_offset(this: World, handle: LightId, id: ObjectId, ox: number, oy: number): void;
-  /** Stop the light from tracking an object. */
-  light_unfollow(this: World, handle: LightId): void;
-
-  // --- Lighting: Directional Lights ---
-
-  /** Add a directional light. Returns a light handle. */
-  add_directional_light(this: World, desc: DirectionalLightDescriptor): LightId;
-  /** Update a directional light's direction vector. Will be normalized internally. */
-  set_directional_light_direction(this: World, handle: LightId, dx: number, dy: number): void;
+  /** Lighting management facade — enable, ambient, point/directional lights, follow. */
+  lights: WorldLights;
 
   // --- Render Layers ---
 

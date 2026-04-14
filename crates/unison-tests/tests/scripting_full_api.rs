@@ -42,8 +42,8 @@ fn lighting_enable_and_set_ambient() {
         local game = {}
         function game.init()
             local w = unison.World.new()
-            w:lighting_set_enabled(true)
-            w:lighting_set_ambient(0.1, 0.1, 0.15, 1.0)
+            w.lights:set_enabled(true)
+            w.lights:set_ambient(0.1, 0.1, 0.15, 1.0)
         end
         function game.update(dt) end
         return game
@@ -56,8 +56,8 @@ fn lighting_add_point_light() {
         local game = {}
         function game.init()
             local w = unison.World.new()
-            w:lighting_set_enabled(true)
-            local light = w:add_point_light({
+            w.lights:set_enabled(true)
+            local light = w.lights:add_point({
                 position = {0, 5},
                 color = 0xFFDD44,
                 intensity = 2.0,
@@ -65,7 +65,7 @@ fn lighting_add_point_light() {
                 casts_shadows = true,
                 shadow = "soft",
             })
-            assert(light ~= nil, "add_point_light should return a handle")
+            assert(light ~= nil, "add_point should return a handle")
         end
         function game.update(dt) end
         return game
@@ -78,15 +78,15 @@ fn lighting_add_directional_light() {
         local game = {}
         function game.init()
             local w = unison.World.new()
-            w:lighting_set_enabled(true)
-            local dir = w:add_directional_light({
+            w.lights:set_enabled(true)
+            local dir = w.lights:add_directional({
                 direction = {-0.5, -1.0},
                 color = 0xFFFFFF,
                 intensity = 0.8,
                 casts_shadows = true,
                 shadow = { filter = "pcf5", strength = 0.8 },
             })
-            assert(dir ~= nil, "add_directional_light should return a handle")
+            assert(dir ~= nil, "add_directional should return a handle")
         end
         function game.update(dt) end
         return game
@@ -99,18 +99,18 @@ fn lighting_set_intensity_and_direction() {
         local game = {}
         function game.init()
             local w = unison.World.new()
-            w:lighting_set_enabled(true)
-            local light = w:add_point_light({
+            w.lights:set_enabled(true)
+            local light = w.lights:add_point({
                 position = {0, 5}, color = 0xFFFFFF,
                 intensity = 1.0, radius = 5.0,
             })
-            w:set_light_intensity(light, 3.0)
+            w.lights:set_intensity(light, 3.0)
 
-            local dir = w:add_directional_light({
+            local dir = w.lights:add_directional({
                 direction = {-1, 0}, color = 0xFFFFFF, intensity = 0.5,
             })
-            w:set_directional_light_direction(dir, -0.7, -1.0)
-            w:set_light_intensity(dir, 1.5)
+            w.lights:set_direction(dir, -0.7, -1.0)
+            w.lights:set_intensity(dir, 1.5)
         end
         function game.update(dt) end
         return game
@@ -123,10 +123,10 @@ fn lighting_ground_shadow() {
         local game = {}
         function game.init()
             local w = unison.World.new()
-            w:lighting_set_enabled(true)
-            w:lighting_set_ground_shadow(-4.5)
+            w.lights:set_enabled(true)
+            w.lights:set_ground_shadow(-4.5)
             -- Disable it
-            w:lighting_set_ground_shadow(nil)
+            w.lights:set_ground_shadow(nil)
         end
         function game.update(dt) end
         return game
@@ -140,24 +140,24 @@ fn light_follow_and_unfollow() {
         function game.init()
             local w = unison.World.new()
             w:set_gravity(0)
-            w:lighting_set_enabled(true)
+            w.lights:set_enabled(true)
 
             local donut = w.objects:spawn_soft_body({
                 mesh = "ring", mesh_params = {1.0, 0.25, 24, 8},
                 material = "rubber", position = {0, 3},
             })
-            local light = w:add_point_light({
+            local light = w.lights:add_point({
                 position = {0, 0}, color = 0xFFFFFF,
                 intensity = 2.0, radius = 8.0,
             })
-            w:light_follow(light, donut)
+            w.lights:follow(light, donut)
             w:step(1/60)
 
             -- Also test with offset
-            w:light_follow_with_offset(light, donut, 0, 2)
+            w.lights:follow(light, donut, { offset = {0, 2} })
             w:step(1/60)
 
-            w:light_unfollow(light)
+            w.lights:unfollow(light)
         end
         function game.update(dt) end
         return game
@@ -616,9 +616,9 @@ fn scene_with_lighting_integration() {
             unison.scenes.set({
                 on_enter = function()
                     local w = unison.World.new()
-                    w:lighting_set_enabled(true)
-                    w:lighting_set_ambient(0.05, 0.05, 0.1, 1.0)
-                    w:add_point_light({
+                    w.lights:set_enabled(true)
+                    w.lights:set_ambient(0.05, 0.05, 0.1, 1.0)
+                    w.lights:add_point({
                         position = {0, 5}, color = 0xFFDD44,
                         intensity = 2.0, radius = 8.0,
                     })
