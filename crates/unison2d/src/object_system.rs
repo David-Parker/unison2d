@@ -15,8 +15,8 @@ use crate::object::{ObjectEntry, ObjectId, ObjectKind, RigidBodyDesc, SoftBodyDe
 
 /// A collision event between two game objects.
 ///
-/// Emitted into the [`EventBus`] after [`Ctx::flush_events()`] translates
-/// raw physics events from `BodyHandle` to `ObjectId`.
+/// Produced by the physics engine and translated from raw `BodyHandle` pairs
+/// to `ObjectId` pairs by the scripting event system.
 #[derive(Clone, Debug)]
 pub struct CollisionEvent {
     /// First object in the collision.

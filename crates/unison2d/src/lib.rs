@@ -12,7 +12,7 @@
 /// Game code is written in **Lua** using `unison-scripting` (`ScriptedGame`).
 ///
 /// ## Subsystem crates (re-exported)
-/// - [`core`] — Vec2, Color, Rect, EventSink
+/// - [`core`] — Vec2, Color, Rect
 /// - [`physics`] — XPBD soft body & rigid body simulation
 /// - [`render`] — Platform-agnostic rendering abstractions
 /// - [`profiler`] — Lightweight function-level profiling
@@ -23,7 +23,6 @@
 
 // Engine layer
 mod engine;
-mod event_bus;
 mod ctx;
 mod object;
 mod object_system;
@@ -32,7 +31,6 @@ mod world;
 mod game;
 
 pub use engine::Engine;
-pub use event_bus::{EventBus, HandlerId};
 pub use ctx::Ctx;
 pub use unison_render::AntiAliasing;
 pub use object::{ObjectId, SoftBodyDesc, RigidBodyDesc, SpriteDesc};

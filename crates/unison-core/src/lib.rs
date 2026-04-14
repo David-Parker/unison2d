@@ -1,6 +1,6 @@
 //! Unison Core — Shared primitives for the Unison 2D engine.
 //!
-//! Provides the common `Vec2`, `Color`, `Rect`, and `EventSink` types used across all
+//! Provides the common `Vec2`, `Color`, and `Rect` types used across all
 //! engine crates. This is the lowest-level crate in the dependency graph — every other
 //! engine crate depends on it.
 
@@ -8,13 +8,11 @@ mod vec2;
 mod color;
 mod rect;
 mod rng;
-mod event_sink;
 
 pub use vec2::Vec2;
 pub use color::Color;
 pub use rect::Rect;
 pub use rng::Rng;
-pub use event_sink::EventSink;
 
 /// Linear interpolation between two f32 values.
 /// `t=0` returns `a`, `t=1` returns `b`.

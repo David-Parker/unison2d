@@ -361,11 +361,8 @@ impl Game for ScriptedGame {
         // borrow below.
         if let Some(world_rc) = bindings::engine::peek_auto_render_world() {
             let mut world = world_rc.borrow_mut();
-            let click_events = bindings::ui::render_pending_ui(engine, &mut world);
+            bindings::ui::render_pending_ui(engine, &mut world);
             drop(world);
-            for name in click_events {
-                bindings::events::queue_string_event(&name);
-            }
         }
 
         if let Some(r) = engine.renderer_mut() {

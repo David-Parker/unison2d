@@ -22,7 +22,7 @@ use std::cell::RefCell;
 
 use mlua::prelude::*;
 
-use unison2d::core::{Color, EventSink, Vec2};
+use unison2d::core::{Color, Vec2};
 use unison2d::render::TextureId;
 use unison2d::ui::facade::Ui;
 use unison2d::ui::node::{UiNode, UiTree};
@@ -62,11 +62,10 @@ pub struct UiNodeDesc {
     pub children: Vec<UiNodeDesc>,
 }
 
-/// Persistent Lua UI state — owns the `Ui<String>` instance and its event sink.
+/// Persistent Lua UI state — owns the `Ui<String>` instance.
 /// Lazily created on the first `ui:frame()` call that has a valid renderer.
 struct LuaUiState {
     ui: Ui<String>,
-    sink: EventSink,
     font_path: String,
 }
 
@@ -270,16 +269,15 @@ fn parse_anchor(s: &str) -> Anchor {
 // ===================================================================
 
 /// Consume any pending `ui:frame()` request, lazily building the `Ui<String>`
-/// the first time a frame is requested. Click events are drained from the
-/// internal sink and returned as string event names for the Lua event system
-/// to emit.
+/// the first time a frame is requested. Click events are dispatched directly
+/// into the Lua event system via [`super::events::queue_string_event`].
 pub fn render_pending_ui(
     engine: &mut Engine,
     world: &mut World,
-) -> Vec<String> {
+) {
     let frame_request = match take_ui_frame() {
         Some(r) => r,
-        None => return Vec::new(),
+        None => return,
     };
 
     // Decide whether we need to (re)build the Ui<String>.
@@ -296,29 +294,31 @@ pub fn render_pending_ui(
                     "[unison-scripting] UI font asset not found: '{}'",
                     frame_request.font_path
                 );
-                return Vec::new();
+                return;
             }
         };
 
-        let sink = EventSink::new();
-        let sink_for_ui = sink.clone();
         let renderer = match engine.renderer.as_mut() {
             Some(r) => r.as_mut(),
-            None => return Vec::new(),
+            None => return,
         };
 
-        let ui = match Ui::<String>::new(font_bytes, renderer, sink_for_ui) {
+        // The callback routes click events directly into the Lua event system.
+        let on_event = |name: String| {
+            super::events::queue_string_event(&name);
+        };
+
+        let ui = match Ui::<String>::new(font_bytes, renderer, on_event) {
             Ok(u) => u,
             Err(e) => {
                 eprintln!("[unison-scripting] Failed to create UI: {e}");
-                return Vec::new();
+                return;
             }
         };
 
         LUA_UI.with(|cell| {
             *cell.borrow_mut() = Some(LuaUiState {
                 ui,
-                sink,
                 font_path: frame_request.font_path.clone(),
             });
         });
@@ -347,20 +347,4 @@ pub fn render_pending_ui(
         let input = &engine.input;
         let _ = state.ui.frame(tree, input, screen_size, dt, world, renderer);
     });
-
-    // Drain emitted click events — return them so the caller can push them
-    // into the Lua event system.
-    LUA_UI.with(|cell| {
-        let borrow = cell.borrow();
-        let state = match borrow.as_ref() {
-            Some(s) => s,
-            None => return Vec::new(),
-        };
-        state
-            .sink
-            .drain()
-            .into_iter()
-            .filter_map(|e| e.downcast::<String>().ok().map(|b| *b))
-            .collect()
-    })
 }

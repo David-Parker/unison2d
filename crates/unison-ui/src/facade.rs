@@ -3,9 +3,8 @@
 //! Game code creates a `Ui<E>` once and calls [`Ui::frame()`] each frame:
 //!
 //! ```ignore
-//! // Create with an EventSink (events route through the EventBus)
-//! let ui = Ui::new(font_bytes, renderer, bus.create_sink())?;
-//! // Or use the factory: ctx.create_ui::<Action>(font_bytes)?
+//! // Create with a callback that receives click events
+//! let ui = Ui::new(font_bytes, renderer, |event: MenuAction| { /* handle it */ })?;
 //!
 //! // In render() — one call handles input, layout, and overlay commands:
 //! let ui_input = self.ui.frame(tree, ctx.input, screen, ctx.dt, &mut self.world, ctx.renderer);
@@ -13,7 +12,7 @@
 //! ```
 
 use unison_input::InputState;
-use unison_core::{EventSink, Vec2};
+use unison_core::Vec2;
 use unison_render::Renderer;
 
 use crate::diff::diff_trees;
@@ -26,9 +25,9 @@ use crate::text::TextRenderer;
 
 /// The main UI facade. Generic over the game's event/action type `E`.
 ///
-/// Events from button clicks are emitted into an [`EventSink`] which routes
-/// them through the engine's [`EventBus`]. Use `ctx.create_ui()` or pass a
-/// sink from `bus.create_sink()` to the constructor.
+/// Click events are delivered synchronously via the `on_event` callback passed
+/// to [`Ui::new`]. Use [`Ui::new`] with a closure, or [`Ui::headless`] to
+/// collect events yourself.
 pub struct Ui<E: Clone + 'static> {
     /// Previous frame's tree (for diffing).
     prev_tree: UiTree<E>,
@@ -40,8 +39,8 @@ pub struct Ui<E: Clone + 'static> {
     state: UiState,
     /// Text renderer (font + glyph atlas).
     text_renderer: TextRenderer,
-    /// Event sink — click events are emitted here, routed to the EventBus on flush.
-    event_sink: EventSink,
+    /// Callback invoked synchronously for each click event.
+    on_event: Box<dyn FnMut(E)>,
     /// Screen size (cached from last begin_frame).
     screen_size: Vec2,
     /// Whether `describe` has been called this frame.
@@ -49,17 +48,16 @@ pub struct Ui<E: Clone + 'static> {
 }
 
 impl<E: Clone + 'static> Ui<E> {
-    /// Create a new UI system with the given font and event sink.
+    /// Create a new UI system with the given font and event callback.
     ///
     /// `font_bytes` should be raw TTF/OTF data. The device scale factor is
     /// derived from the renderer's `drawable_size / screen_size`.
     ///
-    /// Click events are emitted into `sink`, which routes them to the `EventBus`.
-    /// Use `ctx.create_ui()` or `engine.create_ui()` for automatic wiring.
+    /// `on_event` is called synchronously for each button click event.
     pub fn new(
         font_bytes: Vec<u8>,
         renderer: &mut dyn Renderer<Error = String>,
-        sink: EventSink,
+        on_event: impl FnMut(E) + 'static,
     ) -> Result<Self, String> {
         let scale_factor = compute_scale_factor(renderer);
         let text_renderer = TextRenderer::new(font_bytes, scale_factor, renderer)?;
@@ -69,7 +67,7 @@ impl<E: Clone + 'static> Ui<E> {
             layout: Layout { rects: Vec::new() },
             state: UiState::new(),
             text_renderer,
-            event_sink: sink,
+            on_event: Box::new(on_event),
             screen_size: Vec2::new(960.0, 540.0),
             described: false,
         })
@@ -100,9 +98,9 @@ impl<E: Clone + 'static> Ui<E> {
             screen_size,
         );
 
-        // Emit events into the sink (routed to EventBus on flush)
+        // Deliver click events synchronously via the callback.
         for event in events {
-            self.event_sink.emit(event);
+            (self.on_event)(event);
         }
         result
     }
