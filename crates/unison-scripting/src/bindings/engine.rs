@@ -129,32 +129,6 @@ pub fn clear_engine_ptr() {
 pub fn register(lua: &Lua) -> LuaResult<()> {
     let engine = lua.create_table()?;
 
-    // engine.set_background(r, g, b)  — Phase 1 compat
-    engine.set("set_background", lua.create_function(|_, args: LuaMultiValue| {
-        // Support both hex integer and (r, g, b) float forms.
-        if args.len() == 1 {
-            // Hex integer form: engine.set_background(0x1a1a2e)
-            let hex: u32 = match &args[0] {
-                LuaValue::Integer(n) => *n as u32,
-                LuaValue::Number(n) => *n as u32,
-                other => return Err(LuaError::FromLuaConversionError {
-                    from: other.type_name(),
-                    to: "integer".into(),
-                    message: Some("expected hex color integer".into()),
-                }),
-            };
-            let c = Color::from_hex(hex);
-            CLEAR_COLOR.with(|cell| cell.set([c.r, c.g, c.b]));
-        } else if args.len() >= 3 {
-            // Float form: engine.set_background(r, g, b)
-            let r = lua_to_f32(&args[0])?;
-            let g = lua_to_f32(&args[1])?;
-            let b = lua_to_f32(&args[2])?;
-            CLEAR_COLOR.with(|cell| cell.set([r, g, b]));
-        }
-        Ok(())
-    })?)?;
-
     // engine.load_texture("path") → integer texture ID
     // Loads synchronously via the thread-local engine pointer (set during init).
     engine.set("load_texture", lua.create_function(|_, path: String| {
@@ -193,17 +167,6 @@ pub fn register(lua: &Lua) -> LuaResult<()> {
         Ok(())
     })?)?;
 
-    // engine.draw_rect(x, y, w, h, r, g, b) — Phase 1 compat
-    engine.set("draw_rect", lua.create_function(|_, (x, y, w, h, r, g, b): (f32, f32, f32, f32, f32, f32, f32)| {
-        use unison2d::render::RenderCommand;
-        super::super::bridge::push_render_command(RenderCommand::Rect {
-            position: [x, y],
-            size: [w, h],
-            color: Color::new(r, g, b, 1.0),
-        });
-        Ok(())
-    })?)?;
-
     lua.globals().set("engine", engine)?;
     Ok(())
 }
@@ -218,14 +181,3 @@ pub fn reset() {
     ENGINE_PTR.with(|c| c.set(None));
 }
 
-fn lua_to_f32(val: &LuaValue) -> LuaResult<f32> {
-    match val {
-        LuaValue::Integer(n) => Ok(*n as f32),
-        LuaValue::Number(n) => Ok(*n as f32),
-        other => Err(LuaError::FromLuaConversionError {
-            from: other.type_name(),
-            to: "f32".into(),
-            message: None,
-        }),
-    }
-}

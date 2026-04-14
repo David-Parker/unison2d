@@ -46,11 +46,4 @@ declare const engine: {
     border_width: number, border_color: number
   ): void;
 
-  // --- Legacy / Low-level ---
-
-  /** Set clear color. Accepts a hex integer or (r, g, b) floats. Prefer world:set_background. */
-  set_background(this: void, hex: number): void;
-  set_background(this: void, r: number, g: number, b: number): void;
-  /** Draw a colored rectangle. Prefer world:auto_render. */
-  draw_rect(this: void, x: number, y: number, w: number, h: number, r: number, g: number, b: number): void;
 };
