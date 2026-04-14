@@ -6,6 +6,12 @@
 //! world:set_ground(-4.5)
 //! world:step(dt)
 //! world:render()
+//!
+//! -- Object facade (Task 11)
+//! local id = world.objects:spawn_soft_body({...})
+//! local x, y = world.objects:position(id)
+//! world.objects:apply_torque(id, 200)
+//! world.objects:despawn(id)
 //! ```
 
 use std::cell::RefCell;
@@ -20,6 +26,14 @@ use unison2d::World;
 pub struct LuaWorld(pub Rc<RefCell<World>>);
 
 impl LuaUserData for LuaWorld {
+    fn add_fields<F: LuaUserDataFields<Self>>(fields: &mut F) {
+        // Expose the `world.objects` facade as a field.
+        // The facade table holds closures that close over the Rc<RefCell<World>>.
+        fields.add_field_method_get("objects", |lua, this| {
+            super::objects::build_objects_facade(lua, this.0.clone())
+        });
+    }
+
     fn add_methods<M: LuaUserDataMethods<Self>>(methods: &mut M) {
         // -- Background --
         methods.add_method("set_background", |_, this, color: u32| {
@@ -85,9 +99,6 @@ impl LuaUserData for LuaWorld {
             });
             Ok(())
         });
-
-        // Register object methods (spawn, physics, queries)
-        super::objects::add_world_methods(methods);
 
         // Register camera methods
         super::camera::add_world_methods(methods);

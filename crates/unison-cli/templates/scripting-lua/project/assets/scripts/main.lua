@@ -24,7 +24,7 @@ function game.init()
     world:set_ground(-4.5)
     world:set_ground_restitution(0.7)
 
-    logo_id = world:spawn_soft_body({
+    logo_id = world.objects:spawn_soft_body({
         mesh = "ellipse",
         mesh_params = {2.0, 2.0, 24, 3},  -- width, height, segments, rings
         material = "rubber",
@@ -37,12 +37,12 @@ function game.update(dt)
     local sx, sy = unison.input.pointer_position()
     if sx then
         local tx, ty = world:screen_to_world(sx, sy)
-        local px, py = world:get_position(logo_id)
+        local px, py = world.objects:position(logo_id)
         local dx, dy = tx - px, ty - py
         local mag = math.sqrt(dx * dx + dy * dy)
         if mag > 1e-4 then
             local strength = 500.0
-            world:apply_force(logo_id, dx / mag * strength, dy / mag * strength)
+            world.objects:apply_force(logo_id, dx / mag * strength, dy / mag * strength)
         end
     end
     world:step(dt)

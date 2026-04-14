@@ -122,6 +122,16 @@ declare interface SpriteDescriptor {
   color?: number;
 }
 
+/** Descriptor for spawning a static rectangle (platform, wall, floor). */
+declare interface StaticRectDescriptor {
+  /** World position as [x, y]. */
+  position: [number, number];
+  /** Size as [width, height]. */
+  size: [number, number];
+  /** Hex color integer (e.g. 0xAARRGGBB). */
+  color: number;
+}
+
 // ===================================================================
 // Shadow types
 // ===================================================================
@@ -259,6 +269,62 @@ declare type DrawParams = DrawParamsRect | DrawParamsLine | DrawParamsCircle;
 declare type RenderTargetMapping = [string, RenderTargetId | "screen"];
 
 // ===================================================================
+// WorldObjects facade — accessed as world.objects
+// ===================================================================
+
+/**
+ * Object management facade exposed as `world.objects`.
+ *
+ * Call methods with colon syntax: `world.objects:spawn_soft_body(desc)`.
+ */
+declare interface WorldObjects {
+  // --- Spawning ---
+
+  /** Spawn a deformable soft body. Returns an object ID. */
+  spawn_soft_body(this: WorldObjects, desc: SoftBodyDescriptor): ObjectId;
+  /** Spawn a rigid body with an AABB or circle collider. Returns an object ID. */
+  spawn_rigid_body(this: WorldObjects, desc: RigidBodyDescriptor): ObjectId;
+  /** Spawn an immovable rectangle. Descriptor: { position, size, color }. Returns an object ID. */
+  spawn_static_rect(this: WorldObjects, desc: StaticRectDescriptor): ObjectId;
+  /** Spawn a visual-only sprite (no physics). Returns an object ID. */
+  spawn_sprite(this: WorldObjects, desc: SpriteDescriptor): ObjectId;
+  /** Remove an object from the world. */
+  despawn(this: WorldObjects, id: ObjectId): void;
+
+  // --- Physics Interaction ---
+
+  /** Apply a continuous force (call each frame in update). */
+  apply_force(this: WorldObjects, id: ObjectId, fx: number, fy: number): void;
+  /** Apply an instantaneous velocity change. */
+  apply_impulse(this: WorldObjects, id: ObjectId, ix: number, iy: number): void;
+  /**
+   * Apply rotational torque. Uses the engine fixed timestep (1/60 s) internally —
+   * no dt parameter needed.
+   */
+  apply_torque(this: WorldObjects, id: ObjectId, torque: number): void;
+
+  // --- Queries ---
+
+  /** Get object center position. Returns [x, y]. */
+  position(this: WorldObjects, id: ObjectId): LuaMultiReturn<[number, number]>;
+  /** Get object velocity. Returns [vx, vy]. */
+  velocity(this: WorldObjects, id: ObjectId): LuaMultiReturn<[number, number]>;
+  /** True if the object is resting on the ground plane. */
+  is_grounded(this: WorldObjects, id: ObjectId): boolean;
+  /** True if objects a and b are in contact. */
+  is_touching(this: WorldObjects, a: ObjectId, b: ObjectId): boolean;
+
+  // --- Display Properties ---
+
+  /** Teleport object to an exact position. */
+  set_position(this: WorldObjects, id: ObjectId, x: number, y: number): void;
+  /** Set draw order. Higher values draw on top. */
+  set_z_order(this: WorldObjects, id: ObjectId, z: number): void;
+  /** Enable or disable shadow casting for this object. */
+  set_casts_shadow(this: WorldObjects, id: ObjectId, casts: boolean): void;
+}
+
+// ===================================================================
 // World interface
 // ===================================================================
 
@@ -295,47 +361,10 @@ declare interface World {
     border_width: number, border_color: number
   ): void;
 
-  // --- Object Spawning ---
+  // --- Object Management (facade) ---
 
-  /** Spawn a deformable soft body. Returns an object ID. */
-  spawn_soft_body(this: World, desc: SoftBodyDescriptor): ObjectId;
-  /** Spawn a rigid body with an AABB or circle collider. Returns an object ID. */
-  spawn_rigid_body(this: World, desc: RigidBodyDescriptor): ObjectId;
-  /** Spawn an immovable rectangle. pos and size are [x, y] arrays; color is hex. Returns an object ID. */
-  spawn_static_rect(this: World, pos: [number, number], size: [number, number], color: number): ObjectId;
-  /** Spawn a visual-only sprite (no physics). Returns an object ID. */
-  spawn_sprite(this: World, desc: SpriteDescriptor): ObjectId;
-  /** Remove an object from the world. */
-  despawn(this: World, id: ObjectId): void;
-
-  // --- Physics Interaction ---
-
-  /** Apply a continuous force (call each frame in update). */
-  apply_force(this: World, id: ObjectId, fx: number, fy: number): void;
-  /** Apply an instantaneous velocity change. */
-  apply_impulse(this: World, id: ObjectId, ix: number, iy: number): void;
-  /** Apply rotational torque. */
-  apply_torque(this: World, id: ObjectId, torque: number, dt: number): void;
-
-  // --- Queries ---
-
-  /** Get object center position. Returns [x, y]. */
-  get_position(this: World, id: ObjectId): LuaMultiReturn<[number, number]>;
-  /** Get object velocity. Returns [vx, vy]. */
-  get_velocity(this: World, id: ObjectId): LuaMultiReturn<[number, number]>;
-  /** True if the object is resting on the ground plane. */
-  is_grounded(this: World, id: ObjectId): boolean;
-  /** True if objects a and b are in contact. */
-  is_touching(this: World, a: ObjectId, b: ObjectId): boolean;
-
-  // --- Display Properties ---
-
-  /** Set draw order. Higher values draw on top. */
-  set_z_order(this: World, id: ObjectId, z: number): void;
-  /** Enable or disable shadow casting for this object. */
-  set_casts_shadow(this: World, id: ObjectId, casts: boolean): void;
-  /** Teleport object to an exact position. */
-  set_position(this: World, id: ObjectId, x: number, y: number): void;
+  /** Object management facade — spawn, despawn, physics, queries. */
+  objects: WorldObjects;
 
   // --- Camera ---
 

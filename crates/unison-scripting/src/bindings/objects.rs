@@ -1,31 +1,46 @@
-//! Object bindings — spawn, despawn, physics, and query methods on World.
+//! Object bindings — `world.objects` facade for spawn, despawn, physics, and query.
 //!
-//! These are registered as methods on the `LuaWorld` userdata, so Lua calls
-//! them as `world:spawn_soft_body(...)`, `world:apply_force(id, fx, fy)`, etc.
+//! Lua access pattern (post-Task-11):
+//! ```lua
+//! local id = world.objects:spawn_soft_body({...})
+//! world.objects:apply_torque(id, 200)
+//! local x, y = world.objects:position(id)
+//! world.objects:despawn(id)
+//! ```
+//!
+//! The colon syntax passes the table itself as first arg; we discard it (`_self`).
+
+use std::cell::RefCell;
+use std::rc::Rc;
 
 use mlua::prelude::*;
 use unison2d::core::{Color, Vec2};
 use unison2d::physics::{Material, Collider};
 use unison2d::physics::mesh::*;
 use unison2d::render::TextureId;
-use unison2d::{ObjectId, SoftBodyDesc, RigidBodyDesc, SpriteDesc};
+use unison2d::{ObjectId, SoftBodyDesc, RigidBodyDesc, SpriteDesc, World};
 
-use super::world::LuaWorld;
+/// Build the `world.objects` facade table.
+///
+/// Each closure clones the `Rc<RefCell<World>>` and dispatches into the Rust API.
+/// Lua callers use the colon syntax (`world.objects:spawn_soft_body(desc)`); the
+/// table itself is passed as the first argument and is discarded (`_self`).
+pub fn build_objects_facade(lua: &Lua, world_rc: Rc<RefCell<World>>) -> LuaResult<LuaTable> {
+    let tbl = lua.create_table()?;
 
-/// Register object-related methods on the LuaWorld userdata.
-pub fn add_world_methods<M: LuaUserDataMethods<LuaWorld>>(methods: &mut M) {
     // ---------------------------------------------------------------
     // Spawning
     // ---------------------------------------------------------------
 
-    methods.add_method("spawn_soft_body", |_, this, desc: LuaTable| {
+    let w = world_rc.clone();
+    tbl.set("spawn_soft_body", lua.create_function(move |_, (_self, desc): (LuaTable, LuaTable)| {
         let mesh = resolve_mesh(&desc)?;
         let material = resolve_material(&desc)?;
         let position = read_vec2(&desc, "position")?;
         let color = read_color(&desc, "color")?.unwrap_or(Color::WHITE);
         let texture_id = desc.get::<u32>("texture").unwrap_or(0);
 
-        let id = this.0.borrow_mut().objects.spawn_soft_body(SoftBodyDesc {
+        let id = w.borrow_mut().objects.spawn_soft_body(SoftBodyDesc {
             mesh,
             material,
             position,
@@ -33,40 +48,47 @@ pub fn add_world_methods<M: LuaUserDataMethods<LuaWorld>>(methods: &mut M) {
             texture: TextureId::from_raw(texture_id),
         });
         Ok(id.raw())
-    });
+    })?)?;
 
-    methods.add_method("spawn_rigid_body", |_, this, desc: LuaTable| {
+    let w = world_rc.clone();
+    tbl.set("spawn_rigid_body", lua.create_function(move |_, (_self, desc): (LuaTable, LuaTable)| {
         let collider = resolve_collider(&desc)?;
         let position = read_vec2(&desc, "position")?;
         let color = read_color(&desc, "color")?.unwrap_or(Color::WHITE);
         let is_static = desc.get::<bool>("is_static").unwrap_or(false);
 
-        let id = this.0.borrow_mut().objects.spawn_rigid_body(RigidBodyDesc {
+        let id = w.borrow_mut().objects.spawn_rigid_body(RigidBodyDesc {
             collider,
             position,
             color,
             is_static,
         });
         Ok(id.raw())
-    });
+    })?)?;
 
-    methods.add_method("spawn_static_rect", |_, this, (pos, size, color): (LuaTable, LuaTable, u32)| {
-        let position = table_to_vec2(&pos)?;
-        let sz = table_to_vec2(&size)?;
-        let id = this.0.borrow_mut().objects.spawn_static_rect(
-            position, sz, Color::from_hex(color),
+    // spawn_static_rect now takes a descriptor table: { position, size, color }
+    let w = world_rc.clone();
+    tbl.set("spawn_static_rect", lua.create_function(move |_, (_self, desc): (LuaTable, LuaTable)| {
+        let pos_tbl: LuaTable = desc.get("position")?;
+        let position = table_to_vec2(&pos_tbl)?;
+        let sz_tbl: LuaTable = desc.get("size")?;
+        let sz = table_to_vec2(&sz_tbl)?;
+        let color_int: u32 = desc.get("color")?;
+        let id = w.borrow_mut().objects.spawn_static_rect(
+            position, sz, Color::from_hex(color_int),
         );
         Ok(id.raw())
-    });
+    })?)?;
 
-    methods.add_method("spawn_sprite", |_, this, desc: LuaTable| {
+    let w = world_rc.clone();
+    tbl.set("spawn_sprite", lua.create_function(move |_, (_self, desc): (LuaTable, LuaTable)| {
         let texture_id = desc.get::<u32>("texture").unwrap_or(0);
         let position = read_vec2(&desc, "position")?;
         let size = read_vec2(&desc, "size").unwrap_or(Vec2::new(1.0, 1.0));
         let rotation = desc.get::<f32>("rotation").unwrap_or(0.0);
         let color = read_color(&desc, "color")?.unwrap_or(Color::WHITE);
 
-        let id = this.0.borrow_mut().objects.spawn_sprite(SpriteDesc {
+        let id = w.borrow_mut().objects.spawn_sprite(SpriteDesc {
             texture: TextureId::from_raw(texture_id),
             position,
             size,
@@ -74,75 +96,89 @@ pub fn add_world_methods<M: LuaUserDataMethods<LuaWorld>>(methods: &mut M) {
             color,
         });
         Ok(id.raw())
-    });
+    })?)?;
 
-    methods.add_method("despawn", |_, this, id: u64| {
-        this.0.borrow_mut().objects.despawn(ObjectId::from_raw(id));
+    let w = world_rc.clone();
+    tbl.set("despawn", lua.create_function(move |_, (_self, id): (LuaTable, u64)| {
+        w.borrow_mut().objects.despawn(ObjectId::from_raw(id));
         Ok(())
-    });
+    })?)?;
 
     // ---------------------------------------------------------------
     // Physics interaction
     // ---------------------------------------------------------------
 
-    methods.add_method("apply_force", |_, this, (id, fx, fy): (u64, f32, f32)| {
-        this.0.borrow_mut().objects.apply_force(ObjectId::from_raw(id), Vec2::new(fx, fy));
+    let w = world_rc.clone();
+    tbl.set("apply_force", lua.create_function(move |_, (_self, id, fx, fy): (LuaTable, u64, f32, f32)| {
+        w.borrow_mut().objects.apply_force(ObjectId::from_raw(id), Vec2::new(fx, fy));
         Ok(())
-    });
+    })?)?;
 
-    methods.add_method("apply_impulse", |_, this, (id, ix, iy): (u64, f32, f32)| {
-        this.0.borrow_mut().objects.apply_impulse(ObjectId::from_raw(id), Vec2::new(ix, iy));
+    let w = world_rc.clone();
+    tbl.set("apply_impulse", lua.create_function(move |_, (_self, id, ix, iy): (LuaTable, u64, f32, f32)| {
+        w.borrow_mut().objects.apply_impulse(ObjectId::from_raw(id), Vec2::new(ix, iy));
         Ok(())
-    });
+    })?)?;
 
-    methods.add_method("apply_torque", |_, this, (id, torque, dt): (u64, f32, f32)| {
-        this.0.borrow_mut().objects.apply_torque(ObjectId::from_raw(id), torque, dt);
+    // apply_torque: no dt parameter — ObjectSystem uses its internal fixed_dt
+    let w = world_rc.clone();
+    tbl.set("apply_torque", lua.create_function(move |_, (_self, id, torque): (LuaTable, u64, f32)| {
+        w.borrow_mut().objects.apply_torque(ObjectId::from_raw(id), torque);
         Ok(())
-    });
+    })?)?;
 
     // ---------------------------------------------------------------
-    // Queries
+    // Queries — renamed: get_position → position, get_velocity → velocity
     // ---------------------------------------------------------------
 
-    methods.add_method("get_position", |_, this, id: u64| {
-        let pos = this.0.borrow().objects.get_position(ObjectId::from_raw(id));
+    let w = world_rc.clone();
+    tbl.set("position", lua.create_function(move |_, (_self, id): (LuaTable, u64)| {
+        let pos = w.borrow().objects.get_position(ObjectId::from_raw(id));
         Ok((pos.x, pos.y))
-    });
+    })?)?;
 
-    methods.add_method("get_velocity", |_, this, id: u64| {
-        let vel = this.0.borrow().objects.get_velocity(ObjectId::from_raw(id));
+    let w = world_rc.clone();
+    tbl.set("velocity", lua.create_function(move |_, (_self, id): (LuaTable, u64)| {
+        let vel = w.borrow().objects.get_velocity(ObjectId::from_raw(id));
         Ok((vel.x, vel.y))
-    });
+    })?)?;
 
-    methods.add_method("is_grounded", |_, this, id: u64| {
-        Ok(this.0.borrow().objects.is_grounded(ObjectId::from_raw(id)))
-    });
+    let w = world_rc.clone();
+    tbl.set("is_grounded", lua.create_function(move |_, (_self, id): (LuaTable, u64)| {
+        Ok(w.borrow().objects.is_grounded(ObjectId::from_raw(id)))
+    })?)?;
 
-    methods.add_method("is_touching", |_, this, (a, b): (u64, u64)| {
-        Ok(this.0.borrow().objects.is_touching(
+    let w = world_rc.clone();
+    tbl.set("is_touching", lua.create_function(move |_, (_self, a, b): (LuaTable, u64, u64)| {
+        Ok(w.borrow().objects.is_touching(
             ObjectId::from_raw(a),
             ObjectId::from_raw(b),
         ))
-    });
+    })?)?;
 
     // ---------------------------------------------------------------
     // Display properties
     // ---------------------------------------------------------------
 
-    methods.add_method("set_z_order", |_, this, (id, z): (u64, i32)| {
-        this.0.borrow_mut().objects.set_z_order(ObjectId::from_raw(id), z);
+    let w = world_rc.clone();
+    tbl.set("set_position", lua.create_function(move |_, (_self, id, x, y): (LuaTable, u64, f32, f32)| {
+        w.borrow_mut().objects.set_position(ObjectId::from_raw(id), Vec2::new(x, y));
         Ok(())
-    });
+    })?)?;
 
-    methods.add_method("set_casts_shadow", |_, this, (id, casts): (u64, bool)| {
-        this.0.borrow_mut().objects.set_casts_shadow(ObjectId::from_raw(id), casts);
+    let w = world_rc.clone();
+    tbl.set("set_z_order", lua.create_function(move |_, (_self, id, z): (LuaTable, u64, i32)| {
+        w.borrow_mut().objects.set_z_order(ObjectId::from_raw(id), z);
         Ok(())
-    });
+    })?)?;
 
-    methods.add_method("set_position", |_, this, (id, x, y): (u64, f32, f32)| {
-        this.0.borrow_mut().objects.set_position(ObjectId::from_raw(id), Vec2::new(x, y));
+    let w = world_rc.clone();
+    tbl.set("set_casts_shadow", lua.create_function(move |_, (_self, id, casts): (LuaTable, u64, bool)| {
+        w.borrow_mut().objects.set_casts_shadow(ObjectId::from_raw(id), casts);
         Ok(())
-    });
+    })?)?;
+
+    Ok(tbl)
 }
 
 // ===================================================================

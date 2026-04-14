@@ -41,6 +41,9 @@ pub struct ObjectSystem {
     entries: HashMap<ObjectId, ObjectEntry>,
     handle_map: HashMap<BodyHandle, ObjectId>,
     next_id: u64,
+    /// Fixed simulation timestep (seconds). Used by `apply_torque` so callers
+    /// don't have to thread `dt` through the Lua API.
+    pub fixed_dt: f32,
 }
 
 impl ObjectSystem {
@@ -51,6 +54,7 @@ impl ObjectSystem {
             entries: HashMap::new(),
             handle_map: HashMap::new(),
             next_id: 0,
+            fixed_dt: 1.0 / 60.0,
         }
     }
 
@@ -152,9 +156,12 @@ impl ObjectSystem {
 
     /// Apply a torque to an object (continuous rotation, call each frame).
     /// Positive = counter-clockwise, negative = clockwise.
-    pub fn apply_torque(&mut self, id: ObjectId, torque: f32, dt: f32) {
+    ///
+    /// Uses the internal `fixed_dt` (default `1/60` s) for angular impulse
+    /// integration, so callers do not need to supply a timestep.
+    pub fn apply_torque(&mut self, id: ObjectId, torque: f32) {
         if let Some(handle) = self.get_handle(id) {
-            self.physics.apply_torque(handle, torque, dt);
+            self.physics.apply_torque(handle, torque, self.fixed_dt);
         }
     }
 

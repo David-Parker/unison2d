@@ -26,7 +26,7 @@ fn world_create_and_configure() {
     run_script(r#"
         local game = {}
         function game.init()
-            local w = World.new()
+            local w = unison.World.new()
             w:set_gravity(-20)
             w:set_ground(-5)
             w:set_ground_restitution(0.5)
@@ -44,20 +44,20 @@ fn world_step_advances_physics() {
     run_script(r#"
         local game = {}
         function game.init()
-            local w = World.new()
+            local w = unison.World.new()
             w:set_gravity(-9.8)
-            local id = w:spawn_soft_body({
+            local id = w.objects:spawn_soft_body({
                 mesh = "square", mesh_params = {0.5, 2},
                 material = "rubber",
                 position = {0, 10},
             })
             -- Get initial position
-            local x0, y0 = w:get_position(id)
+            local x0, y0 = w.objects:position(id)
             assert(y0 > 9, "initial Y should be ~10, got " .. y0)
             -- Step physics multiple times
             for i = 1, 60 do w:step(1/60) end
             -- Position should have changed (fallen)
-            local x1, y1 = w:get_position(id)
+            local x1, y1 = w.objects:position(id)
             assert(y1 < y0, "body should have fallen: y0=" .. y0 .. " y1=" .. y1)
         end
         function game.update(dt) end
@@ -74,8 +74,8 @@ fn spawn_soft_body_returns_id() {
     run_script(r#"
         local game = {}
         function game.init()
-            local w = World.new()
-            local id = w:spawn_soft_body({
+            local w = unison.World.new()
+            local id = w.objects:spawn_soft_body({
                 mesh = "ring", mesh_params = {1.0, 0.25, 16, 4},
                 material = "rubber",
                 position = {0, 5},
@@ -93,8 +93,8 @@ fn spawn_rigid_body_returns_id() {
     run_script(r#"
         local game = {}
         function game.init()
-            local w = World.new()
-            local id = w:spawn_rigid_body({
+            local w = unison.World.new()
+            local id = w.objects:spawn_rigid_body({
                 collider = "aabb",
                 half_width = 2, half_height = 0.5,
                 position = {0, -3},
@@ -113,8 +113,8 @@ fn spawn_static_rect_returns_id() {
     run_script(r#"
         local game = {}
         function game.init()
-            local w = World.new()
-            local id = w:spawn_static_rect({0, -5}, {20, 3}, 0x336633)
+            local w = unison.World.new()
+            local id = w.objects:spawn_static_rect({ position = {0, -5}, size = {20, 3}, color = 0x336633 })
             assert(type(id) == "number", "spawn_static_rect should return a number ID")
         end
         function game.update(dt) end
@@ -127,8 +127,8 @@ fn spawn_sprite_returns_id() {
     run_script(r#"
         local game = {}
         function game.init()
-            local w = World.new()
-            local id = w:spawn_sprite({
+            local w = unison.World.new()
+            local id = w.objects:spawn_sprite({
                 position = {3, 3},
                 size = {2, 2},
                 color = 0xFFFF00,
@@ -149,16 +149,16 @@ fn apply_force_changes_velocity() {
     run_script(r#"
         local game = {}
         function game.init()
-            local w = World.new()
+            local w = unison.World.new()
             w:set_gravity(0) -- no gravity so we can isolate force effect
-            local id = w:spawn_soft_body({
+            local id = w.objects:spawn_soft_body({
                 mesh = "square", mesh_params = {0.5, 2},
                 material = "rubber",
                 position = {0, 0},
             })
-            w:apply_force(id, 100, 0)
+            w.objects:apply_force(id, 100, 0)
             w:step(1/60)
-            local vx, vy = w:get_velocity(id)
+            local vx, vy = w.objects:velocity(id)
             assert(vx > 0, "horizontal velocity should be positive after rightward force, got " .. vx)
         end
         function game.update(dt) end
@@ -171,16 +171,16 @@ fn apply_impulse_changes_velocity() {
     run_script(r#"
         local game = {}
         function game.init()
-            local w = World.new()
+            local w = unison.World.new()
             w:set_gravity(0)
-            local id = w:spawn_soft_body({
+            local id = w.objects:spawn_soft_body({
                 mesh = "square", mesh_params = {0.5, 2},
                 material = "rubber",
                 position = {0, 0},
             })
-            w:apply_impulse(id, 0, 50)
+            w.objects:apply_impulse(id, 0, 50)
             w:step(1/60)
-            local vx, vy = w:get_velocity(id)
+            local vx, vy = w.objects:velocity(id)
             assert(vy > 0, "vertical velocity should be positive after upward impulse, got " .. vy)
         end
         function game.update(dt) end
@@ -197,14 +197,14 @@ fn get_position_returns_values() {
     run_script(r#"
         local game = {}
         function game.init()
-            local w = World.new()
+            local w = unison.World.new()
             w:set_gravity(0)
-            local id = w:spawn_soft_body({
+            local id = w.objects:spawn_soft_body({
                 mesh = "square", mesh_params = {0.5, 2},
                 material = "rubber",
                 position = {3, 7},
             })
-            local x, y = w:get_position(id)
+            local x, y = w.objects:position(id)
             -- Position should be approximately where we spawned it
             assert(math.abs(x - 3) < 0.5, "x should be near 3, got " .. x)
             assert(math.abs(y - 7) < 0.5, "y should be near 7, got " .. y)
@@ -219,14 +219,14 @@ fn get_velocity_returns_values() {
     run_script(r#"
         local game = {}
         function game.init()
-            local w = World.new()
+            local w = unison.World.new()
             w:set_gravity(0)
-            local id = w:spawn_soft_body({
+            local id = w.objects:spawn_soft_body({
                 mesh = "square", mesh_params = {0.5, 2},
                 material = "rubber",
                 position = {0, 0},
             })
-            local vx, vy = w:get_velocity(id)
+            local vx, vy = w.objects:velocity(id)
             -- Should be near zero initially
             assert(math.abs(vx) < 1, "initial vx should be near 0")
             assert(math.abs(vy) < 1, "initial vy should be near 0")
@@ -241,20 +241,20 @@ fn is_grounded_works() {
     run_script(r#"
         local game = {}
         function game.init()
-            local w = World.new()
+            local w = unison.World.new()
             w:set_gravity(-9.8)
             w:set_ground(-2)
-            local id = w:spawn_soft_body({
+            local id = w.objects:spawn_soft_body({
                 mesh = "square", mesh_params = {0.5, 2},
                 material = "rubber",
                 position = {0, 10},
             })
             -- Not grounded initially (high up)
-            assert(not w:is_grounded(id), "should not be grounded when spawned at y=10")
+            assert(not w.objects:is_grounded(id), "should not be grounded when spawned at y=10")
             -- Step many times until it falls to ground
             for i = 1, 300 do w:step(1/60) end
             -- Should be grounded after falling
-            assert(w:is_grounded(id), "should be grounded after falling for 5 seconds")
+            assert(w.objects:is_grounded(id), "should be grounded after falling for 5 seconds")
         end
         function game.update(dt) end
         return game
@@ -272,13 +272,13 @@ fn despawn_removes_object() {
     run_script(r#"
         local game = {}
         function game.init()
-            local w = World.new()
-            local id = w:spawn_soft_body({
+            local w = unison.World.new()
+            local id = w.objects:spawn_soft_body({
                 mesh = "square", mesh_params = {0.5, 2},
                 material = "rubber",
                 position = {0, 5},
             })
-            w:despawn(id)
+            w.objects:despawn(id)
             -- Stepping after despawn should not crash
             w:step(1/60)
         end
@@ -296,16 +296,16 @@ fn set_display_properties_no_panic() {
     run_script(r#"
         local game = {}
         function game.init()
-            local w = World.new()
-            local id = w:spawn_soft_body({
+            local w = unison.World.new()
+            local id = w.objects:spawn_soft_body({
                 mesh = "square", mesh_params = {0.5, 2},
                 material = "rubber",
                 position = {0, 5},
             })
-            w:set_z_order(id, 100)
-            w:set_casts_shadow(id, false)
-            w:set_position(id, 5, 10)
-            local x, y = w:get_position(id)
+            w.objects:set_z_order(id, 100)
+            w.objects:set_casts_shadow(id, false)
+            w.objects:set_position(id, 5, 10)
+            local x, y = w.objects:position(id)
             assert(math.abs(x - 5) < 0.5, "x should be near 5 after set_position")
         end
         function game.update(dt) end
@@ -324,18 +324,18 @@ fn input_functions_exist_and_return_defaults() {
         local game = {}
         function game.init()
             -- These should all be callable without error
-            local pressed = input.is_key_pressed("Space")
+            local pressed = unison.input.is_key_pressed("Space")
             assert(not pressed, "no keys should be pressed by default")
 
-            local just = input.is_key_just_pressed("W")
+            local just = unison.input.is_key_just_pressed("W")
             assert(not just, "no keys should be just pressed by default")
 
-            local ax = input.axis_x()
-            local ay = input.axis_y()
+            local ax = unison.input.axis_x()
+            local ay = unison.input.axis_y()
             assert(ax == 0, "axis_x should be 0 by default")
             assert(ay == 0, "axis_y should be 0 by default")
 
-            local touches = input.touches_just_began()
+            local touches = unison.input.touches_just_began()
             assert(#touches == 0, "no touches by default")
         end
         function game.update(dt) end
@@ -352,8 +352,8 @@ fn camera_follow_no_panic() {
     run_script(r#"
         local game = {}
         function game.init()
-            local w = World.new()
-            local id = w:spawn_soft_body({
+            local w = unison.World.new()
+            local id = w.objects:spawn_soft_body({
                 mesh = "square", mesh_params = {0.5, 2},
                 material = "rubber",
                 position = {5, 5},
@@ -376,9 +376,9 @@ fn camera_follow_with_offset() {
     run_script(r#"
         local game = {}
         function game.init()
-            local w = World.new()
+            local w = unison.World.new()
             w:set_gravity(0)
-            local id = w:spawn_soft_body({
+            local id = w.objects:spawn_soft_body({
                 mesh = "square", mesh_params = {0.5, 2},
                 material = "rubber",
                 position = {0, 0},
@@ -400,7 +400,7 @@ fn camera_add_and_get_position() {
     run_script(r#"
         local game = {}
         function game.init()
-            local w = World.new()
+            local w = unison.World.new()
             w:camera_add("overview", 20, 15)
             local cx, cy = w:camera_get_position("overview")
             assert(type(cx) == "number", "overview camera x should be a number")
@@ -419,7 +419,7 @@ fn engine_screen_size_returns_values() {
     run_script(r#"
         local game = {}
         function game.init()
-            local w, h = engine.screen_size()
+            local w, h = unison.renderer.screen_size()
             assert(type(w) == "number", "width should be a number")
             assert(type(h) == "number", "height should be a number")
             assert(w > 0, "width should be positive")
@@ -435,7 +435,7 @@ fn engine_set_anti_aliasing_no_panic() {
     run_script(r#"
         local game = {}
         function game.init()
-            engine.set_anti_aliasing("msaa8x")
+            unison.renderer.set_anti_aliasing("msaa8x")
         end
         function game.update(dt) end
         return game
@@ -448,8 +448,8 @@ fn engine_set_background_hex_and_rgb() {
     run_script(r#"
         local game = {}
         function game.init()
-            engine.set_background(0x1a1a2e)     -- hex form
-            engine.set_background(0.1, 0.2, 0.3) -- RGB form
+            local w = unison.World.new()
+            w:set_background(0x1a1a2e)
         end
         function game.update(dt) end
         return game
@@ -465,19 +465,19 @@ fn all_mesh_presets_work() {
     run_script(r#"
         local game = {}
         function game.init()
-            local w = World.new()
+            local w = unison.World.new()
             -- Ring
-            w:spawn_soft_body({ mesh = "ring", mesh_params = {1, 0.3, 16, 4}, material = "rubber", position = {0,0} })
+            w.objects:spawn_soft_body({ mesh = "ring", mesh_params = {1, 0.3, 16, 4}, material = "rubber", position = {0,0} })
             -- Square
-            w:spawn_soft_body({ mesh = "square", mesh_params = {1, 4}, material = "jello", position = {3,0} })
+            w.objects:spawn_soft_body({ mesh = "square", mesh_params = {1, 4}, material = "jello", position = {3,0} })
             -- Ellipse
-            w:spawn_soft_body({ mesh = "ellipse", mesh_params = {1, 0.6, 16, 4}, material = "wood", position = {6,0} })
+            w.objects:spawn_soft_body({ mesh = "ellipse", mesh_params = {1, 0.6, 16, 4}, material = "wood", position = {6,0} })
             -- Star
-            w:spawn_soft_body({ mesh = "star", mesh_params = {1, 0.4, 5, 3}, material = "metal", position = {9,0} })
+            w.objects:spawn_soft_body({ mesh = "star", mesh_params = {1, 0.4, 5, 3}, material = "metal", position = {9,0} })
             -- Blob
-            w:spawn_soft_body({ mesh = "blob", mesh_params = {1, 0.2, 12, 4, 42}, material = "slime", position = {12,0} })
+            w.objects:spawn_soft_body({ mesh = "blob", mesh_params = {1, 0.2, 12, 4, 42}, material = "slime", position = {12,0} })
             -- Rounded box
-            w:spawn_soft_body({ mesh = "rounded_box", mesh_params = {2, 1, 0.2, 4}, material = "rubber", position = {15,0} })
+            w.objects:spawn_soft_body({ mesh = "rounded_box", mesh_params = {2, 1, 0.2, 4}, material = "rubber", position = {15,0} })
         end
         function game.update(dt) end
         return game
@@ -493,15 +493,15 @@ fn material_presets_and_custom() {
     run_script(r#"
         local game = {}
         function game.init()
-            local w = World.new()
+            local w = unison.World.new()
             -- String presets
-            w:spawn_soft_body({ mesh = "square", mesh_params = {0.5, 2}, material = "rubber", position = {0,0} })
-            w:spawn_soft_body({ mesh = "square", mesh_params = {0.5, 2}, material = "jello", position = {2,0} })
-            w:spawn_soft_body({ mesh = "square", mesh_params = {0.5, 2}, material = "wood", position = {4,0} })
-            w:spawn_soft_body({ mesh = "square", mesh_params = {0.5, 2}, material = "metal", position = {6,0} })
-            w:spawn_soft_body({ mesh = "square", mesh_params = {0.5, 2}, material = "slime", position = {8,0} })
+            w.objects:spawn_soft_body({ mesh = "square", mesh_params = {0.5, 2}, material = "rubber", position = {0,0} })
+            w.objects:spawn_soft_body({ mesh = "square", mesh_params = {0.5, 2}, material = "jello", position = {2,0} })
+            w.objects:spawn_soft_body({ mesh = "square", mesh_params = {0.5, 2}, material = "wood", position = {4,0} })
+            w.objects:spawn_soft_body({ mesh = "square", mesh_params = {0.5, 2}, material = "metal", position = {6,0} })
+            w.objects:spawn_soft_body({ mesh = "square", mesh_params = {0.5, 2}, material = "slime", position = {8,0} })
             -- Custom table
-            w:spawn_soft_body({ mesh = "square", mesh_params = {0.5, 2},
+            w.objects:spawn_soft_body({ mesh = "square", mesh_params = {0.5, 2},
                 material = {density = 500, edge_compliance = 1e-5, area_compliance = 1e-4},
                 position = {10,0} })
         end
@@ -520,16 +520,16 @@ fn multiple_lua_refs_to_same_world() {
     run_script(r#"
         local game = {}
         function game.init()
-            local w = World.new()
+            local w = unison.World.new()
             local w2 = w  -- alias
             w:set_gravity(-5)
             w2:set_ground(-3)
-            local id = w:spawn_soft_body({
+            local id = w.objects:spawn_soft_body({
                 mesh = "square", mesh_params = {0.5, 2},
                 material = "rubber", position = {0, 5},
             })
             w2:step(1/60)
-            local x, y = w:get_position(id)
+            local x, y = w.objects:position(id)
             assert(type(y) == "number", "should be able to query through original ref")
         end
         function game.update(dt) end
@@ -545,10 +545,10 @@ fn world_persists_across_lifecycle_calls() {
         local world, obj_id
 
         function game.init()
-            world = World.new()
+            world = unison.World.new()
             world:set_gravity(-9.8)
             world:set_ground(-5)
-            obj_id = world:spawn_soft_body({
+            obj_id = world.objects:spawn_soft_body({
                 mesh = "square", mesh_params = {0.5, 2},
                 material = "rubber",
                 position = {0, 10},
@@ -557,9 +557,9 @@ fn world_persists_across_lifecycle_calls() {
 
         function game.update(dt)
             -- These should work — world persists from init
-            world:apply_force(obj_id, 10, 0)
+            world.objects:apply_force(obj_id, 10, 0)
             world:step(dt)
-            local x, y = world:get_position(obj_id)
+            local x, y = world.objects:position(obj_id)
             assert(type(x) == "number", "position query should work across frames")
         end
 
