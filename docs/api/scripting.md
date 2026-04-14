@@ -22,22 +22,13 @@ impl ScriptedGame {
 }
 
 impl Game for ScriptedGame {
-    type Action = NoAction;
-    fn init(&mut self, engine: &mut Engine<NoAction>);
-    fn update(&mut self, engine: &mut Engine<NoAction>);
-    fn render(&mut self, engine: &mut Engine<NoAction>);
+    fn init(&mut self, engine: &mut Engine);
+    fn update(&mut self, engine: &mut Engine);
+    fn render(&mut self, engine: &mut Engine);
 }
 ```
 
 `ScriptedGame` owns the Lua VM. Pass it to a platform's `run()` function just like any other `Game` implementation.
-
-### `NoAction`
-
-```rust
-pub enum NoAction {}
-```
-
-Unit action enum for scripted games. Scripted games query input directly via the `input` Lua global rather than using Rust action mapping.
 
 ## Lua Lifecycle
 
@@ -325,7 +316,7 @@ Global `events` table for string-keyed events and collision callbacks.
 
 ## Scenes
 
-Scene management replaces the Rust Level trait. A scene is a Lua table with lifecycle functions.
+Scenes are Lua tables with optional lifecycle functions. Set the active scene via `unison.scenes.set(scene)`.
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
@@ -512,20 +503,6 @@ Scripts are loaded from embedded assets at runtime. Place Lua scripts in `projec
 use unison_scripting::ScriptedGame;
 let game = ScriptedGame::from_asset("scripts/main.lua", assets::ASSETS);
 ```
-
-## Engine Simplifications: Rust → Lua
-
-The scripting layer simplifies several Rust engine abstractions into more idiomatic Lua patterns:
-
-| Rust Abstraction | What It Was | Lua Replacement | Why Simpler |
-|------------------|-------------|-----------------|-------------|
-| `Level<S>` trait | Trait with `world()`, `update()`, `render()`, `on_enter()`, etc. Requires implementing on a struct with generic shared state. | Scene tables: `{ on_enter, update, render, on_exit }` | Plain tables — no trait impl, no generics, no boilerplate. |
-| `Engine<A>` + `Action` enum | Generic engine parameterized by a game-specific action enum for input mapping (e.g., `MoveLeft`, `Jump`). | `engine` global + `input` global | No action type needed — scripts read raw input directly via `input.is_key_pressed()`. |
-| `Ctx<S>` | Unified context struct bundling `input`, `dt`, `renderer`, `shared`, `events` — passed to every `Level` method. | Individual globals: `input`, `engine`, `events` | No context threading — globals are always available. |
-| `EventBus` / `SharedState.events` | Typed event enum pushed into a `Vec`, drained and matched by the `Game` struct. | `events.emit("name", data)` / `events.on("name", fn)` | String-keyed, no enum definition, no drain boilerplate. Callbacks fire automatically. |
-| Prefab functions | Factory functions returning `ObjectId`, taking `&mut World` + many parameters. | Lua factory functions in shared modules | Same pattern, but `require("scenes/shared")` replaces `use crate::prefabs`. |
-| `SharedState` struct | Game-defined struct passed as `S` in `Level<S>` for cross-level data (score, settings). | Module-level locals + event data tables | Lua closures and upvalues replace the struct. Events carry data payloads. |
-| `ActiveLevel` enum + dispatch | Rust enum with match arms dispatching to the active level. | `engine.set_scene()` / `engine.switch_scene()` | One function call replaces the enum + match pattern. |
 
 ## See also
 

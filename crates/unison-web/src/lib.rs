@@ -7,18 +7,15 @@
 //!
 //! # Usage
 //!
+//! Game code is authored in Lua (or TypeScript → Lua via TSTL) using
+//! `unison_scripting::ScriptedGame`. The macro wires everything up:
+//!
 //! ```ignore
-//! use unison2d::Game;
-//! use unison_web::run;
-//!
-//! struct MyGame { /* ... */ }
-//! impl Game for MyGame { /* ... */ }
-//!
-//! #[wasm_bindgen(start)]
-//! pub fn main() {
-//!     run(MyGame { /* ... */ });
-//! }
+//! // project/lib.rs
+//! unison_scripting::scripted_game_entry!("scripts/main.lua", assets::ASSETS);
 //! ```
+//!
+//! See `docs/scripting/getting-started/lua.md` for the full scripting guide.
 
 mod renderer;
 mod shaders;

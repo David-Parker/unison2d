@@ -1,28 +1,29 @@
 # unison-web
 
-Web platform crate — WebGL2 renderer, DOM input wiring, and requestAnimationFrame game loop.
+Web platform crate — WebGL2 renderer, DOM input wiring, and
+`requestAnimationFrame` game loop.
 
 ## Usage
 
-```rust
-use unison_web::run;
+Game entry points use `unison_scripting::scripted_game_entry!`, which expands
+to a `#[wasm_bindgen(start)]` function that calls `unison_web::run()`:
 
-#[wasm_bindgen(start)]
-pub fn main() {
-    run(MyGame { /* ... */ });
-}
+```rust
+// project/lib.rs — same pattern on web, iOS, and Android
+unison_scripting::scripted_game_entry!("scripts/main.lua", assets::ASSETS);
 ```
 
 `run()` handles everything:
 1. Gets the `<canvas id="canvas">` element
 2. Creates a WebGL2 context and renderer
-3. Wires keyboard, mouse, and touch events into `InputState`
+3. Wires keyboard, mouse, and touch DOM events into `InputState`
 4. Sets up the profiler time function
-5. Starts a `requestAnimationFrame` loop with fixed timestep (60Hz)
+5. Starts a `requestAnimationFrame` loop with fixed timestep (60 Hz)
 
 ## WebGL2 Renderer
 
-Implements `Renderer` trait from `unison-render`. Supports all 6 `RenderCommand` variants:
+`WebGlRenderer` implements the `Renderer` trait from `unison-render`. It
+supports all `RenderCommand` variants:
 
 | Command | Implementation |
 |---------|---------------|
@@ -33,28 +34,27 @@ Implements `Renderer` trait from `unison-render`. Supports all 6 `RenderCommand`
 | `Line` | Thin rectangle along line direction |
 | `Terrain` | Fan triangulation of polygon |
 
-Three shader programs: solid-color, textured (with tint), and lit sprite (samples both a gradient texture and a shadow mask with optional PCF filtering). Camera transform applied as a 3x3 view-projection matrix uniform.
+Three shader programs: solid-color, textured (with tint), and lit sprite
+(samples both a gradient texture and a shadow mask with optional PCF filtering).
+Camera transform applied as a 3×3 view-projection matrix uniform.
 
 ### Render Targets (FBOs)
-
-The WebGL2 renderer implements offscreen render targets:
 
 | Method | Description |
 |--------|-------------|
 | `create_render_target(w, h)` | Creates FBO + RGBA8 texture attachment |
-| `bind_render_target(target)` | Binds FBO, sets viewport to target size |
-| `destroy_render_target(target)` | Deletes FBO, keeps the texture |
+| `bind_render_target(target)` | Binds FBO; sets viewport to target size |
+| `destroy_render_target(target)` | Deletes FBO; keeps the texture |
 
-`RenderTargetId::SCREEN` binds the default framebuffer and restores canvas viewport.
-
-Render target textures are registered in the renderer's texture map and can be used directly in `DrawSprite` commands for compositing.
+`RenderTargetId::SCREEN` binds the default framebuffer and restores the canvas
+viewport.
 
 ## Input Wiring
 
 DOM events mapped to `InputState`:
 
-| DOM Event | InputState Method |
-|-----------|------------------|
+| DOM Event | `InputState` method |
+|-----------|---------------------|
 | `keydown` | `key_pressed(KeyCode)` |
 | `keyup` | `key_released(KeyCode)` |
 | `mousemove` | `mouse_moved(x, y)` |
@@ -65,26 +65,17 @@ DOM events mapped to `InputState`:
 | `touchend` | `touch_ended(id)` |
 | `touchcancel` | `touch_cancelled(id)` |
 
-Game keys (arrows, space, tab) have `preventDefault()` to avoid page scrolling.
+Arrow keys, Space, and Tab have `preventDefault()` to suppress page scrolling.
 
 ## Game Loop
 
-Fixed timestep accumulator pattern:
-- Calls `Profiler::begin_frame()` at the start of each frame
-- Accumulates real delta time each frame
-- Calls `engine.pre_update()` then `game.update()` at 60Hz intervals (multiple steps if needed)
-- Caps accumulator at 100ms to prevent spiral of death
-- Calls `game.render()` once per frame after all updates
-- Calls `Profiler::end_frame()` to accumulate frame statistics
-- Every 120 frames, logs profiler stats to the browser console via `web_sys::console::log_1` and resets
+Fixed-timestep accumulator pattern:
 
-The platform loop calls `game.update()` and `game.render()`. When using the `Level` trait, `world.step()` and `world.auto_render()` are handled automatically by the provided `run_update` / `run_render` methods. When using the `Game` trait directly, the game controls both manually.
-
-## Dependencies
-
-- `web-sys` — DOM and WebGL2 bindings
-- `wasm-bindgen` — Rust↔JS interop
-- `js-sys` — JavaScript type bindings
+- `Profiler::begin_frame()` at the start of each `rAF` callback
+- Accumulates real delta time; steps at 60 Hz (multiple steps per frame if
+  needed); caps accumulator at 100 ms to prevent spiral of death
+- `game.update()` called once per tick; `game.render()` once per frame
+- Every 120 frames, profiler stats are logged to the browser console and reset
 
 ## HTML Requirements
 
@@ -93,3 +84,9 @@ The canvas element must have `id="canvas"`:
 ```html
 <canvas id="canvas" width="800" height="600"></canvas>
 ```
+
+## Dependencies
+
+- `web-sys` — DOM and WebGL2 bindings
+- `wasm-bindgen` — Rust ↔ JS interop
+- `js-sys` — JavaScript type bindings
