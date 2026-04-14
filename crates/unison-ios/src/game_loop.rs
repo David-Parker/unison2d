@@ -23,7 +23,7 @@ const PROFILER_LOG_INTERVAL: u64 = 120;
 /// supplied by the game crate's FFI layer, not by `unison-ios`.
 pub struct GameState<G: Game> {
     game: G,
-    engine: Engine<G::Action>,
+    engine: Engine,
     input: InputBuffer,
     accumulator: f32,
     initialized: bool,
@@ -40,7 +40,7 @@ impl<G: Game> GameState<G> {
     /// `renderer` is moved into the engine as a trait object, but we keep a
     /// raw pointer to call Metal-specific display frame methods.
     pub fn new(renderer: MetalRenderer, game: G) -> Self {
-        let mut engine = Engine::<G::Action>::new();
+        let mut engine = Engine::new();
 
         // Box the renderer and stash a raw pointer before giving ownership to the engine
         let mut boxed = Box::new(renderer);
@@ -90,7 +90,7 @@ impl<G: Game> GameState<G> {
     }
 
     /// Access the engine (e.g., to update screen size).
-    pub fn engine_mut(&mut self) -> &mut Engine<G::Action> {
+    pub fn engine_mut(&mut self) -> &mut Engine {
         &mut self.engine
     }
 

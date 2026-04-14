@@ -1,47 +1,24 @@
-//! Engine — thin platform bridge for input, actions, and rendering.
+//! Engine — thin platform bridge for input and rendering.
 //!
 //! The engine does NOT own a world. Games create and manage their own
 //! `World` instances (typically through `Level` structs). Engine provides:
-//! - Input → action mapping
+//! - Access to raw input state
 //! - Access to the renderer
 //! - Fixed timestep delta
+//! - Asset loading
 
-use std::hash::Hash;
-
-use unison_input::{ActionMap, InputState, KeyCode, MouseButton};
+use unison_input::InputState;
 use unison_assets::AssetStore;
-use crate::ctx::Ctx;
-use crate::event_bus::EventBus;
-use crate::World;
 use unison_render::{AntiAliasing, Renderer, TextureId, RenderTargetId};
 
-/// The engine struct. Manages input, actions, and renderer access.
+/// The engine struct. Manages input and renderer access.
 ///
-/// Games receive `&mut Engine<A>` in their `init()`, `update()`, and `render()`
-/// callbacks. Use it for input bindings and action queries. For physics, objects,
+/// Games receive `&mut Engine` in their `init()`, `update()`, and `render()`
+/// callbacks. Use it for raw input and renderer access. For physics, objects,
 /// and cameras, use your `World` directly.
-///
-/// ## Action generics
-///
-/// `A` is the game's action enum, used for type-safe input mapping.
-/// Scripted games (`ScriptedGame`) use `NoAction` (from `unison-scripting`) because
-/// input is handled in Lua rather than through Rust action enums. Rust-native games
-/// can define their own action enum and bind keys/buttons to it.
-///
-/// As of Phase 5, the only active consumer is `ScriptedGame<NoAction>`. The generic
-/// is retained because:
-/// - The action API (`bind_key`, `action_active`, `action_axis`, etc.) provides real
-///   value for future Rust-native game code
-/// - The platform crates (`unison-web`, `unison-ios`, `unison-android`) are correctly
-///   generic over `G::Action`, enabling non-scripted games without changes
-/// - Removing it would be a breaking API change with no current technical benefit
-///
-/// // TODO: re-evaluate Action generics once there are more game consumers (scripted and native)
-pub struct Engine<A: Copy + Eq + Hash> {
+pub struct Engine {
     #[doc(hidden)]
     pub input: InputState,
-    #[doc(hidden)]
-    pub actions: ActionMap<A>,
 
     // Renderer is set by the platform crate at startup.
     #[doc(hidden)]
@@ -53,54 +30,17 @@ pub struct Engine<A: Copy + Eq + Hash> {
 
     // Asset store for embedded assets.
     assets: AssetStore,
-
-    // Event bus for inter-component messaging.
-    events: EventBus<World>,
 }
 
-impl<A: Copy + Eq + Hash> Engine<A> {
+impl Engine {
     /// Create a new engine with default settings.
     pub fn new() -> Self {
         Self {
             input: InputState::new(),
-            actions: ActionMap::new(),
             renderer: None,
             fixed_dt: 1.0 / 60.0,
             assets: AssetStore::new(),
-            events: EventBus::new(),
         }
-    }
-
-    // ── Input / Actions ──
-
-    /// Bind a keyboard key to an action.
-    pub fn bind_key(&mut self, key: KeyCode, action: A) {
-        self.actions.bind_key(key, action);
-    }
-
-    /// Bind a mouse button to an action.
-    pub fn bind_mouse_button(&mut self, button: MouseButton, action: A) {
-        self.actions.bind_mouse_button(button, action);
-    }
-
-    /// Is the action currently active? (any bound input is held)
-    pub fn action_active(&self, action: A) -> bool {
-        self.actions.is_action_active(action)
-    }
-
-    /// Did the action just start this frame?
-    pub fn action_just_started(&self, action: A) -> bool {
-        self.actions.is_action_just_started(action)
-    }
-
-    /// Did the action just end this frame?
-    pub fn action_just_ended(&self, action: A) -> bool {
-        self.actions.is_action_just_ended(action)
-    }
-
-    /// Get an axis value from two opposing actions (-1, 0, or +1).
-    pub fn action_axis(&self, negative: A, positive: A) -> f32 {
-        self.actions.axis_value(negative, positive)
     }
 
     // ── Raw access ──
@@ -108,11 +48,6 @@ impl<A: Copy + Eq + Hash> Engine<A> {
     /// Direct access to raw input state.
     pub fn input_state(&self) -> &InputState {
         &self.input
-    }
-
-    /// Direct access to the action map for custom bindings.
-    pub fn actions_mut(&mut self) -> &mut ActionMap<A> {
-        &mut self.actions
     }
 
     /// Get a mutable reference to the renderer.
@@ -155,52 +90,6 @@ impl<A: Copy + Eq + Hash> Engine<A> {
         let renderer = self.renderer.as_mut()
             .ok_or("No renderer available")?;
         renderer.create_texture(&desc)
-    }
-
-    /// Build a [`Ctx`] from this engine's input, renderer, events, dt, and the given shared state.
-    ///
-    /// The unified context replaces the old split `LevelContext` / `RenderContext`.
-    /// Levels receive this single context for both update and render.
-    ///
-    /// ```ignore
-    /// let mut ctx = engine.ctx(&mut self.shared);
-    /// level.update(&mut ctx);
-    /// level.render(&mut ctx);
-    /// ```
-    ///
-    /// Panics if the renderer is not set (should only happen if called before platform init).
-    pub fn ctx<'a, S>(&'a mut self, shared: &'a mut S) -> Ctx<'a, S> {
-        let renderer = self.renderer.as_mut()
-            .expect("Engine::ctx() called before renderer was set")
-            .as_mut();
-        Ctx {
-            input: &self.input,
-            dt: self.fixed_dt,
-            shared,
-            renderer,
-            events: &mut self.events,
-        }
-    }
-
-    /// Access the event bus directly.
-    pub fn events(&mut self) -> &mut EventBus<World> {
-        &mut self.events
-    }
-
-    /// Create a UI system pre-wired to the event bus.
-    ///
-    /// Events from button clicks are automatically routed through the
-    /// `EventBus` via an `EventSink`.
-    ///
-    /// ```ignore
-    /// let ui = engine.create_ui::<MenuAction>(font_bytes)?;
-    /// ```
-    pub fn create_ui<E: Clone + 'static>(&mut self, font_bytes: Vec<u8>) -> Result<unison_ui::facade::Ui<E>, String> {
-        let sink = self.events.create_sink();
-        let renderer = self.renderer.as_mut()
-            .ok_or("No renderer available")?
-            .as_mut();
-        unison_ui::facade::Ui::new(font_bytes, renderer, sink)
     }
 
     // ── Render targets ──
@@ -249,56 +138,17 @@ impl<A: Copy + Eq + Hash> Engine<A> {
 
     // ── Internal: called by platform game loop ──
 
-    /// Update action state from current input.
+    /// Update input state for the next tick.
     /// Called by the platform's game loop before `Game::update()`.
     #[doc(hidden)]
     pub fn pre_update(&mut self) {
-        self.actions.update(&self.input);
+        // No-op: action mapping removed. Raw InputState is updated by the
+        // platform via swap_into before each tick.
     }
 }
 
-impl<A: Copy + Eq + Hash> Default for Engine<A> {
+impl Default for Engine {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[derive(Copy, Clone, Eq, PartialEq, Hash)]
-    enum TestAction {
-        Jump,
-        Left,
-        Right,
-    }
-
-    #[test]
-    fn action_binding_and_query() {
-        let mut engine = Engine::<TestAction>::new();
-        engine.bind_key(KeyCode::Space, TestAction::Jump);
-        engine.bind_key(KeyCode::ArrowLeft, TestAction::Left);
-        engine.bind_key(KeyCode::ArrowRight, TestAction::Right);
-
-        // Simulate a key press
-        engine.input.key_pressed(KeyCode::Space);
-        engine.pre_update();
-
-        assert!(engine.action_active(TestAction::Jump));
-        assert!(engine.action_just_started(TestAction::Jump));
-        assert!(!engine.action_active(TestAction::Left));
-    }
-
-    #[test]
-    fn action_axis_works() {
-        let mut engine = Engine::<TestAction>::new();
-        engine.bind_key(KeyCode::ArrowLeft, TestAction::Left);
-        engine.bind_key(KeyCode::ArrowRight, TestAction::Right);
-
-        engine.input.key_pressed(KeyCode::ArrowRight);
-        engine.pre_update();
-
-        assert_eq!(engine.action_axis(TestAction::Left, TestAction::Right), 1.0);
     }
 }

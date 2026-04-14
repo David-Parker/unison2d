@@ -76,10 +76,6 @@ use unison2d::{AntiAliasing, Engine, Game};
 use unison2d::assets::EmbeddedAsset;
 use error_overlay::ErrorOverlay;
 
-/// Unit action type — scripted games don't use Rust action mapping.
-#[derive(Copy, Clone, Eq, PartialEq, Hash)]
-pub enum NoAction {}
-
 /// How the Lua script source is provided.
 enum ScriptSource {
     /// Inline source code (e.g. from tests).
@@ -155,9 +151,7 @@ impl ScriptedGame {
 }
 
 impl Game for ScriptedGame {
-    type Action = NoAction;
-
-    fn init(&mut self, engine: &mut Engine<NoAction>) {
+    fn init(&mut self, engine: &mut Engine) {
         // Load embedded assets if provided.
         if let Some(assets) = self.embedded_assets {
             engine.assets_mut().load_embedded(assets);
@@ -268,7 +262,7 @@ impl Game for ScriptedGame {
         }
     }
 
-    fn update(&mut self, engine: &mut Engine<NoAction>) {
+    fn update(&mut self, engine: &mut Engine) {
         let dt = engine.dt();
 
         // Refresh screen size.
@@ -335,7 +329,7 @@ impl Game for ScriptedGame {
         }
     }
 
-    fn render(&mut self, engine: &mut Engine<NoAction>) {
+    fn render(&mut self, engine: &mut Engine) {
         // Make engine available to Lua closures during render.
         // The guard clears the pointer when dropped.
         {
@@ -552,7 +546,7 @@ impl ScriptedGame {
     /// resolve to `scripts/scenes/shared.lua`. The dot-notation form is needed
     /// because TypeScriptToLua emits `require("scenes.menu")` rather than
     /// `require("scenes/menu")`.
-    fn setup_require(lua: &Lua, engine: &Engine<NoAction>) -> LuaResult<()> {
+    fn setup_require(lua: &Lua, engine: &Engine) -> LuaResult<()> {
         let preload: LuaTable = lua.globals()
             .get::<LuaTable>("package")?
             .get::<LuaTable>("preload")?;

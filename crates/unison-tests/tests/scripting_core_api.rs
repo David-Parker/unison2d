@@ -7,10 +7,8 @@
 use unison_scripting::ScriptedGame;
 use unison2d::{Engine, Game};
 
-type NoAction = unison_scripting::NoAction;
-
 /// Helper: create a ScriptedGame, run init+update, return it for inspection.
-fn run_script(src: &str) -> (ScriptedGame, Engine<NoAction>) {
+fn run_script(src: &str) -> (ScriptedGame, Engine) {
     let mut game = ScriptedGame::new(src);
     let mut engine = Engine::new();
     game.init(&mut engine);

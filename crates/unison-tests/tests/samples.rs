@@ -10,8 +10,6 @@ use std::path::Path;
 use unison_scripting::ScriptedGame;
 use unison2d::{Engine, Game};
 
-type NoAction = unison_scripting::NoAction;
-
 /// Recursively collect all files under `dir` with their paths relative to `dir`.
 fn collect_files(dir: &Path, rel: &Path, out: &mut Vec<(String, Vec<u8>)>) {
     let entries = match fs::read_dir(dir) {
@@ -46,7 +44,7 @@ fn run_sample(scripts_dir: &Path) {
         .unwrap_or_else(|e| panic!("cannot read {}: {e}", main_lua.display()));
 
     let mut game = ScriptedGame::new(&source);
-    let mut engine: Engine<NoAction> = Engine::new();
+    let mut engine: Engine = Engine::new();
 
     // Inject all .lua files from the sample into the asset store so that
     // `require()` works (setup_require reads from engine.assets()).

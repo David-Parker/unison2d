@@ -28,7 +28,7 @@ fn error_in_update_does_not_panic() {
         "#,
     );
 
-    let mut engine: Engine<unison_scripting::NoAction> = Engine::new();
+    let mut engine: Engine = Engine::new();
     game.init(&mut engine);
 
     // update() should swallow the Lua error without panicking.
@@ -70,7 +70,7 @@ fn error_in_update_does_not_suppress_render() {
         "#,
     );
 
-    let mut engine: Engine<unison_scripting::NoAction> = Engine::new();
+    let mut engine: Engine = Engine::new();
     game.init(&mut engine);
 
     // Run one full frame: update errors, render should still be called.
@@ -126,7 +126,7 @@ fn debug_log_does_not_panic() {
         "#,
     );
 
-    let mut engine: Engine<unison_scripting::NoAction> = Engine::new();
+    let mut engine: Engine = Engine::new();
     game.init(&mut engine);
 
     // debug.log must not panic regardless of argument types.
@@ -152,7 +152,7 @@ fn debug_draw_point_does_not_panic() {
         "#,
     );
 
-    let mut engine: Engine<unison_scripting::NoAction> = Engine::new();
+    let mut engine: Engine = Engine::new();
     game.init(&mut engine);
 
     // debug.draw_point must not panic (it queues a render command internally).
@@ -194,7 +194,7 @@ fn reload_updates_update_function() {
     "#;
 
     let mut game = ScriptedGame::new(v1);
-    let mut engine: Engine<unison_scripting::NoAction> = Engine::new();
+    let mut engine: Engine = Engine::new();
     game.init(&mut engine);
 
     // v1: run update, then reload with v2.
@@ -254,7 +254,7 @@ fn reload_level2_preserves_lua_globals() {
     "#;
 
     let mut game = ScriptedGame::new(v1);
-    let mut engine: Engine<unison_scripting::NoAction> = Engine::new();
+    let mut engine: Engine = Engine::new();
     game.init(&mut engine); // sets _my_state = 99
 
     // Level 2 reload: VM is reused, _my_state must survive.

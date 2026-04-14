@@ -9,7 +9,7 @@
 //! engine.
 
 use unison2d::{Engine, Game};
-use unison_scripting::{NoAction, ScriptedGame};
+use unison_scripting::ScriptedGame;
 
 const LUA_TEMPLATE: &str = include_str!(
     "../../unison-cli/templates/scripting-lua/project/assets/scripts/main.lua"
@@ -55,7 +55,7 @@ fn cli_lua_template_runs_full_lifecycle_without_error_overlay() {
     // up the red bar in the browser.
     let source = render(LUA_TEMPLATE, "test_game");
     let mut game = ScriptedGame::new(source);
-    let mut engine: Engine<NoAction> = Engine::new();
+    let mut engine: Engine = Engine::new();
 
     game.init(&mut engine);
     assert!(

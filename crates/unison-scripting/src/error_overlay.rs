@@ -17,7 +17,6 @@
 //! overlay.render(engine);
 //! ```
 
-use crate::NoAction;
 use unison2d::Engine;
 
 /// Holds the last Lua error message (debug builds only).
@@ -87,7 +86,7 @@ impl ErrorOverlay {
     /// The overlay is drawn as a separate compositing pass after all other
     /// rendering is complete, consistent with how PiP overlays are handled.
     #[allow(unused_variables)]
-    pub fn render(&self, engine: &mut Engine<NoAction>) {
+    pub fn render(&self, engine: &mut Engine) {
         #[cfg(debug_assertions)]
         {
             let msg = match &self.message {

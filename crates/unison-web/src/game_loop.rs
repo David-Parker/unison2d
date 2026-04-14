@@ -22,7 +22,7 @@ const MAX_ACCUMULATOR: f32 = 0.1;
 /// Takes ownership of the game and engine. The loop runs until the page is closed.
 pub fn start_loop<G: Game + 'static>(
     mut game: G,
-    engine: Rc<RefCell<Engine<G::Action>>>,
+    engine: Rc<RefCell<Engine>>,
     input: Rc<RefCell<InputBuffer>>,
 ) {
     let f: Rc<RefCell<Option<Closure<dyn FnMut(f64)>>>> = Rc::new(RefCell::new(None));

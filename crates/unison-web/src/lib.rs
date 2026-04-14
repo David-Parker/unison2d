@@ -98,7 +98,7 @@ pub fn run<G: Game + 'static>(game: G) {
     std::mem::forget(_closures);
 
     // Create engine with renderer
-    let mut engine = Engine::<G::Action>::new();
+    let mut engine = Engine::new();
     engine.renderer = Some(Box::new(web_renderer));
 
     let engine = Rc::new(RefCell::new(engine));

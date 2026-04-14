@@ -29,8 +29,6 @@ use unison2d::ui::node::{UiNode, UiTree};
 use unison2d::ui::style::{Anchor, PanelStyle, TextStyle};
 use unison2d::{Engine, World};
 
-use super::super::NoAction;
-
 // ===================================================================
 // Thread-local UI state
 // ===================================================================
@@ -276,7 +274,7 @@ fn parse_anchor(s: &str) -> Anchor {
 /// internal sink and returned as string event names for the Lua event system
 /// to emit.
 pub fn render_pending_ui(
-    engine: &mut Engine<NoAction>,
+    engine: &mut Engine,
     world: &mut World,
 ) -> Vec<String> {
     let frame_request = match take_ui_frame() {

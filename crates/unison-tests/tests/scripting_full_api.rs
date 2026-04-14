@@ -4,10 +4,8 @@
 use unison_scripting::ScriptedGame;
 use unison2d::{Engine, Game};
 
-type NoAction = unison_scripting::NoAction;
-
 /// Helper: create a ScriptedGame, run init+update, return it for inspection.
-fn run_script(src: &str) -> (ScriptedGame, Engine<NoAction>) {
+fn run_script(src: &str) -> (ScriptedGame, Engine) {
     let mut game = ScriptedGame::new(src);
     let mut engine = Engine::new();
     game.init(&mut engine);
@@ -16,7 +14,7 @@ fn run_script(src: &str) -> (ScriptedGame, Engine<NoAction>) {
 }
 
 /// Run init only (for tests that need init but not update).
-fn run_init(src: &str) -> (ScriptedGame, Engine<NoAction>) {
+fn run_init(src: &str) -> (ScriptedGame, Engine) {
     let mut game = ScriptedGame::new(src);
     let mut engine = Engine::new();
     game.init(&mut engine);
@@ -24,7 +22,7 @@ fn run_init(src: &str) -> (ScriptedGame, Engine<NoAction>) {
 }
 
 /// Run init + multiple updates.
-fn run_script_n(src: &str, n: usize) -> (ScriptedGame, Engine<NoAction>) {
+fn run_script_n(src: &str, n: usize) -> (ScriptedGame, Engine) {
     let mut game = ScriptedGame::new(src);
     let mut engine = Engine::new();
     game.init(&mut engine);

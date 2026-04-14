@@ -17,8 +17,6 @@ use mlua::prelude::*;
 use unison2d::render::Color;
 use unison2d::{Engine, World};
 
-use super::super::NoAction;
-
 // ===================================================================
 // Thread-local bridge state
 // ===================================================================
@@ -39,7 +37,7 @@ thread_local! {
     /// Raw pointer to the Engine, set during init() so Lua closures can call
     /// engine methods (like load_texture) synchronously. Only valid while
     /// the ScriptedGame::init() call is on the stack.
-    static ENGINE_PTR: std::cell::Cell<Option<*mut Engine<NoAction>>> = const { std::cell::Cell::new(None) };
+    static ENGINE_PTR: std::cell::Cell<Option<*mut Engine>> = const { std::cell::Cell::new(None) };
 }
 
 // -- Public accessors for ScriptedGame --
@@ -82,7 +80,7 @@ pub fn take_aa_request() -> Option<String> {
 /// # Safety
 /// The returned reference is only valid while the `ScriptedGame` lifecycle method
 /// that set the pointer is still on the stack.
-pub fn with_engine_ptr<R>(f: impl FnOnce(&mut Engine<NoAction>) -> R) -> Option<R> {
+pub fn with_engine_ptr<R>(f: impl FnOnce(&mut Engine) -> R) -> Option<R> {
     ENGINE_PTR.with(|c| {
         c.get().map(|ptr| {
             // Safety: ptr is valid while ScriptedGame::init()/update()/render()
@@ -112,8 +110,8 @@ impl Drop for EngineGuard {
 /// # Safety
 /// The pointer must remain valid for the lifetime of the returned [`EngineGuard`].
 /// Drop the guard before `engine` goes out of scope or is moved.
-pub fn set_engine_ptr(engine: &mut Engine<NoAction>) -> EngineGuard {
-    ENGINE_PTR.with(|c| c.set(Some(engine as *mut Engine<NoAction>)));
+pub fn set_engine_ptr(engine: &mut Engine) -> EngineGuard {
+    ENGINE_PTR.with(|c| c.set(Some(engine as *mut Engine)));
     EngineGuard
 }
 

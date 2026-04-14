@@ -38,7 +38,7 @@ fn scripted_game_lifecycle_no_panic() {
         "#,
     );
 
-    let mut engine: Engine<unison_scripting::NoAction> = Engine::new();
+    let mut engine: Engine = Engine::new();
 
     // None of these should panic even without a renderer.
     game.init(&mut engine);
@@ -93,7 +93,7 @@ fn script_lifecycle_all_called() {
 #[test]
 fn script_syntax_error_no_panic() {
     let mut game = ScriptedGame::new("this is not valid lua }{");
-    let mut engine: Engine<unison_scripting::NoAction> = Engine::new();
+    let mut engine: Engine = Engine::new();
     // Should log the error internally and continue — no panic.
     game.init(&mut engine);
     game.update(&mut engine);
@@ -115,7 +115,7 @@ fn missing_render_function_is_noop() {
         return g
         "#,
     );
-    let mut engine: Engine<unison_scripting::NoAction> = Engine::new();
+    let mut engine: Engine = Engine::new();
     game.init(&mut engine);
     game.update(&mut engine);
     game.render(&mut engine); // should not panic
@@ -125,7 +125,7 @@ fn missing_render_function_is_noop() {
 fn empty_script_is_noop() {
     // Script returns nothing (nil) — ScriptedGame must handle this gracefully.
     let mut game = ScriptedGame::new("");
-    let mut engine: Engine<unison_scripting::NoAction> = Engine::new();
+    let mut engine: Engine = Engine::new();
     game.init(&mut engine);
     game.update(&mut engine);
     game.render(&mut engine);
@@ -166,7 +166,7 @@ fn test_hot_reload_updates_functions() {
     "#;
 
     let mut game = ScriptedGame::new(v1);
-    let mut engine: Engine<unison_scripting::NoAction> = Engine::new();
+    let mut engine: Engine = Engine::new();
     game.init(&mut engine);
 
     // Before reload: update() should write "v1".
@@ -232,7 +232,7 @@ fn test_hot_reload_level2_preserves_world() {
     "#;
 
     let mut game = ScriptedGame::new(v1);
-    let mut engine: Engine<unison_scripting::NoAction> = Engine::new();
+    let mut engine: Engine = Engine::new();
     game.init(&mut engine);
 
     // _state is now 42 in the VM from v1's init().

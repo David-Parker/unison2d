@@ -4,39 +4,19 @@
 ///
 /// **Quick start:** Create a [`World`], implement the [`Game`] trait, call your platform's `run()`.
 ///
-/// ```ignore
-/// use unison2d::*;
-/// use unison2d::core::{Color, Vec2};
-/// use unison2d::input::KeyCode;
-///
-/// struct MyGame { world: World, player: ObjectId }
-///
-/// impl Game for MyGame {
-///     type Action = MyAction;
-///     fn init(&mut self, engine: &mut Engine<MyAction>) {
-///         engine.bind_key(KeyCode::Space, MyAction::Jump);
-///         self.player = self.world.spawn_soft_body(/* ... */);
-///     }
-///     fn update(&mut self, engine: &mut Engine<MyAction>) {
-///         self.world.step(engine.dt());
-///     }
-///     fn render(&mut self, engine: &mut Engine<MyAction>) {
-///         if let Some(r) = engine.renderer_mut() { self.world.auto_render(r); }
-///     }
-/// }
-/// ```
-///
 /// ## Architecture
 /// - [`World`] — owns [`ObjectSystem`] and [`CameraSystem`]
-/// - [`Engine`] — thin shell for input/actions and renderer access
+/// - [`Engine`] — thin shell for input and renderer access
 /// - [`Game`] — lifecycle trait: init, update, render
+///
+/// Game code is written in **Lua** using `unison-scripting` (`ScriptedGame`).
 ///
 /// ## Subsystem crates (re-exported)
 /// - [`core`] — Vec2, Color, Rect, EventSink
 /// - [`physics`] — XPBD soft body & rigid body simulation
 /// - [`render`] — Platform-agnostic rendering abstractions
 /// - [`profiler`] — Lightweight function-level profiling
-/// - [`input`] — Two-layer input system (raw state + action mapping)
+/// - [`input`] — Raw input state (keyboard, mouse, touch)
 /// - [`assets`] — Build-time asset embedding and runtime asset store
 /// - [`lighting`] — 2D lighting with lightmap compositing and shadows
 /// - [`ui`] — Declarative React-like UI system (HUDs, menus, buttons)
