@@ -12,6 +12,12 @@
 //! local x, y = world.objects:position(id)
 //! world.objects:apply_torque(id, 200)
 //! world.objects:despawn(id)
+//!
+//! -- Camera facade (Task 12)
+//! world.cameras:add("overview", 20, 15)
+//! world.cameras:follow("main", id, { smoothing = 0.08, offset = {0, 3.5} })
+//! local cx, cy = world.cameras:position("main")
+//! local wx, wy = world.cameras:screen_to_world(sx, sy)
 //! ```
 
 use std::cell::RefCell;
@@ -31,6 +37,11 @@ impl LuaUserData for LuaWorld {
         // The facade table holds closures that close over the Rc<RefCell<World>>.
         fields.add_field_method_get("objects", |lua, this| {
             super::objects::build_objects_facade(lua, this.0.clone())
+        });
+
+        // Expose the `world.cameras` facade as a field.
+        fields.add_field_method_get("cameras", |lua, this| {
+            super::camera::build_cameras_facade(lua, this.0.clone())
         });
     }
 
@@ -99,9 +110,6 @@ impl LuaUserData for LuaWorld {
             });
             Ok(())
         });
-
-        // Register camera methods
-        super::camera::add_world_methods(methods);
 
         // Register lighting methods
         super::lighting::add_world_methods(methods);

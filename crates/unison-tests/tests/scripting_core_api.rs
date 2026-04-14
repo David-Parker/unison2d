@@ -358,10 +358,10 @@ fn camera_follow_no_panic() {
                 material = "rubber",
                 position = {5, 5},
             })
-            w:camera_follow("main", id, 0.1)
+            w.cameras:follow("main", id, { smoothing = 0.1 })
             -- Step to let camera track
             for i = 1, 10 do w:step(1/60) end
-            local cx, cy = w:camera_get_position("main")
+            local cx, cy = w.cameras:position("main")
             -- Camera should have moved toward the object
             assert(type(cx) == "number", "camera x should be a number")
             assert(type(cy) == "number", "camera y should be a number")
@@ -383,9 +383,9 @@ fn camera_follow_with_offset() {
                 material = "rubber",
                 position = {0, 0},
             })
-            w:camera_follow_with_offset("main", id, 1.0, 0, 5)
+            w.cameras:follow("main", id, { smoothing = 1.0, offset = {0, 5} })
             w:step(1/60)
-            local cx, cy = w:camera_get_position("main")
+            local cx, cy = w.cameras:position("main")
             -- With smoothing=1.0 (instant), camera should snap to object + offset
             -- Object at ~(0,0), offset (0,5), so camera should be near (0,5)
             assert(math.abs(cy - 5) < 1, "camera y should be near 5 (object + offset), got " .. cy)
@@ -401,9 +401,50 @@ fn camera_add_and_get_position() {
         local game = {}
         function game.init()
             local w = unison.World.new()
-            w:camera_add("overview", 20, 15)
-            local cx, cy = w:camera_get_position("overview")
+            w.cameras:add("overview", 20, 15)
+            local cx, cy = w.cameras:position("overview")
             assert(type(cx) == "number", "overview camera x should be a number")
+        end
+        function game.update(dt) end
+        return game
+    "#);
+}
+
+#[test]
+fn camera_unfollow_no_panic() {
+    run_script(r#"
+        local game = {}
+        function game.init()
+            local w = unison.World.new()
+            local id = w.objects:spawn_soft_body({
+                mesh = "square", mesh_params = {0.5, 2},
+                material = "rubber",
+                position = {0, 0},
+            })
+            w.cameras:follow("main", id, { smoothing = 0.1 })
+            w.cameras:unfollow("main")
+            -- After unfollow, stepping should not panic
+            w:step(1/60)
+        end
+        function game.update(dt) end
+        return game
+    "#);
+}
+
+#[test]
+fn camera_follow_no_opts() {
+    run_script(r#"
+        local game = {}
+        function game.init()
+            local w = unison.World.new()
+            local id = w.objects:spawn_soft_body({
+                mesh = "square", mesh_params = {0.5, 2},
+                material = "rubber",
+                position = {0, 0},
+            })
+            -- opts is optional — omitting it should use defaults (smoothing=0, offset=(0,0))
+            w.cameras:follow("main", id)
+            w:step(1/60)
         end
         function game.update(dt) end
         return game

@@ -36,7 +36,7 @@ end
 function game.update(dt)
     local sx, sy = unison.input.pointer_position()
     if sx then
-        local tx, ty = world:screen_to_world(sx, sy)
+        local tx, ty = world.cameras:screen_to_world(sx, sy)
         local px, py = world.objects:position(logo_id)
         local dx, dy = tx - px, ty - py
         local mag = math.sqrt(dx * dx + dy * dy)

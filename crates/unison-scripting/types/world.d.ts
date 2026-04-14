@@ -269,6 +269,44 @@ declare type DrawParams = DrawParamsRect | DrawParamsLine | DrawParamsCircle;
 declare type RenderTargetMapping = [string, RenderTargetId | "screen"];
 
 // ===================================================================
+// WorldCameras facade — accessed as world.cameras
+// ===================================================================
+
+/**
+ * Camera management facade exposed as `world.cameras`.
+ *
+ * Call methods with colon syntax: `world.cameras:follow("main", id, { smoothing = 0.08 })`.
+ */
+declare interface WorldCameras {
+  /**
+   * Add a named camera with the given viewport size in world units.
+   * Replaces any existing camera with the same name.
+   */
+  add(this: WorldCameras, name: string, width: number, height: number): void;
+
+  /**
+   * Make a named camera follow an object.
+   *
+   * `opts.smoothing`: 0 = frozen, 1 = instant snap. Typical: 0.05–0.2. Defaults to 0.
+   * `opts.offset`: `[ox, oy]` world-space offset applied to the look-at point. Defaults to `[0, 0]`.
+   * `opts` itself may be omitted (equivalent to `{}`).
+   */
+  follow(this: WorldCameras, name: string, id: ObjectId, opts?: { smoothing?: number; offset?: [number, number] }): void;
+
+  /** Stop a named camera from following any object. */
+  unfollow(this: WorldCameras, name: string): void;
+
+  /** Get the current camera center position. Returns [x, y]. */
+  position(this: WorldCameras, name: string): LuaMultiReturn<[number, number]>;
+
+  /**
+   * Convert a screen-space point (e.g. from `unison.input.pointer_just_pressed()`) to
+   * world-space using the `"main"` camera. Returns [world_x, world_y].
+   */
+  screen_to_world(this: WorldCameras, screen_x: number, screen_y: number): LuaMultiReturn<[number, number]>;
+}
+
+// ===================================================================
 // WorldObjects facade — accessed as world.objects
 // ===================================================================
 
@@ -366,21 +404,10 @@ declare interface World {
   /** Object management facade — spawn, despawn, physics, queries. */
   objects: WorldObjects;
 
-  // --- Camera ---
+  // --- Camera Management (facade) ---
 
-  /** Make a named camera follow an object. smoothing: 0 = frozen, 1 = instant snap. */
-  camera_follow(this: World, name: string, id: ObjectId, smoothing: number): void;
-  /** Follow an object with a world-space offset applied to the look-at point. */
-  camera_follow_with_offset(this: World, name: string, id: ObjectId, smoothing: number, ox: number, oy: number): void;
-  /** Add a named camera with the given viewport size in world units. */
-  camera_add(this: World, name: string, width: number, height: number): void;
-  /** Get the current camera center position. Returns [x, y]. */
-  camera_get_position(this: World, name: string): LuaMultiReturn<[number, number]>;
-  /**
-   * Convert a screen-space point (e.g. from `unison.input.pointer_just_pressed()`) to
-   * world-space using the `"main"` camera. Returns [world_x, world_y].
-   */
-  screen_to_world(this: World, screen_x: number, screen_y: number): LuaMultiReturn<[number, number]>;
+  /** Camera management facade — add, follow, position, screen-to-world. */
+  cameras: WorldCameras;
 
   // --- Lighting: System Configuration ---
 

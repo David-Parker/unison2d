@@ -18,7 +18,7 @@ function scene.on_enter()
         color = 0xFF6600,
     })
 
-    world:camera_follow("main", box_id, 0.1)
+    world.cameras:follow("main", box_id, { smoothing = 0.1 })
 
     unison.events.on("test_event", function(data)
         unison.debug.log("received test_event")

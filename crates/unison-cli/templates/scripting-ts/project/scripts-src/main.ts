@@ -35,7 +35,7 @@ const game: Game = {
     update(dt: number) {
         const [sx, sy] = unison.input.pointer_position();
         if (sx !== undefined && sy !== undefined) {
-            const [tx, ty] = world.screen_to_world(sx, sy);
+            const [tx, ty] = world.cameras.screen_to_world(sx, sy);
             const [px, py] = world.get_position(logo_id);
             const dx = tx - px;
             const dy = ty - py;

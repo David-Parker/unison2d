@@ -21,7 +21,7 @@
 //!         position = {0, 3.5}, color = 0xFFFFFF,
 //!         texture = engine.load_texture("textures/donut-pink.png"),
 //!     })
-//!     world:camera_follow("main", donut, 0.08)
+//!     world.cameras:follow("main", donut, { smoothing = 0.08 })
 //! end
 //!
 //! function game.update(dt)
