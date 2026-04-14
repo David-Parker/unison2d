@@ -22,12 +22,14 @@ thread_local! {
 pub struct InputStateSnapshot {
     pub keys_pressed: Vec<KeyCode>,
     pub keys_just_pressed: Vec<KeyCode>,
+    pub keys_just_released: Vec<KeyCode>,
     pub axis: (f32, f32),
     pub touches_began: Vec<(f32, f32)>,
     pub active_touch: Option<(f32, f32)>,
     pub mouse_pos: (f32, f32),
     pub mouse_left_just_pressed: bool,
     pub mouse_left_pressed: bool,
+    pub mouse_left_just_released: bool,
 }
 
 impl InputStateSnapshot {
@@ -42,6 +44,10 @@ impl InputStateSnapshot {
             .filter(|k| input.is_key_just_pressed(**k))
             .copied()
             .collect();
+        let keys_just_released: Vec<KeyCode> = all_keys.iter()
+            .filter(|k| input.is_key_just_released(**k))
+            .copied()
+            .collect();
         let axis_vec = input.axis();
         let touches_began: Vec<(f32, f32)> = input.touches_just_began()
             .iter()
@@ -54,12 +60,14 @@ impl InputStateSnapshot {
         Self {
             keys_pressed,
             keys_just_pressed,
+            keys_just_released,
             axis: (axis_vec.x, axis_vec.y),
             touches_began,
             active_touch,
             mouse_pos: (mouse_pos_vec.x, mouse_pos_vec.y),
             mouse_left_just_pressed: input.is_mouse_just_pressed(MouseButton::Left),
             mouse_left_pressed: input.is_mouse_pressed(MouseButton::Left),
+            mouse_left_just_released: input.is_mouse_just_released(MouseButton::Left),
         }
     }
 }
@@ -103,6 +111,20 @@ pub fn register(lua: &Lua) -> LuaResult<()> {
         })
     })?)?;
 
+    // input.is_key_just_released("W") → bool
+    input.set("is_key_just_released", lua.create_function(|_, name: String| {
+        INPUT_STATE.with(|cell| {
+            let snap = cell.borrow();
+            match &*snap {
+                Some(s) => match parse_key_code(&name) {
+                    Some(k) => Ok(s.keys_just_released.contains(&k)),
+                    None => Ok(false),
+                },
+                None => Ok(false),
+            }
+        })
+    })?)?;
+
     // input.axis_x() → f32
     input.set("axis_x", lua.create_function(|_, ()| {
         INPUT_STATE.with(|cell| {
@@ -139,6 +161,13 @@ pub fn register(lua: &Lua) -> LuaResult<()> {
     input.set("is_mouse_just_pressed", lua.create_function(|_, ()| {
         INPUT_STATE.with(|cell| {
             Ok(cell.borrow().as_ref().is_some_and(|s| s.mouse_left_just_pressed))
+        })
+    })?)?;
+
+    // input.is_mouse_button_just_released() → bool (left button, this frame)
+    input.set("is_mouse_button_just_released", lua.create_function(|_, ()| {
+        INPUT_STATE.with(|cell| {
+            Ok(cell.borrow().as_ref().is_some_and(|s| s.mouse_left_just_released))
         })
     })?)?;
 

@@ -25,6 +25,8 @@ declare const input: {
   is_key_pressed(this: void, key: KeyName): boolean;
   /** True only on the frame the key was first pressed. */
   is_key_just_pressed(this: void, key: KeyName): boolean;
+  /** True only on the frame the key was released. */
+  is_key_just_released(this: void, key: KeyName): boolean;
   /** Horizontal axis in [-1, 1] from joystick or touch joystick. */
   axis_x(this: void): number;
   /** Vertical axis in [-1, 1] from joystick or touch joystick. */
@@ -33,6 +35,8 @@ declare const input: {
   touches_just_began(this: void): TouchPosition[];
   /** True on the frame the primary (left) mouse button was first pressed. */
   is_mouse_just_pressed(this: void): boolean;
+  /** True on the frame the primary (left) mouse button was released. */
+  is_mouse_button_just_released(this: void): boolean;
   /** Current mouse position in screen space: `[x, y]`. */
   mouse_position(this: void): LuaMultiReturn<[number, number]>;
   /**
