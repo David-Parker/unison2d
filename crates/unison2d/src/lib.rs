@@ -49,8 +49,6 @@ mod object;
 mod object_system;
 mod camera_system;
 mod world;
-mod level;
-mod prefab;
 mod game;
 
 pub use engine::Engine;
@@ -61,8 +59,6 @@ pub use object::{ObjectId, SoftBodyDesc, RigidBodyDesc, SpriteDesc};
 pub use object_system::{ObjectSystem, CollisionEvent};
 pub use camera_system::CameraSystem;
 pub use world::{World, Environment, RenderLayerId, RenderLayerConfig};
-pub use level::Level;
-pub use prefab::Prefab;
 pub use game::Game;
 
 // Subsystem re-exports

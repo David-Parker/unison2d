@@ -1,27 +1,22 @@
-//! Ctx — unified context passed to levels during update and render.
+//! Ctx — unified context passed to game code during update and render.
 //!
-//! Replaces the split `LevelContext` / `RenderContext` with a single struct
-//! that has everything a level needs: input, renderer, events, assets, and
-//! shared state.
+//! A single struct that has everything game code needs: input, renderer, events,
+//! assets, and shared state.
 //!
 //! ```ignore
-//! impl Level<SharedState> for MyLevel {
-//!     fn update(&mut self, ctx: &mut Ctx<SharedState>) {
-//!         // Input
-//!         let input = ctx.input;
-//!         let dt = ctx.dt;
+//! fn my_update(ctx: &mut Ctx<SharedState>) {
+//!     // Input
+//!     let input = ctx.input;
+//!     let dt = ctx.dt;
 //!
-//!         // Events
-//!         ctx.events.emit(MyEvent { score: 100 });
+//!     // Events
+//!     ctx.events.emit(MyEvent { score: 100 });
 //!
-//!         // Renderer
-//!         let screen = ctx.renderer.screen_size();
+//!     // Renderer
+//!     let screen = ctx.renderer.screen_size();
 //!
-//!         // Shared state
-//!         ctx.shared.score += 1;
-//!
-//!         // world.step() is called automatically — don't call it here
-//!     }
+//!     // Shared state
+//!     ctx.shared.score += 1;
 //! }
 //! ```
 
@@ -33,9 +28,9 @@ use crate::object::ObjectId;
 use crate::object_system::CollisionEvent;
 use crate::World;
 
-/// Unified context passed to levels for both update and render.
+/// Unified context passed for both update and render.
 ///
-/// Contains everything a level needs: input, renderer, events, assets,
+/// Contains everything game code needs: input, renderer, events, assets,
 /// delta time, and shared state. Built by `Engine::ctx()` each frame.
 pub struct Ctx<'a, S = ()> {
     /// Raw input state for this frame.
