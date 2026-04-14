@@ -9,12 +9,11 @@
 use std::hash::Hash;
 
 use unison_input::{ActionMap, InputState, KeyCode, MouseButton};
-use unison_core::{Color, Rect};
 use unison_assets::AssetStore;
 use crate::ctx::Ctx;
 use crate::event_bus::EventBus;
 use crate::World;
-use unison_render::{AntiAliasing, Renderer, RenderCommand, DrawSprite, TextureId, RenderTargetId, Camera};
+use unison_render::{AntiAliasing, Renderer, TextureId, RenderTargetId};
 
 /// The engine struct. Manages input, actions, and renderer access.
 ///
@@ -208,8 +207,8 @@ impl<A: Copy + Eq + Hash> Engine<A> {
 
     /// Create an offscreen render target.
     ///
-    /// Returns `(target_id, texture_id)`. The texture can be used in
-    /// `composite_layer()` to draw the target's contents on screen.
+    /// Returns `(target_id, texture_id)`. The texture can be used to draw
+    /// the target's contents on screen.
     pub fn create_render_target(&mut self, width: u32, height: u32) -> Result<(RenderTargetId, TextureId), String> {
         match self.renderer.as_mut() {
             Some(r) => r.create_render_target(width, height),
@@ -245,56 +244,6 @@ impl<A: Copy + Eq + Hash> Engine<A> {
         match self.renderer.as_ref() {
             Some(r) => r.anti_aliasing(),
             None => AntiAliasing::None,
-        }
-    }
-
-    // ── Compositing ──
-
-    /// Begin compositing: bind the screen, set up a screen-space camera, and clear.
-    ///
-    /// After this call, use `composite_layer()` to draw render target textures
-    /// onto the screen. Finish with `end_composite()`.
-    ///
-    /// Screen-space coordinates use a 1×1 unit camera where (0,0) is bottom-left
-    /// and (1,1) is top-right.
-    pub fn begin_composite(&mut self, clear_color: Color) {
-        if let Some(r) = self.renderer.as_mut() {
-            r.bind_render_target(RenderTargetId::SCREEN);
-            let mut cam = Camera::new(1.0, 1.0);
-            cam.set_position(0.5, 0.5);
-            r.begin_frame(&cam);
-            r.clear(clear_color);
-        }
-    }
-
-    /// Draw a render-target texture onto the screen.
-    ///
-    /// `screen_rect` uses normalized coordinates: (0,0) is bottom-left, (1,1) is
-    /// top-right. For a full-screen quad, use `Rect::from_position(Vec2::ZERO, Vec2::ONE)`.
-    pub fn composite_layer(&mut self, texture: TextureId, screen_rect: Rect) {
-        if let Some(r) = self.renderer.as_mut() {
-            let center = screen_rect.center();
-            let size = screen_rect.size();
-            let uv = if r.fbo_origin_top_left() {
-                [0.0, 0.0, 1.0, 1.0]
-            } else {
-                [0.0, 1.0, 1.0, 0.0]
-            };
-            r.draw(RenderCommand::Sprite(DrawSprite {
-                texture,
-                position: [center.x, center.y],
-                size: [size.x, size.y],
-                rotation: 0.0,
-                uv,
-                color: Color::WHITE,
-            }));
-        }
-    }
-
-    /// Finish compositing and present the frame.
-    pub fn end_composite(&mut self) {
-        if let Some(r) = self.renderer.as_mut() {
-            r.end_frame();
         }
     }
 

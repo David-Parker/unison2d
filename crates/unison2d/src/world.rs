@@ -678,8 +678,7 @@ impl World {
     /// Render all layers through each named camera into its assigned render target.
     ///
     /// For each `(camera_name, target_id)` pair: renders all layers through
-    /// that camera into the target. Use with `Engine::composite_layer()`
-    /// to arrange outputs on screen.
+    /// that camera into the target to arrange outputs.
     ///
     /// Layers, lighting, unlit commands, and overlays are included in each
     /// target and cleared after this call.
