@@ -1,5 +1,4 @@
 /// <reference path="lua.d.ts" />
-/// <reference path="engine.d.ts" />
 /// <reference path="input.d.ts" />
 /// <reference path="events.d.ts" />
 /// <reference path="world.d.ts" />

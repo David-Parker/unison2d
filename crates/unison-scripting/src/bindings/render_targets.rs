@@ -101,7 +101,7 @@ pub fn add_world_methods<M: LuaUserDataMethods<super::world::LuaWorld>>(methods:
 
         // Ensure the render pass runs even when the script uses multi-camera
         // rendering instead of world:render().
-        super::engine_state::request_auto_render(this.0.clone());
+        super::engine_state::request_render(this.0.clone());
 
         Ok(())
     });

@@ -123,7 +123,7 @@ function game.init()
 end
 
 function game.update(dt) world:step(dt) end
-function game.render()   world:auto_render() end
+function game.render()   world:render() end
 
 return game
 ```

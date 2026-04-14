@@ -19,11 +19,11 @@ thread_local! {
     /// Screen dimensions — refreshed each frame.
     static SCREEN_SIZE: std::cell::Cell<(f32, f32)> = const { std::cell::Cell::new((960.0, 540.0)) };
 
-    /// Background clear color — set by the old Phase 1 `engine.set_background(r,g,b)`.
+    /// Background clear color — set by `world:set_background(rgb)`.
     static CLEAR_COLOR: std::cell::Cell<[f32; 3]> = const { std::cell::Cell::new([0.1, 0.1, 0.12]) };
 
     /// World to render, set by `world:render()`, consumed by `ScriptedGame::render`.
-    static AUTO_RENDER_WORLD: RefCell<Option<Rc<RefCell<World>>>> = const { RefCell::new(None) };
+    static RENDER_WORLD: RefCell<Option<Rc<RefCell<World>>>> = const { RefCell::new(None) };
 
     /// Anti-aliasing mode request (string), consumed during init.
     static AA_REQUEST: RefCell<Option<String>> = const { RefCell::new(None) };
@@ -49,19 +49,19 @@ pub fn get_clear_color() -> Color {
     Color::new(r, g, b, 1.0)
 }
 
-pub fn request_auto_render(world: Rc<RefCell<World>>) {
-    AUTO_RENDER_WORLD.with(|cell| {
+pub fn request_render(world: Rc<RefCell<World>>) {
+    RENDER_WORLD.with(|cell| {
         *cell.borrow_mut() = Some(world);
     });
 }
 
-pub fn take_auto_render_world() -> Option<Rc<RefCell<World>>> {
-    AUTO_RENDER_WORLD.with(|cell| cell.borrow_mut().take())
+pub fn take_render_world() -> Option<Rc<RefCell<World>>> {
+    RENDER_WORLD.with(|cell| cell.borrow_mut().take())
 }
 
-/// Non-consuming peek at the auto-render world (for collision event flushing).
-pub fn peek_auto_render_world() -> Option<Rc<RefCell<World>>> {
-    AUTO_RENDER_WORLD.with(|cell| cell.borrow().clone())
+/// Non-consuming peek at the requested render world (for collision event flushing).
+pub fn peek_render_world() -> Option<Rc<RefCell<World>>> {
+    RENDER_WORLD.with(|cell| cell.borrow().clone())
 }
 
 pub fn take_aa_request() -> Option<String> {
@@ -129,7 +129,7 @@ pub fn clear_engine_ptr() {
 pub fn reset() {
     SCREEN_SIZE.with(|c| c.set((960.0, 540.0)));
     CLEAR_COLOR.with(|c| c.set([0.1, 0.1, 0.12]));
-    AUTO_RENDER_WORLD.with(|cell| *cell.borrow_mut() = None);
+    RENDER_WORLD.with(|cell| *cell.borrow_mut() = None);
     AA_REQUEST.with(|cell| *cell.borrow_mut() = None);
     ENGINE_PTR.with(|c| c.set(None));
     super::action_map::reset();

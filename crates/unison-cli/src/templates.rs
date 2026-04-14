@@ -61,7 +61,7 @@ mod tests {
     #[test]
     fn engine_types_contains_globals() {
         assert!(ENGINE_TYPES.get_file("game.d.ts").is_some());
-        assert!(ENGINE_TYPES.get_file("engine.d.ts").is_some());
+        assert!(ENGINE_TYPES.get_file("unison.d.ts").is_some());
         assert!(ENGINE_TYPES.get_file("input.d.ts").is_some());
         assert!(ENGINE_TYPES.get_file("index.d.ts").is_some());
     }

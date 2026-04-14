@@ -1,4 +1,4 @@
-//! Scene management — Lua-side scene tables replace Rust Level trait.
+//! Scene management — `unison.scenes` table for switching between Lua scene tables.
 //!
 //! A scene is a Lua table with lifecycle functions:
 //!

@@ -1,10 +1,10 @@
-//! Input bindings — global `input` table refreshed each frame.
+//! Input bindings — `unison.input` table refreshed each frame.
 //!
 //! ```lua
-//! if input.is_key_pressed("Space") then ... end
-//! if input.is_key_just_pressed("W") then ... end
-//! if input.is_mouse_button_just_pressed(0) then ... end
-//! local touches = input.touches_started()
+//! if unison.input.is_key_pressed("Space") then ... end
+//! if unison.input.is_key_just_pressed("W") then ... end
+//! if unison.input.is_mouse_button_just_pressed(0) then ... end
+//! local touches = unison.input.touches_started()
 //! ```
 
 use std::cell::RefCell;

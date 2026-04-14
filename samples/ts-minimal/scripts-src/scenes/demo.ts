@@ -40,7 +40,7 @@ const scene: Scene = {
     },
 
     render() {
-        world.auto_render();
+        world.render();
     },
 
     on_exit() {

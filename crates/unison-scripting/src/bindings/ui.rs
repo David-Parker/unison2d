@@ -1,7 +1,7 @@
 //! UI bindings — declarative UI from Lua tables.
 //!
 //! ```lua
-//! local ui = engine.create_ui("fonts/DejaVuSans-Bold.ttf")
+//! local ui = unison.UI.new("fonts/DejaVuSans-Bold.ttf")
 //!
 //! -- In render:
 //! ui:frame({

@@ -300,7 +300,7 @@ impl Game for ScriptedGame {
 
         // Flush collision events from world into Lua callbacks.
         if let Some(lua) = &self.lua {
-            if let Some(world_rc) = bindings::engine_state::peek_auto_render_world() {
+            if let Some(world_rc) = bindings::engine_state::peek_render_world() {
                 let world_key = bindings::collisions::key_of(&world_rc);
                 let mut world = world_rc.borrow_mut();
                 bindings::collisions::flush(lua, world_key, &mut world);
@@ -360,7 +360,7 @@ impl Game for ScriptedGame {
         // before the main render pass. This needs the engine (renderer +
         // assets + input), so it has to happen before we take the renderer
         // borrow below.
-        if let Some(world_rc) = bindings::engine_state::peek_auto_render_world() {
+        if let Some(world_rc) = bindings::engine_state::peek_render_world() {
             let mut world = world_rc.borrow_mut();
             bindings::ui::render_pending_ui(engine, &mut world);
             drop(world);
@@ -368,7 +368,7 @@ impl Game for ScriptedGame {
 
         if let Some(r) = engine.renderer_mut() {
             // Check if Lua called world:render().
-            if let Some(world_rc) = bindings::engine_state::take_auto_render_world() {
+            if let Some(world_rc) = bindings::engine_state::take_render_world() {
                 let mut world = world_rc.borrow_mut();
                 world.snapshot_for_render();
 

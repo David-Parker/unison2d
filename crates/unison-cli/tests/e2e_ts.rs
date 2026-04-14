@@ -58,7 +58,7 @@ fn scaffold_ts_project() -> (TempDir, PathBuf) {
 
     // Sanity: engine types should have been copied under scripts-src/types/
     assert!(
-        root.join("project/scripts-src/types/unison2d/engine.d.ts").exists(),
+        root.join("project/scripts-src/types/unison2d/unison.d.ts").exists(),
         "engine types missing from scaffolded TS project",
     );
 

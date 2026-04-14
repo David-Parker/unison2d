@@ -18,7 +18,6 @@ project/scripts-src/main.ts
 project/scripts-src/tsconfig.json
 project/scripts-src/types/unison2d/color.d.ts
 project/scripts-src/types/unison2d/debug.d.ts
-project/scripts-src/types/unison2d/engine.d.ts
 project/scripts-src/types/unison2d/events.d.ts
 project/scripts-src/types/unison2d/game.d.ts
 project/scripts-src/types/unison2d/index.d.ts

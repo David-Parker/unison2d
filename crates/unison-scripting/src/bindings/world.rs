@@ -124,7 +124,7 @@ impl LuaUserData for LuaWorld {
         // render is handled specially: we buffer the request and the
         // ScriptedGame render phase submits it with the actual renderer.
         methods.add_method("render", |_, this, ()| {
-            super::engine_state::request_auto_render(this.0.clone());
+            super::engine_state::request_render(this.0.clone());
             Ok(())
         });
 

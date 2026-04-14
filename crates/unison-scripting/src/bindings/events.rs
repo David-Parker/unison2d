@@ -1,11 +1,11 @@
-//! Event system bindings — string-keyed pub/sub.
+//! Event system bindings — `unison.events` table, string-keyed pub/sub.
 //!
 //! ```lua
-//! events.on("score", function(data)
+//! unison.events.on("score", function(data)
 //!     print("Score: " .. data.points)
 //! end)
 //!
-//! events.emit("score", { points = 10 })
+//! unison.events.emit("score", { points = 10 })
 //! ```
 //!
 //! Collision callbacks have moved to the World userdata — see `world:on_collision*`.

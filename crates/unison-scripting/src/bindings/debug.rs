@@ -1,15 +1,16 @@
-//! Debug utility bindings — logging, draw helpers, and debug visualization toggles.
+//! Debug utility bindings — `unison.debug` table: logging, draw helpers, and
+//! debug visualization toggles.
 //!
 //! ```lua
 //! -- Print to the platform console (varargs, joined with tab)
-//! debug.log("player pos:", x, y)
+//! unison.debug.log("player pos:", x, y)
 //!
 //! -- Draw a small point in world space (uses a tiny rect render command)
-//! debug.draw_point(x, y, 0xFF0000)
+//! unison.debug.draw_point(x, y, 0xFF0000)
 //!
 //! -- Toggle debug visualizations (no-op until engine support lands)
-//! debug.show_physics(true)
-//! debug.show_fps(true)
+//! unison.debug.show_physics(true)
+//! unison.debug.show_fps(true)
 //! ```
 
 use mlua::prelude::*;
