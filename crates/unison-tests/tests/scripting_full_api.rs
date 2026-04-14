@@ -231,15 +231,16 @@ fn events_multiple_handlers() {
 }
 
 // ===========================================================================
-// Events — collision
+// Events — collision (now on world:on_collision*)
 // ===========================================================================
 
 #[test]
-fn events_on_collision_registers() {
+fn world_on_collision_registers() {
     run_script(r#"
         local game = {}
         function game.init()
-            unison.events.on_collision(function(a, b, info)
+            local w = unison.World.new()
+            w:on_collision(function(a, b, info)
                 -- Just registering should not panic
             end)
         end
@@ -249,7 +250,7 @@ fn events_on_collision_registers() {
 }
 
 #[test]
-fn events_on_collision_for_registers() {
+fn world_on_collision_with_registers() {
     run_script(r#"
         local game = {}
         function game.init()
@@ -258,7 +259,7 @@ fn events_on_collision_for_registers() {
                 mesh = "ring", mesh_params = {1.0, 0.25, 24, 8},
                 material = "rubber", position = {0, 3},
             })
-            unison.events.on_collision_for(obj, function(other, info) end)
+            w:on_collision_with(obj, function(other, info) end)
         end
         function game.update(dt) end
         return game
@@ -266,7 +267,7 @@ fn events_on_collision_for_registers() {
 }
 
 #[test]
-fn events_on_collision_between_registers() {
+fn world_on_collision_between_registers() {
     run_script(r#"
         local game = {}
         function game.init()
@@ -279,7 +280,7 @@ fn events_on_collision_between_registers() {
                 mesh = "ring", mesh_params = {1.0, 0.25, 24, 8},
                 material = "rubber", position = {2, 3},
             })
-            unison.events.on_collision_between(a, b, function(info) end)
+            w:on_collision_between(a, b, function(info) end)
         end
         function game.update(dt) end
         return game

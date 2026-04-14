@@ -25,6 +25,17 @@
 //! local light = world.lights:add_point({ position = {0, 5}, color = 0xFFDD44, radius = 8.0 })
 //! world.lights:follow(light, id, { offset = {0, 2} })
 //! world.lights:unfollow(light)
+//!
+//! -- Collision callbacks (Task 14)
+//! world:on_collision(function(a, b, info)
+//!     print("collision between " .. a .. " and " .. b)
+//! end)
+//! world:on_collision_with(donut, function(other, info)
+//!     print("donut hit " .. other)
+//! end)
+//! world:on_collision_between(donut, platform, function(info)
+//!     print("donut landed!")
+//! end)
 //! ```
 
 use std::cell::RefCell;
@@ -37,6 +48,24 @@ use unison2d::World;
 /// Newtype around `Rc<RefCell<World>>` so we can implement `UserData`.
 #[derive(Clone)]
 pub struct LuaWorld(pub Rc<RefCell<World>>);
+
+impl LuaWorld {
+    /// Return the world key used to index the collision registry.
+    fn world_key(&self) -> super::collisions::WorldKey {
+        super::collisions::key_of(&self.0)
+    }
+}
+
+impl Drop for LuaWorld {
+    fn drop(&mut self) {
+        // Only clear when we are the last Lua-side reference to this World.
+        // `Rc::strong_count` includes the count inside the Rc itself plus any
+        // clones held by closures. When it reaches 1 this is the sole owner.
+        if Rc::strong_count(&self.0) == 1 {
+            super::collisions::clear_world(self.world_key());
+        }
+    }
+}
 
 impl LuaUserData for LuaWorld {
     fn add_fields<F: LuaUserDataFields<Self>>(fields: &mut F) {
@@ -128,6 +157,23 @@ impl LuaUserData for LuaWorld {
 
         // Register render target methods (render_to_targets)
         super::render_targets::add_world_methods(methods);
+
+        // -- Collision callbacks --
+
+        // world:on_collision(fn(a, b, info))
+        methods.add_method("on_collision", |lua, this, cb: LuaFunction| {
+            super::collisions::register_any(lua, this.world_key(), &this.0, cb)
+        });
+
+        // world:on_collision_with(id, fn(other, info))
+        methods.add_method("on_collision_with", |lua, this, (id, cb): (u64, LuaFunction)| {
+            super::collisions::register_with(lua, this.world_key(), &this.0, id, cb)
+        });
+
+        // world:on_collision_between(a, b, fn(info))
+        methods.add_method("on_collision_between", |lua, this, (a, b, cb): (u64, u64, LuaFunction)| {
+            super::collisions::register_between(lua, this.world_key(), &this.0, a, b, cb)
+        });
     }
 }
 

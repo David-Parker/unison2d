@@ -18,6 +18,7 @@ pub mod objects;
 pub mod input;
 pub mod camera;
 pub mod lighting;
+pub mod collisions;
 pub mod events;
 pub mod scene;
 pub mod render_layers;

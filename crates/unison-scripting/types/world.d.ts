@@ -457,6 +457,15 @@ declare interface World {
   /** Lighting management facade — enable, ambient, point/directional lights, follow. */
   lights: WorldLights;
 
+  // --- Collision Callbacks ---
+
+  /** Register a callback invoked for every collision pair each frame: fn(a, b, info). */
+  on_collision(this: World, callback: (a: ObjectId, b: ObjectId, info: CollisionInfo) => void): void;
+  /** Register a callback invoked when the given object collides with anything: fn(other, info). */
+  on_collision_with(this: World, id: ObjectId, callback: (other: ObjectId, info: CollisionInfo) => void): void;
+  /** Register a callback invoked when objects a and b collide: fn(info). */
+  on_collision_between(this: World, a: ObjectId, b: ObjectId, callback: (info: CollisionInfo) => void): void;
+
   // --- Render Layers ---
 
   /** Create a new named render layer, appended after existing layers. Returns a layer handle. */

@@ -301,8 +301,9 @@ impl Game for ScriptedGame {
         // Flush collision events from world into Lua callbacks.
         if let Some(lua) = &self.lua {
             if let Some(world_rc) = bindings::engine_state::peek_auto_render_world() {
+                let world_key = bindings::collisions::key_of(&world_rc);
                 let mut world = world_rc.borrow_mut();
-                bindings::events::flush_collision_events(lua, &mut world);
+                bindings::collisions::flush(lua, world_key, &mut world);
             }
             // Flush string-keyed events.
             bindings::events::flush_string_events(lua);
@@ -423,6 +424,7 @@ impl Drop for ScriptedGame {
 
         // Reset all thread-local state owned by the scripting system so that
         // a subsequent ScriptedGame constructed on the same thread starts clean.
+        bindings::collisions::reset();
         bindings::events::reset();
         bindings::scene::reset();
         bindings::engine_state::reset();

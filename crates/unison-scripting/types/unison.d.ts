@@ -82,13 +82,7 @@ declare interface UnisonEvents {
   on(this: void, name: string, callback: (data?: any) => void): void;
   /** Emit a named event with optional data. Callbacks fire at end of frame. */
   emit(this: void, name: string, data?: any): void;
-  /** Called for every collision pair each frame. */
-  on_collision(this: void, callback: (a: ObjectId, b: ObjectId, info: CollisionInfo) => void): void;
-  /** Called when the given object collides with anything. */
-  on_collision_for(this: void, id: ObjectId, callback: (other: ObjectId, info: CollisionInfo) => void): void;
-  /** Called when objects a and b collide. */
-  on_collision_between(this: void, a: ObjectId, b: ObjectId, callback: (info: CollisionInfo) => void): void;
-  /** Clear all string-keyed event handlers and pending events. Collision handlers are NOT cleared. */
+  /** Clear all string-keyed event handlers and pending events. */
   clear(this: void): void;
 }
 
@@ -150,7 +144,7 @@ declare const unison: {
   input: UnisonInput;
   /** Scene management service. */
   scenes: UnisonScenes;
-  /** String-keyed pub/sub event bus and collision callbacks. */
+  /** String-keyed pub/sub event bus (on, emit, clear). */
   events: UnisonEvents;
   /** UI factory. */
   UI: UnisonUI;
