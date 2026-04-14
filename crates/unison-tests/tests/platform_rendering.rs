@@ -197,7 +197,7 @@ fn opengl_renderer_uses_vflipped_fbo_uvs() {
         color: Color::RED,
     }, 0);
 
-    world.auto_render(&mut renderer);
+    world.render(&mut renderer);
     let ops = renderer.ops();
 
     let uv = first_screen_composite_uv(&ops)
@@ -221,7 +221,7 @@ fn metal_renderer_uses_normal_fbo_uvs() {
         color: Color::RED,
     }, 0);
 
-    world.auto_render(&mut renderer);
+    world.render(&mut renderer);
     let ops = renderer.ops();
 
     let uv = first_screen_composite_uv(&ops)
@@ -253,7 +253,7 @@ fn lightmap_composite_respects_fbo_origin() {
         size: [1.0, 1.0],
         color: Color::RED,
     }, 0);
-    world.auto_render(&mut renderer);
+    world.render(&mut renderer);
     let gl_uv = first_multiply_composite_uv(&renderer.ops());
 
     // Metal-style
@@ -275,7 +275,7 @@ fn lightmap_composite_respects_fbo_origin() {
         size: [1.0, 1.0],
         color: Color::RED,
     }, 0);
-    world.auto_render(&mut renderer);
+    world.render(&mut renderer);
     let metal_uv = first_multiply_composite_uv(&renderer.ops());
 
     if let (Some(gl), Some(metal)) = (gl_uv, metal_uv) {
@@ -313,11 +313,11 @@ fn scene_fbo_created_at_drawable_size() {
         color: Color::RED,
     }, 0);
 
-    // auto_render triggers ensure_scene_fbo internally.
+    // render triggers ensure_scene_fbo internally.
     // The mock renderer doesn't validate FBO dimensions, but we verify
     // the trait contract: create_render_target is called (meaning the
     // FBO path runs), and rendering completes without error.
-    world.auto_render(&mut renderer);
+    world.render(&mut renderer);
 
     let ops = renderer.ops();
     // The FBO path binds a non-SCREEN target before drawing scene content

@@ -28,7 +28,7 @@ thread_local! {
     /// Background clear color — set by the old Phase 1 `engine.set_background(r,g,b)`.
     static CLEAR_COLOR: std::cell::Cell<[f32; 3]> = const { std::cell::Cell::new([0.1, 0.1, 0.12]) };
 
-    /// World to auto-render, set by `world:auto_render()`, consumed by `ScriptedGame::render`.
+    /// World to render, set by `world:render()`, consumed by `ScriptedGame::render`.
     static AUTO_RENDER_WORLD: RefCell<Option<Rc<RefCell<World>>>> = const { RefCell::new(None) };
 
     /// Anti-aliasing mode request (string), consumed during init.

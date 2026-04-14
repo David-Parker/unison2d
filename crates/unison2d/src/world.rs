@@ -635,9 +635,35 @@ impl World {
         renderer.end_frame();
     }
 
+    // ── Rendering (private helper) ──
+
+    /// Shared render pipeline: layers → unlit → overlays, all directed to `target_id`.
+    ///
+    /// Callers are responsible for merging object commands and fitting cameras
+    /// before invoking this helper.  Does **not** clear the command queues —
+    /// that is done by the public entry points after all cameras have been
+    /// rendered.
+    fn render_with_camera(
+        &mut self,
+        renderer: &mut dyn Renderer<Error = String>,
+        camera: &Camera,
+        target_id: RenderTargetId,
+    ) {
+        // Render all layers (handles lit/unlit grouping, FBO, lighting)
+        self.render_layers(renderer, camera, target_id);
+
+        // Unlit pass (world-space, after all layers — not darkened by lightmap)
+        renderer.bind_render_target(target_id);
+        self.render_unlit(renderer, camera);
+
+        // Overlay pass (screen-space, after all layers)
+        renderer.bind_render_target(target_id);
+        self.render_overlays(renderer);
+    }
+
     // ── Rendering (public) ──
 
-    /// Render all layers through the "main" camera to the currently-bound target.
+    /// Render all layers through the "main" camera to the screen.
     ///
     /// This is a convenience method for simple single-camera setups.
     /// For multi-camera rendering, use `render_to_targets()` instead.
@@ -645,8 +671,8 @@ impl World {
     /// Layers are rendered in creation order. Consecutive lit layers share a
     /// single offscreen FBO with lighting composited; unlit layers render
     /// directly. After all layers: unlit commands, then overlay commands.
-    pub fn auto_render(&mut self, renderer: &mut dyn Renderer<Error = String>) {
-        profile_scope!("world.auto_render");
+    pub fn render(&mut self, renderer: &mut dyn Renderer<Error = String>) {
+        profile_scope!("world.render");
         // Fit camera viewport to screen aspect ratio (keeps height, adjusts width)
         let (sw, sh) = renderer.screen_size();
         if let Some(c) = self.cameras.get_mut(DEFAULT_CAMERA) {
@@ -660,14 +686,7 @@ impl World {
         // Merge object commands into the default layer
         self.merge_objects_into_default_layer();
 
-        // Render all layers (handles lit/unlit grouping, FBO, lighting)
-        self.render_layers(renderer, &camera, RenderTargetId::SCREEN);
-
-        // Unlit pass (world-space, after all layers — not darkened by lightmap)
-        self.render_unlit(renderer, &camera);
-
-        // Overlay pass (screen-space, after all layers)
-        self.render_overlays(renderer);
+        self.render_with_camera(renderer, &camera, RenderTargetId::SCREEN);
 
         // Clear all queued commands for next frame
         self.clear_layer_commands();
@@ -706,16 +725,7 @@ impl World {
                 None => continue,
             };
 
-            // Render all layers to this target
-            self.render_layers(renderer, &camera, target_id);
-
-            // Unlit pass for this target
-            renderer.bind_render_target(target_id);
-            self.render_unlit(renderer, &camera);
-
-            // Overlay pass for this target
-            renderer.bind_render_target(target_id);
-            self.render_overlays(renderer);
+            self.render_with_camera(renderer, &camera, target_id);
         }
 
         // Clear all queued commands for next frame

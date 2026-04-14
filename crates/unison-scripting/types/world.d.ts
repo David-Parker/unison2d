@@ -282,7 +282,7 @@ declare interface World {
   /** Advance physics by dt seconds. Call in update. */
   step(this: World, dt: number): void;
   /** Render all objects and lighting through the main camera. Call in render. */
-  auto_render(this: World): void;
+  render(this: World): void;
   /** Render each named camera to a specific render target. */
   render_to_targets(this: World, mapping: RenderTargetMapping[]): void;
 

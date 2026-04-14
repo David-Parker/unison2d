@@ -32,7 +32,7 @@
 //! end
 //!
 //! function game.render()
-//!     world:auto_render()
+//!     world:render()
 //! end
 //!
 //! return game
@@ -366,7 +366,7 @@ impl Game for ScriptedGame {
         }
 
         if let Some(r) = engine.renderer_mut() {
-            // Check if Lua called world:auto_render().
+            // Check if Lua called world:render().
             if let Some(world_rc) = bindings::engine::take_auto_render_world() {
                 let mut world = world_rc.borrow_mut();
                 world.snapshot_for_render();
@@ -379,7 +379,7 @@ impl Game for ScriptedGame {
                         .collect();
                     world.render_to_targets(r, &camera_targets);
                 } else {
-                    world.auto_render(r);
+                    world.render(r);
                 }
 
                 // Handle overlay requests (PiP, etc.)

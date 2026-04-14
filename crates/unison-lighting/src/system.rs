@@ -86,7 +86,7 @@ impl LightingSystem {
 
     /// Enable or disable the lighting system.
     ///
-    /// When disabled, `auto_render` and `render_to_targets` skip the
+    /// When disabled, `render` and `render_to_targets` skip the
     /// lighting pass entirely — the scene renders without any darkening.
     pub fn set_enabled(&mut self, enabled: bool) {
         self.enabled = enabled;

@@ -5,7 +5,7 @@
 //! world:set_gravity(-9.8)
 //! world:set_ground(-4.5)
 //! world:step(dt)
-//! world:auto_render()
+//! world:render()
 //! ```
 
 use std::cell::RefCell;
@@ -55,9 +55,9 @@ impl LuaUserData for LuaWorld {
         });
 
         // -- Rendering --
-        // auto_render is handled specially: we buffer the request and the
+        // render is handled specially: we buffer the request and the
         // ScriptedGame render phase submits it with the actual renderer.
-        methods.add_method("auto_render", |_, this, ()| {
+        methods.add_method("render", |_, this, ()| {
             super::engine::request_auto_render(this.0.clone());
             Ok(())
         });

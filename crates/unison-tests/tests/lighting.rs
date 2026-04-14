@@ -1660,7 +1660,7 @@ fn shadow_creates_detectable_dark_edge() {
 
 /// Full World rendering pipeline test — reproduces the donut game setup.
 #[test]
-fn e2e_world_auto_render_with_shadows() {
+fn e2e_world_render_with_shadows() {
     use unison_lighting::Occluder;
 
     let mut world = unison2d::World::new();
@@ -1699,7 +1699,7 @@ fn e2e_world_auto_render_with_shadows() {
     let mut renderer = MockRenderer::new(800.0, 600.0);
 
     // Render the world
-    world.auto_render(&mut renderer);
+    world.render(&mut renderer);
 
     let ops = renderer.ops();
 

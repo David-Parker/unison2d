@@ -49,7 +49,7 @@ function game.update(dt)
 end
 
 function game.render()
-    world:auto_render()
+    world:render()
     ui:frame({
         { type = "column", anchor = "top", padding = 16, children = {
             { type = "label", text = "Unison 2D Game", font_size = 28, font_color = 0xffffff },

@@ -137,7 +137,7 @@ impl<E: Clone + 'static> Ui<E> {
 
     /// Render the UI into the world's overlay system.
     ///
-    /// Call this in your render function, before `world.auto_render()`.
+    /// Call this in your render function, before `world.render()`.
     pub fn render(
         &mut self,
         world: &mut dyn OverlayTarget,

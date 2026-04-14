@@ -171,11 +171,11 @@ fn has_clear_only_frame_for(ops: &[RenderOp], target: RenderTargetId) -> bool {
 // ── Tests ──
 
 /// The default World has a single lit "scene" layer. When rendered via
-/// `auto_render` to SCREEN, the output target must be cleared with the
+/// `render` to SCREEN, the output target must be cleared with the
 /// background color before the lit-layer composite. Without this clear,
 /// stale content from previous frames bleeds through.
 #[test]
-fn auto_render_clears_screen_with_background_color() {
+fn render_clears_screen_with_background_color() {
     let mut renderer = MockRenderer::new();
     let mut world = World::new();
     let bg = Color::from_hex(0x1a1a2e);
@@ -188,7 +188,7 @@ fn auto_render_clears_screen_with_background_color() {
         color: Color::RED,
     }, 0);
 
-    world.auto_render(&mut renderer);
+    world.render(&mut renderer);
 
     let ops = renderer.ops();
     let screen_clears = clears_for_target(&ops, RenderTargetId::SCREEN);
@@ -308,7 +308,7 @@ fn lit_only_world_clears_output_target() {
         color: Color::RED,
     }, 0);
 
-    world.auto_render(&mut renderer);
+    world.render(&mut renderer);
 
     let ops = renderer.ops();
     let screen_clears = clears_for_target(&ops, RenderTargetId::SCREEN);
@@ -328,9 +328,9 @@ fn lit_only_world_clears_output_target() {
 // flash of the background color (flicker).  The clear must always be in the
 // same frame as the composite draw.
 
-/// auto_render must not produce a clear-only frame on SCREEN.
+/// render must not produce a clear-only frame on SCREEN.
 #[test]
-fn auto_render_no_flicker_on_screen() {
+fn render_no_flicker_on_screen() {
     let mut renderer = MockRenderer::new();
     let mut world = World::new();
     world.set_background(Color::from_hex(0x1a1a2e));
@@ -341,7 +341,7 @@ fn auto_render_no_flicker_on_screen() {
         color: Color::RED,
     }, 0);
 
-    world.auto_render(&mut renderer);
+    world.render(&mut renderer);
 
     assert!(
         !has_clear_only_frame_for(&renderer.ops(), RenderTargetId::SCREEN),
