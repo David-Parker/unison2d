@@ -64,7 +64,7 @@ ones.
 ```lua
 function game.init()
     local menu = require("scenes/menu")
-    engine.set_scene(menu)
+    unison.scenes.set(menu)
 end
 ```
 
@@ -74,7 +74,7 @@ import * as menu from "./scenes/menu";
 
 const game: Game = {
     init() {
-        engine.set_scene(menu);
+        unison.scenes.set(menu);
     },
 };
 
@@ -98,11 +98,11 @@ function scene.update(dt)
 end
 
 function scene.render()
-    world:auto_render()
+    world:render()
 end
 
 function scene.on_exit()
-    events.clear()
+    unison.events.clear()
     world = nil
 end
 
@@ -124,11 +124,11 @@ const scene: Scene = {
     },
 
     render() {
-        world.auto_render();
+        world.render();
     },
 
     on_exit() {
-        events.clear();
+        unison.events.clear();
         world = undefined!;
     },
 };
@@ -138,18 +138,18 @@ export = scene;
 
 ### Switching Scenes
 
-Use `engine.switch_scene()` to transition between scenes. It calls `on_exit` on
-the current scene, then `on_enter` on the new one:
+Use `unison.scenes.set()` to transition between scenes. It calls `on_exit` on
+the current scene (if any), then `on_enter` on the new one:
 
 **Lua:**
 ```lua
-engine.switch_scene(require("scenes/gameplay"))
+unison.scenes.set(require("scenes/gameplay"))
 ```
 
 **TypeScript:**
 ```typescript
 import * as gameplay from "./scenes/gameplay";
-engine.switch_scene(gameplay);
+unison.scenes.set(gameplay);
 ```
 
 ### Fresh State per Visit
@@ -163,16 +163,16 @@ table. If a scene stores mutable state, use a factory function:
 return function()
     local scene = {}
     local world
-    function scene.on_enter() world = World.new() end
+    function scene.on_enter() world = unison.World.new() end
     function scene.update(dt) world:step(dt) end
-    function scene.render() world:auto_render() end
+    function scene.render() world:render() end
     function scene.on_exit() world = nil end
     return scene
 end
 
 -- In another file:
 local make_gameplay = require("scenes/gameplay")
-engine.switch_scene(make_gameplay())  -- fresh instance
+unison.scenes.set(make_gameplay())  -- fresh instance
 ```
 
 **TypeScript:**
@@ -181,9 +181,9 @@ engine.switch_scene(make_gameplay())  -- fresh instance
 function makeScene(): Scene {
     let world: World;
     return {
-        on_enter() { world = World.new(); },
+        on_enter() { world = unison.World.new(); },
         update(dt: number) { world.step(dt); },
-        render() { world.auto_render(); },
+        render() { world.render(); },
         on_exit() { world = undefined!; },
     };
 }
@@ -192,7 +192,7 @@ export = makeScene;
 
 // In another file:
 import makeGameplay = require("./scenes/gameplay");
-engine.switch_scene(makeGameplay());
+unison.scenes.set(makeGameplay());
 ```
 
 ---
@@ -203,70 +203,71 @@ The engine provides a string-keyed pub/sub event bus plus collision callbacks.
 
 ### String Events
 
-Register a listener with `events.on()`, fire with `events.emit()`. Callbacks
+Register a listener with `unison.events.on()`, fire with `unison.events.emit()`. Callbacks
 execute at the end of the frame.
 
 **Lua:**
 ```lua
-events.on("level_complete", function(data)
-    debug.log("Score:", data.score)
-    engine.switch_scene(require("scenes/menu"))
+unison.events.on("level_complete", function(data)
+    unison.debug.log("Score:", data.score)
+    unison.scenes.set(require("scenes/menu"))
 end)
 
-events.emit("level_complete", { score = 1234 })
+unison.events.emit("level_complete", { score = 1234 })
 ```
 
 **TypeScript:**
 ```typescript
-events.on("level_complete", (data) => {
-    debug.log("Score:", data.score);
-    engine.switch_scene(menu);
+unison.events.on("level_complete", (data) => {
+    unison.debug.log("Score:", data.score);
+    unison.scenes.set(menu);
 });
 
-events.emit("level_complete", { score: 1234 });
+unison.events.emit("level_complete", { score: 1234 });
 ```
 
 ### Collision Events
 
-Three levels of specificity:
+Three levels of specificity. Collision callbacks are registered on the World, not the
+event bus:
 
 **Lua:**
 ```lua
 -- Every collision pair each frame
-events.on_collision(function(a, b, info)
-    debug.log("collision between", a, b)
+world:on_collision(function(a, b, info)
+    unison.debug.log("collision between", a, b)
 end)
 
 -- When a specific object collides with anything
-events.on_collision_for(player_id, function(other, info)
-    debug.log("player hit", other)
+world:on_collision_with(player_id, function(other, info)
+    unison.debug.log("player hit", other)
 end)
 
 -- When two specific objects collide
-events.on_collision_between(player_id, spike_id, function(info)
-    debug.log("ouch! penetration:", info.penetration)
+world:on_collision_between(player_id, spike_id, function(info)
+    unison.debug.log("ouch! penetration:", info.penetration)
 end)
 ```
 
 **TypeScript:**
 ```typescript
-events.on_collision((a, b, info) => {
-    debug.log("collision between", a, b);
+world.on_collision((a, b, info) => {
+    unison.debug.log("collision between", a, b);
 });
 
-events.on_collision_for(player_id, (other, info) => {
-    debug.log("player hit", other);
+world.on_collision_with(player_id, (other, info) => {
+    unison.debug.log("player hit", other);
 });
 
-events.on_collision_between(player_id, spike_id, (info) => {
-    debug.log("ouch! penetration:", info.penetration);
+world.on_collision_between(player_id, spike_id, (info) => {
+    unison.debug.log("ouch! penetration:", info.penetration);
 });
 ```
 
 ### Cleaning Up
 
-Call `events.clear()` in `on_exit` to remove all string-keyed event handlers and
-pending events. Collision handlers are not cleared by `events.clear()`.
+Call `unison.events.clear()` in `on_exit` to remove all string-keyed event handlers and
+pending events. Collision handlers registered on the World are not cleared by `unison.events.clear()`.
 
 ---
 
@@ -277,12 +278,12 @@ rendering. Each scene typically creates its own World.
 
 **Lua:**
 ```lua
-local world = World.new()
+local world = unison.World.new()
 world:set_background(0x1a1a2e)
 world:set_gravity(-9.8)
 world:set_ground(-4.5)
 
-local box_id = world:spawn_rigid_body({
+local box_id = world.objects:spawn_rigid_body({
     collider = "aabb",
     half_width = 0.5,
     half_height = 0.5,
@@ -290,17 +291,17 @@ local box_id = world:spawn_rigid_body({
     color = 0xFF6600,
 })
 
-world:camera_follow("main", box_id, 0.1)
+world.cameras:follow("main", box_id, { smoothing = 0.1 })
 ```
 
 **TypeScript:**
 ```typescript
-const world = World.new();
+const world = unison.World.new();
 world.set_background(0x1a1a2e);
 world.set_gravity(-9.8);
 world.set_ground(-4.5);
 
-const box_id = world.spawn_rigid_body({
+const box_id = world.objects.spawn_rigid_body({
     collider: "aabb",
     half_width: 0.5,
     half_height: 0.5,
@@ -308,11 +309,11 @@ const box_id = world.spawn_rigid_body({
     color: 0xFF6600,
 });
 
-world.camera_follow("main", box_id, 0.1);
+world.cameras.follow("main", box_id, { smoothing: 0.1 });
 ```
 
-Call `world:step(dt)` / `world.step(dt)` in update and `world:auto_render()` /
-`world.auto_render()` in render.
+Call `world:step(dt)` / `world.step(dt)` in update and `world:render()` /
+`world.render()` in render.
 
 ---
 

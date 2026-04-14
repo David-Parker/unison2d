@@ -4,12 +4,15 @@ iOS platform crate -- Metal renderer, touch input, FFI game loop, and Swift host
 
 ## Usage
 
-Games need exactly one line of Rust code to export to iOS:
+Games need exactly one line of Rust code to export to iOS. Use `ScriptedGame` as the game type — it loads all gameplay from Lua at runtime:
 
 ```rust
-// In your game crate (e.g., lib.rs or ios_ffi.rs):
+// In your game crate (e.g., lib.rs):
 #[cfg(feature = "ios")]
-unison_ios::export_game!(MyGame, MyGame::new());
+unison_ios::export_game!(
+    unison_scripting::ScriptedGame,
+    unison_scripting::ScriptedGame::from_asset("scripts/main.lua", assets::ASSETS)
+);
 ```
 
 The Swift host app (provided by the `UnisoniOS` Swift package) handles MTKView setup, CADisplayLink rendering, and touch forwarding. The game crate compiles to a static library that the Xcode project links.
@@ -33,15 +36,15 @@ Swift (UnisoniOS package)              Rust (unison-ios crate)
 
 ## export_game! (macro)
 
-Generates 9 `#[no_mangle] pub unsafe extern "C"` FFI entry points that bridge a concrete `Game` type to the Swift host app.
+Generates 9 `#[no_mangle] pub unsafe extern "C"` FFI entry points that bridge a concrete `Game` type to the Swift host app. Pass `ScriptedGame` as the game type.
 
 ```rust
 unison_ios::export_game!($game_type, $constructor);
 ```
 
 **Arguments:**
-- `$game_type` -- the concrete struct that implements `unison2d::Game`
-- `$constructor` -- an expression that creates a new instance (e.g., `MyGame::new()`)
+- `$game_type` -- the concrete struct that implements `unison2d::Game` (use `ScriptedGame`)
+- `$constructor` -- an expression that creates a new instance
 
 **Generated FFI functions:**
 

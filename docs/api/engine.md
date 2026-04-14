@@ -45,7 +45,7 @@ Fields exposed via methods:
 | `engine.dt()` | Fixed timestep delta (1/60 s) |
 | `engine.assets()` | Read-only `AssetStore` |
 | `engine.assets_mut()` | Mutable `AssetStore` (for loading embedded assets) |
-| `engine.load_texture(path)` | Decode + upload a texture in one step |
+| `engine.load_texture(path)` | Decode + upload a texture in one step (called internally by `unison.assets.load_texture`) |
 | `engine.set_anti_aliasing(mode)` | Set MSAA mode for this session |
 | `engine.anti_aliasing()` | Current AA mode |
 | `engine.create_render_target(w, h)` | Create an offscreen FBO; returns `(RenderTargetId, TextureId)` |

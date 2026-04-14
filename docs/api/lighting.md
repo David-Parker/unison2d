@@ -223,7 +223,9 @@ impl LightingSystem {
 
 ## Usage
 
-### Basic lighting
+Lighting is controlled from Lua via the `world.lights` facade. See [scripting.md](scripting.md) for the full Lua API. The Rust API below is for internal engine and platform work only.
+
+### Basic lighting (Rust internal)
 
 ```rust
 world.lighting.set_ambient(Color::new(0.1, 0.1, 0.15, 1.0));
@@ -237,19 +239,16 @@ let light = world.lighting.add_light(PointLight::new(
 ));
 ```
 
-### Light following an object
+### Light following an object (Rust internal)
 
-Use `World::light_follow` to have a point light automatically track an object's position each `step()`. This is the preferred approach over manually syncing positions in `update()`.
+The `LightingSystem` tracks follow relationships internally. From Lua, use `world.lights:follow(handle, id)`.
 
 ```rust
 let light = world.lighting.add_light(PointLight::new(pos, color, 1.0, 6.0));
-world.light_follow(light, player_id);
-
-// Optional: follow with an offset
-world.light_follow_with_offset(light, player_id, Vec2::new(0.0, 2.0));
+// Lua equivalent: world.lights:follow(light, player_id)
 
 // Stop following
-world.light_unfollow(light);
+// Lua equivalent: world.lights:unfollow(light)
 ```
 
 The position is synced instantly (no smoothing) to avoid shadow artifacts from position lag.
@@ -297,7 +296,7 @@ All rigid bodies and soft bodies cast shadows by default. Disable on specific ob
 world.objects.set_casts_shadow(particle_id, false);
 ```
 
-`World::auto_render` and `World::render_to_targets` collect occluders and render shadows automatically for lit render layers. Unlit layers bypass the lighting system entirely.
+`world:render()` and `world:render_to_targets(...)` collect occluders and render shadows automatically for lit render layers. Unlit layers bypass the lighting system entirely.
 
 ## Shadow architecture
 

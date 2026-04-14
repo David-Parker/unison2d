@@ -91,9 +91,10 @@ Key settings:
 ### Type Declarations
 
 The engine's TypeScript type declarations live at `crates/unison-scripting/types/`.
-These declare all engine globals (`engine`, `input`, `events`, `World`, `Color`, `Rng`,
-`math`, `debug`) with full JSDoc. The `tsconfig.json` include path above makes them
-available without any explicit import.
+These declare the `unison` global (`unison.assets`, `unison.renderer`, `unison.input`,
+`unison.scenes`, `unison.events`, `unison.UI`, `unison.debug`, `unison.math`,
+`unison.World`, `unison.Color`, `unison.Rng`) with full JSDoc. The `tsconfig.json`
+include path above makes them available without any explicit import.
 
 ---
 
@@ -130,7 +131,7 @@ import * as demo from "./scenes/demo";
 
 const game: Game = {
     init() {
-        engine.set_scene(demo);
+        unison.scenes.set(demo);
     },
     update(dt: number) {},
     render() {},
@@ -146,12 +147,12 @@ let box_id: ObjectId;
 
 const scene: Scene = {
     on_enter() {
-        world = World.new();
+        world = unison.World.new();
         world.set_background(0x1a1a2e);
         world.set_gravity(-9.8);
         world.set_ground(-4.5);
 
-        box_id = world.spawn_rigid_body({
+        box_id = world.objects.spawn_rigid_body({
             collider: "aabb",
             half_width: 0.5,
             half_height: 0.5,
@@ -159,32 +160,32 @@ const scene: Scene = {
             color: 0xFF6600,
         });
 
-        world.camera_follow("main", box_id, 0.1);
+        world.cameras.follow("main", box_id, { smoothing: 0.1 });
 
-        events.on("test_event", (data) => {
-            debug.log("received test_event");
+        unison.events.on("test_event", (data) => {
+            unison.debug.log("received test_event");
         });
     },
 
     update(dt: number) {
-        if (input.is_key_pressed("ArrowLeft") || input.is_key_pressed("A")) {
-            world.apply_force(box_id, -5, 0);
+        if (unison.input.is_key_pressed("ArrowLeft") || unison.input.is_key_pressed("A")) {
+            world.objects.apply_force(box_id, -5, 0);
         }
-        if (input.is_key_pressed("ArrowRight") || input.is_key_pressed("D")) {
-            world.apply_force(box_id, 5, 0);
+        if (unison.input.is_key_pressed("ArrowRight") || unison.input.is_key_pressed("D")) {
+            world.objects.apply_force(box_id, 5, 0);
         }
-        if (input.is_key_just_pressed("Space") && world.is_grounded(box_id)) {
-            world.apply_impulse(box_id, 0, 5);
+        if (unison.input.is_key_just_pressed("Space") && world.objects.is_grounded(box_id)) {
+            world.objects.apply_impulse(box_id, 0, 5);
         }
         world.step(dt);
     },
 
     render() {
-        world.auto_render();
+        world.render();
     },
 
     on_exit() {
-        events.clear();
+        unison.events.clear();
         world = undefined!;
         box_id = undefined!;
     },
@@ -216,11 +217,11 @@ declarations use `this: World` parameters to enforce correct usage.
 Lua functions that return multiple values use `LuaMultiReturn` in TypeScript:
 
 ```typescript
-// Lua: local w, h = engine.screen_size()
-const [w, h] = engine.screen_size();
+// Lua: local w, h = unison.renderer.screen_size()
+const [w, h] = unison.renderer.screen_size();
 
-// Lua: local x, y = world:get_position(id)
-const [x, y] = world.get_position(id);
+// Lua: local x, y = world.objects:position(id)
+const [x, y] = world.objects.position(id);
 ```
 
 ### Clearing references

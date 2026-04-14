@@ -75,7 +75,7 @@ function game.update(dt)
 end
 
 function game.render()
-    -- Called every frame. Call world:auto_render() to draw the world.
+    -- Called every frame. Call world:render() to draw the world.
 end
 
 return game
@@ -96,7 +96,7 @@ local game = {}
 
 function game.init()
     local demo = require("scenes/demo")
-    engine.set_scene(demo)
+    unison.scenes.set(demo)
 end
 
 function game.update(dt) end
@@ -111,12 +111,12 @@ local scene = {}
 local world, box_id
 
 function scene.on_enter()
-    world = World.new()
+    world = unison.World.new()
     world:set_background(0x1a1a2e)
     world:set_gravity(-9.8)
     world:set_ground(-4.5)
 
-    box_id = world:spawn_rigid_body({
+    box_id = world.objects:spawn_rigid_body({
         collider = "aabb",
         half_width = 0.5,
         half_height = 0.5,
@@ -124,32 +124,32 @@ function scene.on_enter()
         color = 0xFF6600,
     })
 
-    world:camera_follow("main", box_id, 0.1)
+    world.cameras:follow("main", box_id, { smoothing = 0.1 })
 
-    events.on("test_event", function(data)
-        debug.log("received test_event")
+    unison.events.on("test_event", function(data)
+        unison.debug.log("received test_event")
     end)
 end
 
 function scene.update(dt)
-    if input.is_key_pressed("ArrowLeft") or input.is_key_pressed("A") then
-        world:apply_force(box_id, -5, 0)
+    if unison.input.is_key_pressed("ArrowLeft") or unison.input.is_key_pressed("A") then
+        world.objects:apply_force(box_id, -5, 0)
     end
-    if input.is_key_pressed("ArrowRight") or input.is_key_pressed("D") then
-        world:apply_force(box_id, 5, 0)
+    if unison.input.is_key_pressed("ArrowRight") or unison.input.is_key_pressed("D") then
+        world.objects:apply_force(box_id, 5, 0)
     end
-    if input.is_key_just_pressed("Space") and world:is_grounded(box_id) then
-        world:apply_impulse(box_id, 0, 5)
+    if unison.input.is_key_just_pressed("Space") and world.objects:is_grounded(box_id) then
+        world.objects:apply_impulse(box_id, 0, 5)
     end
     world:step(dt)
 end
 
 function scene.render()
-    world:auto_render()
+    world:render()
 end
 
 function scene.on_exit()
-    events.clear()
+    unison.events.clear()
     world = nil
     box_id = nil
 end
@@ -179,7 +179,7 @@ project/assets/scripts/
 ```lua
 -- In main.lua -- loads scripts/scenes/menu.lua
 local menu = require("scenes/menu")
-engine.set_scene(menu)
+unison.scenes.set(menu)
 ```
 
 **Module format** — each module file returns a table:
@@ -204,7 +204,7 @@ function instead:
 local function make_scene()
     local scene = {}
     local world  -- fresh local per call
-    function scene.on_enter() world = World.new() ... end
+    function scene.on_enter() world = unison.World.new() ... end
     ...
     return scene
 end
@@ -215,7 +215,7 @@ return make_scene  -- return the factory, not the scene
 
 ## Scene System
 
-For multi-scene games, use `engine.set_scene()` instead of returning update/render from
+For multi-scene games, use `unison.scenes.set()` instead of returning update/render from
 the top-level game table:
 
 ```lua
@@ -224,7 +224,7 @@ local game = {}
 
 function game.init()
     local menu = require("scenes/menu")
-    engine.set_scene(menu)
+    unison.scenes.set(menu)
 end
 
 -- update/render are optional when using scenes

@@ -13,7 +13,7 @@ let id = renderer.create_texture(&desc)?;
 
 Decoded textures default to `Rgba8` format with `LinearMipmap` filtering (trilinear anti-aliasing).
 
-For a one-liner, use `engine.load_texture("path")` which combines asset lookup, decode, and GPU upload.
+For a one-liner, use `unison.assets.load_texture("path")` from script, which combines asset lookup, decode, and GPU upload.
 
 ## Renderer (trait)
 
@@ -80,14 +80,14 @@ renderer.destroy_render_target(target);  // FBO freed, texture kept
 
 ## AntiAliasing
 
-Controls MSAA sample count for offscreen render targets. Set via `Engine` or `Renderer`.
+Controls MSAA sample count for offscreen render targets. Set from Lua via `unison.renderer.set_anti_aliasing(mode)`, or from Rust via `Renderer::set_anti_aliasing`.
 
 ```rust
 use unison2d::AntiAliasing;
 
-// In Game::init():
-engine.set_anti_aliasing(AntiAliasing::MSAAx4);
-engine.anti_aliasing()  // -> AntiAliasing::MSAAx4
+// Internal Rust usage (platform/engine code only):
+renderer.set_anti_aliasing(AntiAliasing::MSAAx4);
+renderer.anti_aliasing()  // -> AntiAliasing::MSAAx4
 ```
 
 Variants: `None` (1 sample), `MSAAx2`, `MSAAx4` (default), `MSAAx8`.

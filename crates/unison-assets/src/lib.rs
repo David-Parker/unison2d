@@ -4,6 +4,9 @@
 //! as `&[u8]` slices. At runtime, [`AssetStore`] decompresses and serves them
 //! by relative path.
 //!
+//! Game code loads assets via `unison.assets.load_texture("path")` in Lua/TypeScript.
+//! See [scripting docs](../docs/api/scripting.md) for the Lua API.
+//!
 //! # Build-time (in your game's `build.rs`)
 //!
 //! ```ignore
@@ -13,7 +16,7 @@
 //! }
 //! ```
 //!
-//! # Runtime (in your game code)
+//! # Runtime (internal engine use)
 //!
 //! ```ignore
 //! // Include the generated asset table
@@ -21,7 +24,8 @@
 //!     include!(concat!(env!("OUT_DIR"), "/assets.rs"));
 //! }
 //!
-//! // In Game::init:
+//! // ScriptedGame::from_asset loads embedded assets automatically.
+//! // For direct engine use:
 //! engine.assets_mut().load_embedded(assets::ASSETS);
 //! let png_bytes = engine.assets().get("textures/donut-pink.png");
 //! ```

@@ -1,12 +1,12 @@
 # unison-scripting
 
-Lua 5.4 scripting for Unison 2D. Implements the `Game` trait internally, forwarding lifecycle calls into an embedded Lua VM. Game code is written in Lua rather than Rust.
+Lua 5.4 scripting for Unison 2D. Implements the `Game` trait internally, forwarding lifecycle calls into an embedded Lua VM. All game code is written in Lua (or TypeScript transpiled to Lua via TSTL) — Rust authoring is not a supported path for game code.
 
 ## Purpose
 
 - Embed a full Lua 5.4 VM in the game binary (vendored C source, no system Lua required)
-- Implement `Game` trait so the scripting layer is a drop-in replacement for Rust game code
-- Expose engine functionality to Lua via registered globals (`engine`, `input`, `World`, etc.)
+- Implement `Game` trait so `ScriptedGame` is the drop-in platform entry point
+- Expose all engine functionality to Lua via the single `unison.*` global namespace
 - Support all three platforms: Web (wasm32), iOS (aarch64-apple-ios), Android
 
 ## Key Types
@@ -28,7 +28,7 @@ impl Game for ScriptedGame {
 }
 ```
 
-`ScriptedGame` owns the Lua VM. Pass it to a platform's `run()` function just like any other `Game` implementation.
+`ScriptedGame` owns the Lua VM. Pass it to a platform's `run()` function.
 
 ## Lua Lifecycle
 
@@ -39,30 +39,31 @@ local game = {}
 local world, donut
 
 function game.init()
-    world = World.new()
+    world = unison.World.new()
     world:set_gravity(-9.8)
     world:set_ground(-4.5)
-    donut = world:spawn_soft_body({
+    local tex = unison.assets.load_texture("textures/donut-pink.png")
+    donut = world.objects:spawn_soft_body({
         mesh = "ring", mesh_params = {1.0, 0.25, 24, 8},
         material = "rubber",
         position = {0, 3.5},
-        texture = engine.load_texture("textures/donut-pink.png"),
+        texture = tex,
     })
-    world:camera_follow("main", donut, 0.08)
+    world.cameras:follow("main", donut, { smoothing = 0.08 })
 end
 
 function game.update(dt)
-    if input.is_key_pressed("ArrowRight") then
-        world:apply_force(donut, 80, 0)
+    if unison.input.is_key_pressed("ArrowRight") then
+        world.objects:apply_force(donut, 80, 0)
     end
-    if input.is_key_just_pressed("Space") and world:is_grounded(donut) then
-        world:apply_impulse(donut, 0, 10)
+    if unison.input.is_key_just_pressed("Space") and world.objects:is_grounded(donut) then
+        world.objects:apply_impulse(donut, 0, 10)
     end
     world:step(dt)
 end
 
 function game.render()
-    world:auto_render()
+    world:render()
 end
 
 return game
@@ -78,7 +79,7 @@ Create and manage a physics world with objects, cameras, and rendering.
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `World.new` | `() → World` | Create a new World with default settings (main camera, -9.8 gravity) |
+| `unison.World.new` | `() → World` | Create a new World with default settings (main camera, -9.8 gravity) |
 
 ### Configuration
 
@@ -95,23 +96,26 @@ Create and manage a physics world with objects, cameras, and rendering.
 | Method | Signature | Description |
 |--------|-----------|-------------|
 | `world:step` | `(dt: number)` | Advance physics simulation by `dt` seconds |
-| `world:auto_render` | `()` | Render all objects through the main camera |
+| `world:render` | `()` | Render all objects and lighting through the main camera |
+| `world:render_to_targets` | `(mapping: table)` | Render each named camera to a specific render target |
+| `world:draw_overlay` | `(tex, x, y, w, h)` | Composite a render-target texture onto the screen |
+| `world:draw_overlay_bordered` | `(tex, x, y, w, h, bw, bc)` | Like draw_overlay with a colored border |
 
 ---
 
 ## Objects
 
-Spawn, despawn, and interact with physics objects. All spawn functions return an integer **object ID**.
+Spawn, despawn, and interact with physics objects via `world.objects`. All spawn functions return an integer **object ID**.
 
 ### Spawning
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `world:spawn_soft_body` | `(desc: table) → id` | Spawn a soft body from descriptor table |
-| `world:spawn_rigid_body` | `(desc: table) → id` | Spawn a rigid body from descriptor table |
-| `world:spawn_static_rect` | `(pos, size, color) → id` | Spawn a static rectangle (`pos`/`size` are `{x,y}` tables, `color` is hex) |
-| `world:spawn_sprite` | `(desc: table) → id` | Spawn a sprite (visual only, no physics) |
-| `world:despawn` | `(id: integer)` | Remove an object from the world |
+| `world.objects:spawn_soft_body` | `(desc: table) → id` | Spawn a soft body from descriptor table |
+| `world.objects:spawn_rigid_body` | `(desc: table) → id` | Spawn a rigid body from descriptor table |
+| `world.objects:spawn_static_rect` | `(desc: table) → id` | Spawn a static rectangle |
+| `world.objects:spawn_sprite` | `(desc: table) → id` | Spawn a sprite (visual only, no physics) |
+| `world.objects:despawn` | `(id: integer)` | Remove an object from the world |
 
 ### Soft Body Descriptor
 
@@ -122,7 +126,7 @@ Spawn, despawn, and interact with physics objects. All spawn functions return an
     material = "rubber",           -- preset string or custom table
     position = {x, y},
     color = 0xFFFFFF,              -- hex integer (optional, default white)
-    texture = texture_id,          -- from engine.load_texture (optional)
+    texture = texture_id,          -- from unison.assets.load_texture (optional)
 }
 ```
 
@@ -171,93 +175,108 @@ Spawn, despawn, and interact with physics objects. All spawn functions return an
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `world:apply_force` | `(id, fx, fy)` | Apply a continuous force (use in update) |
-| `world:apply_impulse` | `(id, ix, iy)` | Apply an instant velocity change |
-| `world:apply_torque` | `(id, torque, dt)` | Apply rotational torque |
+| `world.objects:apply_force` | `(id, fx, fy)` | Apply a continuous force (use in update) |
+| `world.objects:apply_impulse` | `(id, ix, iy)` | Apply an instant velocity change |
+| `world.objects:apply_torque` | `(id, torque)` | Apply rotational torque |
 
 ### Queries
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `world:get_position` | `(id) → x, y` | Get object center position |
-| `world:get_velocity` | `(id) → vx, vy` | Get object velocity |
-| `world:is_grounded` | `(id) → bool` | True if object is resting on ground |
-| `world:is_touching` | `(a, b) → bool` | True if two objects are in contact |
+| `world.objects:position` | `(id) → x, y` | Get object center position |
+| `world.objects:velocity` | `(id) → vx, vy` | Get object velocity |
+| `world.objects:is_grounded` | `(id) → bool` | True if object is resting on ground |
+| `world.objects:is_touching` | `(a, b) → bool` | True if two objects are in contact |
 
 ### Display Properties
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `world:set_z_order` | `(id, z: integer)` | Set draw order (higher = on top) |
-| `world:set_casts_shadow` | `(id, bool)` | Enable/disable shadow casting |
-| `world:set_position` | `(id, x, y)` | Teleport object to position |
+| `world.objects:set_z_order` | `(id, z: integer)` | Set draw order (higher = on top) |
+| `world.objects:set_casts_shadow` | `(id, bool)` | Enable/disable shadow casting |
+| `world.objects:set_position` | `(id, x, y)` | Teleport object to position |
 
 ---
 
 ## Input
 
-Global `input` table, refreshed each frame automatically.
+`unison.input` — refreshed each frame automatically.
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `input.is_key_pressed` | `(key: string) → bool` | True while key is held down |
-| `input.is_key_just_pressed` | `(key: string) → bool` | True only on the frame the key was pressed |
-| `input.axis_x` | `() → number` | Horizontal axis (-1 to 1, from joystick/touch) |
-| `input.axis_y` | `() → number` | Vertical axis (-1 to 1) |
-| `input.touches_just_began` | `() → [{x, y}, ...]` | Array of new touch positions this frame |
+| `unison.input.is_key_pressed` | `(key: string) → bool` | True while key is held down |
+| `unison.input.is_key_just_pressed` | `(key: string) → bool` | True only on the frame the key was pressed |
+| `unison.input.is_key_just_released` | `(key: string) → bool` | True only on the frame the key was released |
+| `unison.input.touches_started` | `() → [{x, y}, ...]` | Array of new touch positions this frame |
+| `unison.input.is_mouse_button_pressed` | `(btn) → bool` | True while mouse button held (0=Left, 1=Right, 2=Middle) |
+| `unison.input.is_mouse_button_just_pressed` | `(btn) → bool` | True on the frame the mouse button was first pressed |
+| `unison.input.mouse_position` | `() → x, y` | Current mouse position in screen space |
+| `unison.input.is_pointer_just_pressed` | `() → bool` | True if touch began or primary mouse button just pressed |
+| `unison.input.pointer_position` | `() → x, y` | Active touch or held-mouse position |
+| `unison.input.bind_action` | `(name, opts)` | Bind a named action to keys and/or mouse buttons |
+| `unison.input.bind_axis` | `(name, opts)` | Bind a named axis to negative/positive keys or joystick |
+| `unison.input.is_action_pressed` | `(name) → bool` | True while any bound input is held |
+| `unison.input.is_action_just_pressed` | `(name) → bool` | True only on the frame the action was first triggered |
+| `unison.input.is_action_just_released` | `(name) → bool` | True only on the frame all bound inputs were released |
+| `unison.input.axis` | `(name) → number` | Digital axis value in [-1, 1] |
 
 **Key names:** `"ArrowUp"`, `"ArrowDown"`, `"ArrowLeft"`, `"ArrowRight"`, `"Space"`, `"Enter"`, `"Escape"`, `"Tab"`, `"Backspace"`, `"ShiftLeft"`, `"ShiftRight"`, `"ControlLeft"`, `"ControlRight"`, `"AltLeft"`, `"AltRight"`, single letters `"A"`–`"Z"`, digits `"0"`–`"9"` or `"Digit0"`–`"Digit9"`.
 
 ---
 
-## Camera
+## Cameras
 
-Camera methods are on the World object. A default `"main"` camera is created automatically.
+Camera management via `world.cameras`.
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `world:camera_follow` | `(name, id, smoothing)` | Make camera follow an object (0=frozen, 1=instant) |
-| `world:camera_follow_with_offset` | `(name, id, smoothing, ox, oy)` | Follow with world-space offset |
-| `world:camera_add` | `(name, width, height)` | Add a named camera with viewport size |
-| `world:camera_get_position` | `(name) → x, y` | Get camera center position |
+| `world.cameras:add` | `(name, width, height)` | Add a named camera with viewport size |
+| `world.cameras:follow` | `(name, id, opts?)` | Make camera follow an object (opts: smoothing, offset) |
+| `world.cameras:unfollow` | `(name)` | Stop following |
+| `world.cameras:position` | `(name) → x, y` | Get camera center position |
+| `world.cameras:screen_to_world` | `(sx, sy) → wx, wy` | Convert screen-space to world-space |
 
 ---
 
-## Engine
-
-Global `engine` table for texture loading, screen info, and configuration.
+## Assets
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `engine.load_texture` | `(path: string) → integer` | Load texture from embedded assets, returns texture ID |
-| `engine.screen_size` | `() → width, height` | Get screen dimensions in logical points |
-| `engine.set_anti_aliasing` | `(mode: string)` | Set AA mode: `"none"`, `"msaa2x"`, `"msaa4x"`, `"msaa8x"` |
-| `engine.set_background` | `(hex)` or `(r, g, b)` | Set clear color (fallback path, prefer `world:set_background`) |
-| `engine.draw_rect` | `(x, y, w, h, r, g, b)` | Draw a colored rectangle (fallback path, prefer `world:auto_render`) |
+| `unison.assets.load_texture` | `(path: string) → integer` | Load texture from embedded assets, returns texture ID |
+
+---
+
+## Renderer
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `unison.renderer.screen_size` | `() → width, height` | Get screen dimensions in logical points |
+| `unison.renderer.anti_aliasing` | `() → mode` | Current AA mode |
+| `unison.renderer.set_anti_aliasing` | `(mode: string)` | Set AA mode: `"none"`, `"msaa2x"`, `"msaa4x"`, `"msaa8x"` |
+| `unison.renderer.create_target` | `(w, h) → target_id, tex_id` | Create an offscreen render target |
 
 ---
 
 ## Lighting
 
-Control the lighting system through World methods.
+Control the lighting system through `world.lights`.
 
 ### System Configuration
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `world:lighting_set_enabled` | `(bool)` | Enable/disable the lighting system |
-| `world:lighting_set_ambient` | `(r, g, b, a)` | Set ambient light color |
-| `world:lighting_set_ground_shadow` | `(y)` or `(nil)` | Set ground shadow plane, or nil to disable |
+| `world.lights:set_enabled` | `(bool)` | Enable/disable the lighting system |
+| `world.lights:set_ambient` | `(r, g, b, a)` | Set ambient light color |
+| `world.lights:set_ground_shadow` | `(y)` or `(nil)` | Set ground shadow plane, or nil to disable |
 
 ### Point Lights
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `world:add_point_light` | `(desc) → handle` | Add point light from descriptor table |
-| `world:set_light_intensity` | `(handle, intensity)` | Update light intensity |
-| `world:light_follow` | `(handle, object_id)` | Make light track an object |
-| `world:light_follow_with_offset` | `(handle, id, ox, oy)` | Track with offset |
-| `world:light_unfollow` | `(handle)` | Stop tracking |
+| `world.lights:add_point` | `(desc) → handle` | Add point light from descriptor table |
+| `world.lights:set_intensity` | `(handle, intensity)` | Update light intensity |
+| `world.lights:follow` | `(handle, object_id, opts?)` | Make light track an object (opts: offset) |
+| `world.lights:unfollow` | `(handle)` | Stop tracking |
 
 **Point light descriptor:**
 ```lua
@@ -275,8 +294,8 @@ Control the lighting system through World methods.
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `world:add_directional_light` | `(desc) → handle` | Add directional light |
-| `world:set_directional_light_direction` | `(handle, dx, dy)` | Update direction |
+| `world.lights:add_directional` | `(desc) → handle` | Add directional light |
+| `world.lights:set_direction` | `(handle, dx, dy)` | Update direction |
 
 **Directional light descriptor:**
 ```lua
@@ -293,22 +312,21 @@ Control the lighting system through World methods.
 
 ## Events
 
-Global `events` table for string-keyed events and collision callbacks.
-
-### String Events
+`unison.events` — string-keyed pub/sub.
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `events.on` | `(name, callback)` | Register a callback for named event |
-| `events.emit` | `(name, data?)` | Emit event with optional data table |
+| `unison.events.on` | `(name, callback)` | Register a callback for named event |
+| `unison.events.emit` | `(name, data?)` | Emit event with optional data table |
+| `unison.events.clear` | `()` | Clear all string-keyed event handlers and pending events |
 
-### Collision Events
+### Collision Callbacks
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `events.on_collision` | `(fn(a, b, info))` | Callback for any collision |
-| `events.on_collision_for` | `(id, fn(other, info))` | Callback for specific object |
-| `events.on_collision_between` | `(a, b, fn(info))` | Callback for specific pair |
+| `world:on_collision` | `(fn(a, b, info))` | Callback for any collision pair each frame |
+| `world:on_collision_with` | `(id, fn(other, info))` | Callback for specific object |
+| `world:on_collision_between` | `(a, b, fn(info))` | Callback for specific pair |
 
 **Collision info table:** `{ normal_x, normal_y, penetration, contact_x, contact_y }`
 
@@ -320,20 +338,20 @@ Scenes are Lua tables with optional lifecycle functions. Set the active scene vi
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `engine.set_scene` | `(scene_table)` | Set initial scene, calls `on_enter` |
-| `engine.switch_scene` | `(scene_table)` | Transition: `on_exit` old, `on_enter` new |
+| `unison.scenes.set` | `(scene_table)` | Set initial scene, calls `on_enter` |
+| `unison.scenes.current` | `() → scene or nil` | Return the active scene |
 
 **Scene table format:**
 ```lua
 local scene = {
     on_enter = function() ... end,   -- called when scene starts
-    update = function(dt) ... end,   -- called each frame
-    render = function() ... end,     -- called each frame
-    on_exit = function() ... end,    -- called when switching away
+    update   = function(dt) ... end, -- called each frame
+    render   = function() ... end,   -- called each frame
+    on_exit  = function() ... end,   -- called when switching away
 }
 ```
 
-When scenes are active, the scene's `update`/`render` are called instead of `game.update`/`game.render`.
+When a scene is active, the scene's `update`/`render` are called instead of `game.update`/`game.render`.
 
 ---
 
@@ -363,8 +381,8 @@ Create named render layers with different lighting/clear settings.
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `Color.hex` | `(hex) → Color` | Create color from hex integer |
-| `Color.rgba` | `(r, g, b, a) → Color` | Create from RGBA components |
+| `unison.Color.hex` | `(hex) → Color` | Create color from hex integer |
+| `unison.Color.rgba` | `(r, g, b, a) → Color` | Create from RGBA components |
 | `color:lerp` | `(other, t) → Color` | Interpolate between colors |
 
 Color fields: `color.r`, `color.g`, `color.b`, `color.a`
@@ -373,7 +391,7 @@ Color fields: `color.r`, `color.g`, `color.b`, `color.a`
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `Rng.new` | `(seed) → Rng` | Create deterministic RNG |
+| `unison.Rng.new` | `(seed) → Rng` | Create deterministic RNG |
 | `rng:range` | `(min, max) → number` | Random float in [min, max) |
 | `rng:range_int` | `(min, max) → integer` | Random integer in [min, max] |
 
@@ -381,9 +399,9 @@ Color fields: `color.r`, `color.g`, `color.b`, `color.a`
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `math.lerp` | `(a, b, t) → number` | Linear interpolation |
-| `math.smoothstep` | `(edge0, edge1, x) → number` | Smooth Hermite interpolation |
-| `math.clamp` | `(x, min, max) → number` | Clamp value to range |
+| `unison.math.lerp` | `(a, b, t) → number` | Linear interpolation |
+| `unison.math.smoothstep` | `(edge0, edge1, x) → number` | Smooth Hermite interpolation |
+| `unison.math.clamp` | `(x, min, max) → number` | Clamp value to range |
 
 ---
 
@@ -393,14 +411,16 @@ Declarative UI built from Lua tables.
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `engine.create_ui` | `(font_path) → UI` | Create UI handle from font asset |
+| `unison.UI.new` | `(font_path) → UI` | Create UI handle from font asset |
 | `ui:frame` | `(tree_table)` | Render a UI frame from nested table tree |
 
 **Node types:** `"column"`, `"row"`, `"panel"`, `"label"`, `"button"`, `"spacer"`
 
-Button `on_click` values are emitted as string events. Listen with `events.on("click_name", callback)`.
+Button `on_click` values are emitted as string events. Listen with `unison.events.on("click_name", callback)`.
 
 ```lua
+local ui = unison.UI.new("fonts/DejaVuSans-Bold.ttf")
+
 ui:frame({
     { type = "column", anchor = "center", gap = 10, children = {
         { type = "label", text = "Title", font_size = 32 },
@@ -414,14 +434,14 @@ ui:frame({
 
 ## debug Global
 
-Global `debug` table for development utilities.
+`unison.debug` — development utilities.
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `debug.log` | `(...)` | Print varargs to stderr, joined with tabs (uses `tostring` on each value) |
-| `debug.draw_point` | `(x, y, color: integer)` | Draw a 0.1-unit point at world position; color is hex |
-| `debug.show_physics` | `(enabled: bool)` | Toggle physics debug visualization (stub — not yet wired) |
-| `debug.show_fps` | `(enabled: bool)` | Toggle FPS counter overlay (stub — not yet wired) |
+| `unison.debug.log` | `(...)` | Print varargs to stderr, joined with tabs (uses `tostring` on each value) |
+| `unison.debug.draw_point` | `(x, y, color: integer)` | Draw a 0.1-unit point at world position; color is hex |
+| `unison.debug.show_physics` | `(enabled: bool)` | Toggle physics debug visualization (stub — not yet wired) |
+| `unison.debug.show_fps` | `(enabled: bool)` | Toggle FPS counter overlay (stub — not yet wired) |
 
 ## Modules & require()
 

@@ -29,17 +29,17 @@ The function:
 
 ## Runtime: `AssetStore`
 
-Lives on `Engine`. Load the generated table once at startup, then query by path.
+`ScriptedGame` loads the generated asset table automatically — no manual setup needed in game code. Lua scripts load textures via `unison.assets.load_texture("path")`. The Rust API below is for internal engine use.
 
 ```rust
 mod assets {
     include!(concat!(env!("OUT_DIR"), "/assets.rs"));
 }
 
-// In Game::init:
+// In ScriptedGame::from_asset (internal):
 engine.assets_mut().load_embedded(assets::ASSETS);
 
-// Later:
+// Query directly (internal engine use):
 let png_bytes = engine.assets().get("textures/donut-pink.png");
 ```
 

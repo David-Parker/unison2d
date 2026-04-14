@@ -1,6 +1,6 @@
 # Unison 2D Engine — Documentation
 
-Game code is written in **Lua** or **TypeScript** via the `unison-scripting` crate. TypeScript is transpiled to Lua at build time via TSTL. The Rust `Game` trait remains available for advanced use cases (engine work, custom rendering paths), but scripting is the canonical path for writing a game.
+Game code is written in **Lua** or **TypeScript** (transpiled to Lua at build time via TSTL). `unison-scripting::ScriptedGame` is the sole game-entry implementation; all gameplay authoring goes through the `unison.*` Lua namespace.
 
 ## Scripting (Lua + TypeScript) — canonical game code
 

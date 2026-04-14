@@ -4,12 +4,15 @@ Android platform crate -- OpenGL ES 3.0 renderer, touch input, JNI frame loop, a
 
 ## Usage
 
-Games need exactly one line of Rust code to export to Android:
+Games need exactly one line of Rust code to export to Android. Use `ScriptedGame` as the game type — it loads all gameplay from Lua at runtime:
 
 ```rust
-// In your game crate (e.g., lib.rs or android_ffi.rs):
+// In your game crate (e.g., lib.rs):
 #[cfg(feature = "android")]
-unison_android::export_game!(MyGame, MyGame::new());
+unison_android::export_game!(
+    unison_scripting::ScriptedGame,
+    unison_scripting::ScriptedGame::from_asset("scripts/main.lua", assets::ASSETS)
+);
 ```
 
 The Kotlin host app (provided by the `UnisonAndroid` library module) handles GLSurfaceView setup, continuous rendering, and touch forwarding. The game crate compiles to a shared library (`.so`) that the Android app loads via `System.loadLibrary`.
@@ -33,15 +36,15 @@ Kotlin (UnisonAndroid library)           Rust (unison-android crate)
 
 ## export_game! (macro)
 
-Generates 9 `#[no_mangle] pub unsafe extern "system"` JNI entry points that bridge a concrete `Game` type to the Kotlin host app.
+Generates 9 `#[no_mangle] pub unsafe extern "system"` JNI entry points that bridge a concrete `Game` type to the Kotlin host app. Pass `ScriptedGame` as the game type.
 
 ```rust
 unison_android::export_game!($game_type, $constructor);
 ```
 
 **Arguments:**
-- `$game_type` -- the concrete struct that implements `unison2d::Game`
-- `$constructor` -- an expression that creates a new instance (e.g., `MyGame::new()`)
+- `$game_type` -- the concrete struct that implements `unison2d::Game` (use `ScriptedGame`)
+- `$constructor` -- an expression that creates a new instance
 
 **Generated JNI functions:**
 
