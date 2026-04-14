@@ -23,7 +23,6 @@
 
 // Engine layer
 mod engine;
-mod ctx;
 mod object;
 mod object_system;
 mod camera_system;
@@ -31,7 +30,6 @@ mod world;
 mod game;
 
 pub use engine::Engine;
-pub use ctx::Ctx;
 pub use unison_render::AntiAliasing;
 pub use object::{ObjectId, SoftBodyDesc, RigidBodyDesc, SpriteDesc};
 pub use object_system::{ObjectSystem, CollisionEvent};
