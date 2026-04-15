@@ -51,4 +51,9 @@ void game_set_axis(void* state, float x, float y);
 /// Destroy the game state and free memory. Do not use the pointer after this call.
 void game_destroy(void* state);
 
+/// Return the opaque `Engine` pointer owned by the game state. Used by Swift
+/// to call `engine_audio_suspend` / `engine_audio_resume_system` on
+/// AVAudioSession interruptions. Returns NULL if `state` is NULL.
+void* game_engine_ptr(void* state);
+
 #endif /* UnisonGameFFI_h */

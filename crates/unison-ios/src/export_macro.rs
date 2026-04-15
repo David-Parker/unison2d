@@ -132,5 +132,19 @@ macro_rules! export_game {
                 drop(Box::from_raw(state as *mut __UnisonGameState));
             }
         }
+
+        /// Expose the `Engine` owned by `GameState` so Swift can pass it to
+        /// the `engine_audio_*` FFI for AVAudioSession interruption handling.
+        /// Returns null if `state` is null.
+        #[no_mangle]
+        pub unsafe extern "C" fn game_engine_ptr(
+            state: *mut ::std::ffi::c_void,
+        ) -> *mut ::std::ffi::c_void {
+            if state.is_null() {
+                return ::std::ptr::null_mut();
+            }
+            let state = &mut *(state as *mut __UnisonGameState);
+            state.engine_mut() as *mut _ as *mut ::std::ffi::c_void
+        }
     };
 }

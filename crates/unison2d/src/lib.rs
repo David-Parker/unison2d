@@ -30,6 +30,7 @@ mod world;
 mod game;
 
 pub use engine::Engine;
+pub use engine::{engine_audio_arm, engine_audio_resume_system, engine_audio_suspend};
 pub use unison_render::AntiAliasing;
 pub use object::{ObjectId, SoftBodyDesc, RigidBodyDesc, SpriteDesc};
 pub use object_system::{ObjectSystem, CollisionEvent};
