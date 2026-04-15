@@ -74,6 +74,7 @@ use mlua::prelude::*;
 use mlua::{StdLib, LuaOptions};
 use unison2d::{AntiAliasing, Engine, Game};
 use unison2d::assets::EmbeddedAsset;
+use unison_profiler::profile_scope;
 use error_overlay::ErrorOverlay;
 
 /// How the Lua script source is provided.
@@ -211,7 +212,12 @@ impl Game for ScriptedGame {
         }
 
         // Execute the script. It must return a table.
-        let game_table: LuaTable = match lua.load(&script_src).eval() {
+        // Profiled so the one-time parse + top-level execution cost is visible.
+        let load_result = {
+            profile_scope!("scripting.load");
+            lua.load(&script_src).eval::<LuaTable>()
+        };
+        let game_table: LuaTable = match load_result {
             Ok(t) => t,
             Err(e) => {
                 let msg = format!("[unison-scripting] Script error: {e}");
@@ -237,10 +243,13 @@ impl Game for ScriptedGame {
         let _engine_guard = bindings::engine_state::set_engine_ptr(engine);
 
         // Call the script's init().
-        if let Err(e) = self.call_lifecycle("init", ()) {
-            let msg = format!("[unison-scripting] init() error: {e}");
-            eprintln!("{msg}");
-            self.overlay.set(msg);
+        {
+            profile_scope!("scripting.init");
+            if let Err(e) = self.call_lifecycle("init", ()) {
+                let msg = format!("[unison-scripting] init() error: {e}");
+                eprintln!("{msg}");
+                self.overlay.set(msg);
+            }
         }
 
         // Drop the guard explicitly before accessing engine again (AA setup below).
@@ -263,6 +272,7 @@ impl Game for ScriptedGame {
     }
 
     fn update(&mut self, engine: &mut Engine) {
+        profile_scope!("scripting.update");
         let dt = engine.dt();
 
         // Refresh screen size.
@@ -282,31 +292,39 @@ impl Game for ScriptedGame {
         let _engine_guard = bindings::engine_state::set_engine_ptr(engine);
 
         // Dispatch update: scene system takes priority if active.
-        if bindings::scene::is_active() {
-            if let Some(lua) = &self.lua {
-                if let Err(e) = bindings::scene::call_scene_update(lua, dt) {
-                    let msg = format!("[unison-scripting] scene update() error: {e}");
+        // The inner scope isolates time spent inside the Lua VM (user script
+        // code + binding callbacks) from the surrounding Rust overhead.
+        {
+            profile_scope!("lua.update");
+            if bindings::scene::is_active() {
+                if let Some(lua) = &self.lua {
+                    if let Err(e) = bindings::scene::call_scene_update(lua, dt) {
+                        let msg = format!("[unison-scripting] scene update() error: {e}");
+                        eprintln!("{msg}");
+                        self.overlay.set(msg);
+                    }
+                }
+            } else {
+                if let Err(e) = self.call_lifecycle("update", dt) {
+                    let msg = format!("[unison-scripting] update() error: {e}");
                     eprintln!("{msg}");
                     self.overlay.set(msg);
                 }
             }
-        } else {
-            if let Err(e) = self.call_lifecycle("update", dt) {
-                let msg = format!("[unison-scripting] update() error: {e}");
-                eprintln!("{msg}");
-                self.overlay.set(msg);
-            }
         }
 
         // Flush collision events from world into Lua callbacks.
-        if let Some(lua) = &self.lua {
-            if let Some(world_rc) = bindings::engine_state::peek_render_world() {
-                let world_key = bindings::collisions::key_of(&world_rc);
-                let mut world = world_rc.borrow_mut();
-                bindings::collisions::flush(lua, world_key, &mut world);
+        {
+            profile_scope!("lua.flush_events");
+            if let Some(lua) = &self.lua {
+                if let Some(world_rc) = bindings::engine_state::peek_render_world() {
+                    let world_key = bindings::collisions::key_of(&world_rc);
+                    let mut world = world_rc.borrow_mut();
+                    bindings::collisions::flush(lua, world_key, &mut world);
+                }
+                // Flush string-keyed events.
+                bindings::events::flush_string_events(lua);
             }
-            // Flush string-keyed events.
-            bindings::events::flush_string_events(lua);
         }
 
         // Drop guard explicitly so engine is free before AA application below.
@@ -331,12 +349,17 @@ impl Game for ScriptedGame {
     }
 
     fn render(&mut self, engine: &mut Engine) {
+        profile_scope!("scripting.render");
+
         // Make engine available to Lua closures during render.
         // The guard clears the pointer when dropped.
         {
             let _engine_guard = bindings::engine_state::set_engine_ptr(engine);
 
             // Dispatch render: scene system takes priority if active.
+            // Inner scope isolates time spent inside the Lua VM (script
+            // render() + binding calls) from the surrounding Rust pipeline.
+            profile_scope!("lua.render");
             if bindings::scene::is_active() {
                 if let Some(lua) = &self.lua {
                     if let Err(e) = bindings::scene::call_scene_render(lua) {

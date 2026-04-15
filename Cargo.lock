@@ -1435,6 +1435,7 @@ dependencies = [
  "tree-sitter-typescript",
  "unison-android",
  "unison-ios",
+ "unison-profiler",
  "unison-web",
  "unison2d",
  "wasm-bindgen",
