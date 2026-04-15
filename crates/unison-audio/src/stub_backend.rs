@@ -118,6 +118,7 @@ impl AudioBackend for StubBackend {
     fn suspend(&mut self) { self.events.push(StubEvent::Suspend); }
     fn resume_system(&mut self) { self.events.push(StubEvent::ResumeSystem); }
     fn tick(&mut self, dt: f32) { self.events.push(StubEvent::Tick(dt)); }
+    fn as_any(&self) -> &dyn std::any::Any { self }
 }
 
 #[cfg(test)]

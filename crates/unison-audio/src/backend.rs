@@ -28,7 +28,7 @@ pub struct BackendSpatialParams {
     pub fade_in: Option<f32>,
 }
 
-pub trait AudioBackend: Send {
+pub trait AudioBackend: Send + std::any::Any {
     fn load_sound(&mut self, bytes: &[u8]) -> Result<BackendSoundId, AudioError>;
     fn unload_sound(&mut self, sound: BackendSoundId);
 
@@ -55,4 +55,7 @@ pub trait AudioBackend: Send {
     fn suspend(&mut self);
     fn resume_system(&mut self);
     fn tick(&mut self, dt: f32);
+
+    #[doc(hidden)]
+    fn as_any(&self) -> &dyn std::any::Any;
 }

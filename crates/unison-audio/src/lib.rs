@@ -9,8 +9,10 @@ pub mod backend;
 pub mod id;
 pub mod params;
 pub mod stub_backend;
+pub mod system;
 
 pub use backend::{AudioBackend, BackendPlayParams, BackendSpatialParams};
 pub use id::{BackendBusId, BackendPlaybackId, BackendSoundId, BusId, PlaybackId, SoundId};
 pub use params::{AudioError, PlayParams, Rolloff, SpatialParams};
 pub use stub_backend::{StubBackend, StubEvent};
+pub use system::{AudioSystem, MusicOptions, StopOptions};
