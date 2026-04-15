@@ -24,8 +24,9 @@ mod game_loop;
 
 pub use renderer::WebGlRenderer;
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
+use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::WebGl2RenderingContext as GL;
 use unison2d::{Engine, Game};
@@ -98,8 +99,42 @@ pub fn run<G: Game + 'static>(game: G) {
     let mut engine = Engine::new();
     engine.renderer = Some(Box::new(web_renderer));
 
+    // Defer audio init until first user gesture (browser autoplay policy).
+    // The audio system starts unarmed; a one-shot listener below arms it
+    // on the first keydown / mousedown / touchstart.
+    engine.audio.unarm_for_web();
+
     let engine = Rc::new(RefCell::new(engine));
+
+    // Install a one-shot gesture listener to arm the audio system.
+    install_audio_arm_listener(engine.clone());
 
     // Start game loop
     game_loop::start_loop(game, engine, input);
+}
+
+/// Install listeners on `window` that call `engine.audio.arm()` on the first
+/// user gesture (keydown, mousedown, or touchstart). Required because browsers
+/// block audio playback until a user interaction has occurred.
+///
+/// The closure is leaked via `.forget()` — it lives for the page lifetime,
+/// matching the engine and game loop.
+fn install_audio_arm_listener(engine: Rc<RefCell<Engine>>) {
+    let armed = Rc::new(Cell::new(false));
+    let handler = Closure::wrap(Box::new(move |_event: web_sys::Event| {
+        if armed.get() {
+            return;
+        }
+        armed.set(true);
+        engine.borrow_mut().audio.arm();
+    }) as Box<dyn FnMut(web_sys::Event)>);
+
+    let window = web_sys::window().expect("no window");
+    for event in &["keydown", "mousedown", "touchstart"] {
+        window
+            .add_event_listener_with_callback(event, handler.as_ref().unchecked_ref())
+            .expect("audio arm listener");
+    }
+    // Leak the closure — it must live for the page lifetime.
+    handler.forget();
 }
