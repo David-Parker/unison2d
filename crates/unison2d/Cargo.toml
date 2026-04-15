@@ -16,8 +16,10 @@ unison-profiler = { workspace = true }
 unison-input = { workspace = true }
 unison-assets = { workspace = true }
 unison-ui = { workspace = true }
+unison-audio = { workspace = true }
 
 [features]
-default = []
+default = ["backend-kira"]
+backend-kira = ["unison-audio/backend-kira"]
 simd = ["unison-physics/simd"]
 profiling = ["unison-profiler/enabled", "unison-physics/profiling", "unison-lighting/profiling"]

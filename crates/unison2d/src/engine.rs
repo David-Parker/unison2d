@@ -9,6 +9,7 @@
 
 use unison_input::InputState;
 use unison_assets::AssetStore;
+use unison_audio::AudioSystem;
 use unison_render::{AntiAliasing, Renderer, TextureId, RenderTargetId};
 
 /// The engine struct. Manages input and renderer access.
@@ -30,6 +31,11 @@ pub struct Engine {
 
     // Asset store for embedded assets.
     assets: AssetStore,
+
+    /// Audio subsystem. Initialized in `Engine::new()` with a `KiraBackend`
+    /// when the `backend-kira` feature is enabled; falls back to a silent
+    /// stub backend if initialization fails or the feature is disabled.
+    pub audio: AudioSystem,
 }
 
 impl Engine {
@@ -40,6 +46,7 @@ impl Engine {
             renderer: None,
             fixed_dt: 1.0 / 60.0,
             assets: AssetStore::new(),
+            audio: make_default_audio_system(),
         }
     }
 
@@ -142,13 +149,70 @@ impl Engine {
     /// Called by the platform's game loop before `Game::update()`.
     #[doc(hidden)]
     pub fn pre_update(&mut self) {
-        // No-op: action mapping removed. Raw InputState is updated by the
-        // platform via swap_into before each tick.
+        // Tick audio each frame (backend tweens, bookkeeping, etc.).
+        self.audio.tick(self.dt());
     }
 }
 
 impl Default for Engine {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// Build the default audio system. Tries `KiraBackend` when the feature is
+/// enabled, falling back to a silent `StubBackend` on error or when the
+/// feature is disabled so games still run on headless / audio-less systems.
+fn make_default_audio_system() -> AudioSystem {
+    #[cfg(feature = "backend-kira")]
+    {
+        use unison_audio::KiraBackend;
+        match KiraBackend::new() {
+            Ok(backend) => return AudioSystem::with_backend(Box::new(backend)),
+            Err(e) => eprintln!(
+                "[unison] audio: KiraBackend init failed ({e}); using silent stub"
+            ),
+        }
+    }
+    AudioSystem::with_backend(Box::new(unison_audio::StubBackend::new()))
+}
+
+// ── FFI helpers for platform glue (Swift / Kotlin / web event handlers) ──
+//
+// Each helper takes `*mut Engine`. The platform crate owns the Engine and is
+// responsible for ensuring the pointer is valid and not aliased at the call
+// site. Null pointers are tolerated (no-op) as a defensive measure.
+
+/// Suspend audio output (e.g. app backgrounded).
+///
+/// # Safety
+/// `engine` must be either null or a valid, exclusively-accessible pointer
+/// to an `Engine` owned by the caller.
+#[no_mangle]
+pub unsafe extern "C" fn engine_audio_suspend(engine: *mut Engine) {
+    if !engine.is_null() {
+        (&mut *engine).audio.suspend();
+    }
+}
+
+/// Resume audio output after suspension.
+///
+/// # Safety
+/// See [`engine_audio_suspend`].
+#[no_mangle]
+pub unsafe extern "C" fn engine_audio_resume_system(engine: *mut Engine) {
+    if !engine.is_null() {
+        (&mut *engine).audio.resume_system();
+    }
+}
+
+/// Arm the audio system after a user gesture (web autoplay policy).
+///
+/// # Safety
+/// See [`engine_audio_suspend`].
+#[no_mangle]
+pub unsafe extern "C" fn engine_audio_arm(engine: *mut Engine) {
+    if !engine.is_null() {
+        (&mut *engine).audio.arm();
     }
 }

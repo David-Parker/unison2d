@@ -1976,6 +1976,7 @@ dependencies = [
  "tree-sitter",
  "tree-sitter-typescript",
  "unison-android",
+ "unison-audio",
  "unison-ios",
  "unison-profiler",
  "unison-web",
@@ -2029,6 +2030,7 @@ name = "unison2d"
 version = "0.1.0"
 dependencies = [
  "unison-assets",
+ "unison-audio",
  "unison-core",
  "unison-input",
  "unison-lighting",

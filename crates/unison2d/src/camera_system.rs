@@ -71,6 +71,17 @@ impl CameraSystem {
         self.cameras.len()
     }
 
+    /// Position of the currently-active camera in world coordinates.
+    ///
+    /// Used by the audio system to position the listener. There is no
+    /// explicit "active" concept in Unison today, so this returns the
+    /// position of the default `"main"` camera (auto-created by
+    /// [`CameraSystem::new`]). Returns `None` if the main camera has
+    /// been removed.
+    pub fn active_world_position(&self) -> Option<Vec2> {
+        self.cameras.get(DEFAULT_CAMERA).map(|cam| Vec2::new(cam.x, cam.y))
+    }
+
     /// Make a named camera follow an object with the given smoothing factor.
     /// Smoothing: 0.0 = no movement, 1.0 = instant snap. Typical: 0.05-0.2.
     pub fn follow(&mut self, camera_name: &str, target: ObjectId, smoothing: f32) {

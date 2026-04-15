@@ -284,6 +284,9 @@ impl Game for ScriptedGame {
         // Refresh input snapshot.
         bindings::input::refresh(engine.input_state());
 
+        // Tick audio before user code runs (backend tweens, bookkeeping).
+        engine.pre_update();
+
         // Make engine available to Lua closures (so load_texture works in
         // scene on_enter when scenes are switched mid-game). Kept set until
         // after event flushing so that event handlers (e.g. level_complete
@@ -389,9 +392,23 @@ impl Game for ScriptedGame {
             drop(world);
         }
 
+        // Check if Lua called world:render(). We take the render world first
+        // (before acquiring the renderer borrow) so we can push the active
+        // camera position to the audio system's listener.
+        let render_world = bindings::engine_state::take_render_world();
+        if let Some(world_rc) = render_world.as_ref() {
+            let listener_pos = {
+                let world = world_rc.borrow();
+                world.cameras
+                    .active_world_position()
+                    .unwrap_or(unison2d::core::Vec2::ZERO)
+            };
+            engine.audio.set_listener_position(listener_pos);
+        }
+
         if let Some(r) = engine.renderer_mut() {
             // Check if Lua called world:render().
-            if let Some(world_rc) = bindings::engine_state::take_render_world() {
+            if let Some(world_rc) = render_world {
                 let mut world = world_rc.borrow_mut();
                 world.snapshot_for_render();
 
