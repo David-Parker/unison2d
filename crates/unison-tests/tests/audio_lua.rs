@@ -134,3 +134,29 @@ fn lua_play_music_starts_and_crossfades() {
     ));
     assert!(looped_play, "expected at least one looping Play event");
 }
+
+#[test]
+fn lua_world_play_sound_at_routes_through_play_spatial() {
+    let mut engine = setup_engine("dummy.wav");
+
+    run_lua_in_init(&mut engine, r#"
+        local snd = unison.audio.load("dummy.wav")
+        assert(snd ~= nil, "load should return a SoundId")
+        local w = unison.World.new()
+        local pb = w:play_sound_at(snd, 1.0, 2.0)
+        assert(pb ~= 0, "play_sound_at should return a non-zero PlaybackId")
+    "#);
+
+    let events = &engine.audio.backend_for_test().events;
+    let spatial = events.iter().find(|e| matches!(e, StubEvent::PlaySpatial { .. }));
+    let spatial = spatial.expect(&format!("expected PlaySpatial event, got {events:?}"));
+    match spatial {
+        StubEvent::PlaySpatial { position, .. } => {
+            assert!(
+                (position.x - 1.0).abs() < 1e-6 && (position.y - 2.0).abs() < 1e-6,
+                "expected PlaySpatial at (1, 2), got ({}, {})", position.x, position.y
+            );
+        }
+        _ => unreachable!(),
+    }
+}

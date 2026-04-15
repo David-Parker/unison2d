@@ -169,6 +169,8 @@ declare const unison: {
   scenes: UnisonScenes;
   /** String-keyed pub/sub event bus (on, emit, clear). */
   events: UnisonEvents;
+  /** Audio service — load, play, music, buses. */
+  audio: UnisonAudio;
   /** UI factory. */
   UI: UnisonUI;
   /** Development utilities. */

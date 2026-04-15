@@ -40,14 +40,23 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::atomic::{AtomicU32, Ordering};
 
 use mlua::prelude::*;
 use unison2d::render::Color;
 use unison2d::World;
 
+/// Monotonic counter for per-world spatial-audio tags.
+/// Starts at 1 so `0` can be reserved as "no world" if needed.
+static NEXT_WORLD_TAG: AtomicU32 = AtomicU32::new(1);
+
 /// Newtype around `Rc<RefCell<World>>` so we can implement `UserData`.
+///
+/// The second field is a stable `u32` tag assigned at construction and used
+/// to scope spatial-audio playbacks to the owning world (see
+/// `world:play_sound_at` / `world:clear_sounds`).
 #[derive(Clone)]
-pub struct LuaWorld(pub Rc<RefCell<World>>);
+pub struct LuaWorld(pub Rc<RefCell<World>>, pub u32 /* tag */);
 
 impl LuaWorld {
     /// Return the world key used to index the collision registry.
@@ -174,6 +183,57 @@ impl LuaUserData for LuaWorld {
         methods.add_method("on_collision_between", |lua, this, (a, b, cb): (u64, u64, LuaFunction)| {
             super::collisions::register_between(lua, this.world_key(), &this.0, a, b, cb)
         });
+
+        // -- Spatial audio (world-scoped) --
+
+        // world:play_sound_at(snd, x, y, opts?) -> PlaybackId
+        methods.add_method("play_sound_at",
+            |_, this, (snd, x, y, opts): (u32, f32, f32, Option<LuaTable>)| {
+            let tag = this.1;
+            let pb = super::engine_state::with_engine_ptr(|e| {
+                let bus = match opts.as_ref().and_then(|t| t.get::<String>("bus").ok()) {
+                    Some(name) => e.audio.bus_by_name(&name).unwrap_or_else(|| e.audio.sfx_bus()),
+                    None => e.audio.sfx_bus(),
+                };
+                let mut p = unison_audio::SpatialParams::at(unison2d::core::Vec2::new(x, y), bus);
+                if let Some(t) = opts {
+                    if let Ok(v) = t.get::<f32>("volume")       { p.volume = v; }
+                    if let Ok(v) = t.get::<f32>("pitch")        { p.pitch = v; }
+                    if let Ok(v) = t.get::<f32>("max_distance") { p.max_distance = v; }
+                    if let Ok(b) = t.get::<bool>("looping")     { p.looping = b; }
+                    p.fade_in = t.get::<f32>("fade_in").ok();
+                    if let Ok(s) = t.get::<String>("rolloff") {
+                        p.rolloff = match s.as_str() {
+                            "linear" => unison_audio::Rolloff::Linear,
+                            _        => unison_audio::Rolloff::InverseSquare,
+                        };
+                    }
+                }
+                e.audio.play_spatial(unison_audio::SoundId::from_raw(snd), p, Some(tag)).ok()
+            }).flatten().map(|p| p.raw()).unwrap_or(0);
+            Ok(pb)
+        });
+
+        // world:set_sound_position(pb, x, y)
+        methods.add_method("set_sound_position",
+            |_, _this, (pb, x, y): (u32, f32, f32)| {
+            super::engine_state::with_engine_ptr(|e| {
+                e.audio.set_position(unison_audio::PlaybackId::from_raw(pb),
+                                     unison2d::core::Vec2::new(x, y));
+            });
+            Ok(())
+        });
+
+        // world:clear_sounds(opts?) — stops all spatial playbacks for this world
+        methods.add_method("clear_sounds",
+            |_, this, opts: Option<LuaTable>| {
+            let tag = this.1;
+            let fade = opts.and_then(|t| t.get::<f32>("fade_out").ok());
+            super::engine_state::with_engine_ptr(|e| {
+                e.audio.stop_all_spatial_for(tag, fade);
+            });
+            Ok(())
+        });
     }
 }
 
@@ -182,7 +242,8 @@ pub fn populate(lua: &Lua, unison: &LuaTable) -> LuaResult<()> {
     let world_table = lua.create_table()?;
 
     world_table.set("new", lua.create_function(|_, ()| {
-        Ok(LuaWorld(Rc::new(RefCell::new(World::new()))))
+        let tag = NEXT_WORLD_TAG.fetch_add(1, Ordering::Relaxed);
+        Ok(LuaWorld(Rc::new(RefCell::new(World::new())), tag))
     })?)?;
 
     unison.set("World", world_table)?;

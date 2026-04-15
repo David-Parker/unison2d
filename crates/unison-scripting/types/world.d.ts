@@ -482,6 +482,19 @@ declare interface World {
   draw(this: World, shape: DrawShape, params: DrawParams, z: number): void;
   /** Draw a shape to the default layer, unaffected by the lightmap. */
   draw_unlit(this: World, shape: DrawShape, params: DrawParams, z: number): void;
+
+  // --- Spatial Audio ---
+
+  /**
+   * Play a positional sound in this world. Routes through `unison.audio.play_spatial`
+   * with a stable per-world tag so `world:clear_sounds` can stop only this world's
+   * spatial playbacks.
+   */
+  play_sound_at(this: World, sound: SoundId, x: number, y: number, opts?: PlayAtOptions): PlaybackId;
+  /** Update the position of a spatial playback (typically each frame). */
+  set_sound_position(this: World, playback: PlaybackId, x: number, y: number): void;
+  /** Stop every spatial playback tagged to this world, optionally fading out. */
+  clear_sounds(this: World, opts?: AudioStopOptions): void;
 }
 
 // World constructor is now unison.World.new()
