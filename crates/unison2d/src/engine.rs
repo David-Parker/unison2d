@@ -7,10 +7,12 @@
 //! - Fixed timestep delta
 //! - Asset loading
 
+use std::collections::HashMap;
+
 use unison_input::InputState;
 use unison_assets::AssetStore;
 use unison_audio::AudioSystem;
-use unison_render::{AntiAliasing, Renderer, TextureId, RenderTargetId};
+use unison_render::{AntiAliasing, FontId, Renderer, TextureId, RenderTargetId};
 
 /// The engine struct. Manages input and renderer access.
 ///
@@ -32,6 +34,11 @@ pub struct Engine {
     // Asset store for embedded assets.
     assets: AssetStore,
 
+    // Font registry — maps FontId to an asset path. The asset store owns the
+    // bytes; this map exists so scripts can refer to fonts by an opaque handle.
+    font_paths: HashMap<FontId, String>,
+    next_font_id: u32,
+
     /// Audio subsystem. Initialized in `Engine::new()` with a `KiraBackend`
     /// when the `backend-kira` feature is enabled; falls back to a silent
     /// stub backend if initialization fails or the feature is disabled.
@@ -46,6 +53,8 @@ impl Engine {
             renderer: None,
             fixed_dt: 1.0 / 60.0,
             assets: AssetStore::new(),
+            font_paths: HashMap::new(),
+            next_font_id: 1,
             audio: make_default_audio_system(),
         }
     }
@@ -97,6 +106,28 @@ impl Engine {
         let renderer = self.renderer.as_mut()
             .ok_or("No renderer available")?;
         renderer.create_texture(&desc)
+    }
+
+    // ── Fonts ──
+
+    /// Register a font asset and return an opaque [`FontId`].
+    ///
+    /// The engine verifies the asset exists in the asset store, allocates an
+    /// id, and remembers the mapping. No bytes are copied — UI code fetches
+    /// the bytes from the asset store when it actually needs to rasterize.
+    pub fn load_font(&mut self, asset_path: &str) -> Result<FontId, String> {
+        if self.assets.get(asset_path).is_none() {
+            return Err(format!("Asset not found: '{}'", asset_path));
+        }
+        let id = FontId::from_raw(self.next_font_id);
+        self.next_font_id += 1;
+        self.font_paths.insert(id, asset_path.to_string());
+        Ok(id)
+    }
+
+    /// Look up the asset path for a previously-registered font.
+    pub fn font_path(&self, id: FontId) -> Option<&str> {
+        self.font_paths.get(&id).map(|s| s.as_str())
     }
 
     // ── Render targets ──

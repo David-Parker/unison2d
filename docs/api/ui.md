@@ -9,11 +9,13 @@ nodes, handles pointer input, and emits overlay draw commands.
 ## Creating a UI handle
 
 ```lua
-local ui = unison.UI.new("fonts/DejaVuSans-Bold.ttf")
+local font = unison.assets.load_font("fonts/DejaVuSans-Bold.ttf")
+local ui   = unison.UI.new(font)
 ```
 
-Pass the asset path for a TTF/OTF font bundled via `unison_assets`. Reuse the
-handle across frames — do not recreate it every frame.
+Register a TTF/OTF font asset with `unison.assets.load_font`, then pass the
+returned `FontId` to `unison.UI.new`. Reuse the UI handle across frames — do
+not recreate it every frame.
 
 ## Rendering a frame
 

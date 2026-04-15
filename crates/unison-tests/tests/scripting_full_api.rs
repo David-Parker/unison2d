@@ -581,12 +581,15 @@ fn math_clamp() {
 
 #[test]
 fn ui_create_and_frame_no_panic() {
-    run_script(r#"
+    // Register a dummy font asset so `unison.assets.load_font` succeeds.
+    let mut game = ScriptedGame::new(r#"
         local game = {}
         local ui
 
         function game.init()
-            ui = unison.UI.new("fonts/test.ttf")
+            local font = unison.assets.load_font("fonts/test.ttf")
+            assert(font ~= nil, "load_font should succeed when asset is registered")
+            ui = unison.UI.new(font)
         end
 
         function game.update(dt) end
@@ -602,6 +605,10 @@ fn ui_create_and_frame_no_panic() {
 
         return game
     "#);
+    let mut engine = Engine::new();
+    engine.assets_mut().insert("fonts/test.ttf".to_string(), vec![0u8; 8]);
+    game.init(&mut engine);
+    game.update(&mut engine);
 }
 
 // ===========================================================================

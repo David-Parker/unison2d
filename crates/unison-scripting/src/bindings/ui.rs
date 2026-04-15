@@ -1,7 +1,8 @@
 //! UI bindings — declarative UI from Lua tables.
 //!
 //! ```lua
-//! local ui = unison.UI.new("fonts/DejaVuSans-Bold.ttf")
+//! local font = unison.assets.load_font("fonts/DejaVuSans-Bold.ttf")
+//! local ui   = unison.UI.new(font)
 //!
 //! -- In render:
 //! ui:frame({
@@ -23,7 +24,7 @@ use std::cell::RefCell;
 use mlua::prelude::*;
 
 use unison2d::core::{Color, Vec2};
-use unison2d::render::TextureId;
+use unison2d::render::{FontId, TextureId};
 use unison2d::ui::facade::Ui;
 use unison2d::ui::node::{UiNode, UiTree};
 use unison2d::ui::style::{Anchor, PanelStyle, TextStyle};
@@ -36,8 +37,8 @@ use unison2d::{Engine, World};
 /// Pending UI tree for the current frame (set by ui:frame(), consumed by ScriptedGame::render()).
 /// Stored as serialized node descriptors that ScriptedGame converts to UiTree.
 pub struct UiFrameRequest {
-    /// The font asset path used to create this UI.
-    pub font_path: String,
+    /// The FontId the Lua caller bound to this UI handle.
+    pub font: FontId,
     /// Serialized tree nodes.
     pub nodes: Vec<UiNodeDesc>,
 }
@@ -66,7 +67,7 @@ pub struct UiNodeDesc {
 /// Lazily created on the first `ui:frame()` call that has a valid renderer.
 struct LuaUiState {
     ui: Ui<String>,
-    font_path: String,
+    font: FontId,
 }
 
 thread_local! {
@@ -90,7 +91,7 @@ pub fn reset() {
 // ===================================================================
 
 struct LuaUi {
-    font_path: String,
+    font: FontId,
 }
 
 impl LuaUserData for LuaUi {
@@ -100,7 +101,7 @@ impl LuaUserData for LuaUi {
             let nodes = parse_node_list(&tree)?;
             UI_FRAME.with(|cell| {
                 *cell.borrow_mut() = Some(UiFrameRequest {
-                    font_path: this.font_path.clone(),
+                    font: this.font,
                     nodes,
                 });
             });
@@ -113,12 +114,12 @@ impl LuaUserData for LuaUi {
 // Registration
 // ===================================================================
 
-/// Populate `unison.UI` (with `new(font_path)` constructor) on the given `unison` table.
+/// Populate `unison.UI` (with `new(font_id)` constructor) on the given `unison` table.
 pub fn populate(lua: &Lua, unison: &LuaTable) -> LuaResult<()> {
     let ui_table = lua.create_table()?;
 
-    ui_table.set("new", lua.create_function(|_, font_path: String| {
-        Ok(LuaUi { font_path })
+    ui_table.set("new", lua.create_function(|_, font_id: u32| {
+        Ok(LuaUi { font: FontId::from_raw(font_id) })
     })?)?;
 
     unison.set("UI", ui_table)?;
@@ -283,17 +284,28 @@ pub fn render_pending_ui(
 
     // Decide whether we need to (re)build the Ui<String>.
     let needs_new = LUA_UI.with(|cell| match cell.borrow().as_ref() {
-        Some(state) => state.font_path != frame_request.font_path,
+        Some(state) => state.font != frame_request.font,
         None => true,
     });
 
     if needs_new {
-        let font_bytes = match engine.assets().get(&frame_request.font_path) {
+        let font_path = match engine.font_path(frame_request.font) {
+            Some(p) => p.to_string(),
+            None => {
+                eprintln!(
+                    "[unison-scripting] UI.new called with invalid FontId {} — did you forget unison.assets.load_font()?",
+                    frame_request.font.raw()
+                );
+                return;
+            }
+        };
+
+        let font_bytes = match engine.assets().get(&font_path) {
             Some(b) => b.to_vec(),
             None => {
                 eprintln!(
                     "[unison-scripting] UI font asset not found: '{}'",
-                    frame_request.font_path
+                    font_path
                 );
                 return;
             }
@@ -320,7 +332,7 @@ pub fn render_pending_ui(
         LUA_UI.with(|cell| {
             *cell.borrow_mut() = Some(LuaUiState {
                 ui,
-                font_path: frame_request.font_path.clone(),
+                font: frame_request.font,
             });
         });
     }

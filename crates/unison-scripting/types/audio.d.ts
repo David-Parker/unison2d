@@ -58,7 +58,7 @@ declare interface UnisonAudio {
   /** Free a previously loaded sound. */
   unload(this: void, sound: SoundId): void;
 
-  /** Play a non-positional sound. Returns a PlaybackId (0 if deferred on web). */
+  /** Play a non-positional sound. Returns a PlaybackId (0 if deferred on web before the first user gesture). */
   play(this: void, sound: SoundId, opts?: PlayOptions): PlaybackId;
   /** Stop a playback, optionally fading out. */
   stop(this: void, playback: PlaybackId, opts?: AudioStopOptions): void;

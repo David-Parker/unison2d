@@ -10,15 +10,30 @@ declare type AntiAliasingMode = "none" | "msaa2x" | "msaa4x" | "msaa8x";
 /** Opaque texture ID returned by unison.assets.load_texture. */
 declare type TextureId = number;
 
+/** Opaque font ID returned by unison.assets.load_font. */
+declare type FontId = number;
+
 /** Opaque render target ID returned by unison.renderer.create_target. */
 declare type RenderTargetId = number;
 
-/** Asset loading service. */
+/** Asset loading service.
+ *
+ * Every loader returns the opaque handle on success and `undefined` on failure.
+ * Errors are logged by the engine; check the result before using it:
+ * ```ts
+ * const tex = unison.assets.load_texture("textures/donut.png");
+ * if (tex !== undefined) { ... }
+ * ```
+ */
 declare interface UnisonAssets {
-  /** Load a texture from embedded assets. Returns a texture ID (0 on error). Call in init or on_enter. */
-  load_texture(this: void, path: string): TextureId;
-  /** Load a sound from embedded assets. Returns a SoundId (0 on error). Call in init or on_enter. */
-  load_sound(this: void, path: string): SoundId;
+  /** Load a texture from embedded assets. Returns the TextureId or undefined. Call in init or on_enter. */
+  load_texture(this: void, path: string): TextureId | undefined;
+  /** Load a sound from embedded assets. Returns the SoundId or undefined. Call in init or on_enter. */
+  load_sound(this: void, path: string): SoundId | undefined;
+  /** Load a font from embedded assets. Returns the FontId (pass to `unison.UI.new`) or undefined. Call in init or on_enter. */
+  load_font(this: void, path: string): FontId | undefined;
+  /** Load raw asset bytes. Returns a Lua string (byte buffer) or undefined. Use for level data, JSON, etc. */
+  load_bytes(this: void, path: string): string | undefined;
 }
 
 /** Renderer configuration and screen info. */
@@ -113,8 +128,8 @@ declare interface UnisonEvents {
 
 /** UI factory — create a UI handle for rendering declarative UI. */
 declare interface UnisonUI {
-  /** Create a UI handle for the given font asset. Reuse the handle across frames. */
-  new: (this: void, font_path: string) => UI;
+  /** Create a UI handle bound to a previously-loaded font. Reuse the handle across frames. */
+  new: (this: void, font: FontId) => UI;
 }
 
 /** Development utilities. */

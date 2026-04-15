@@ -16,7 +16,10 @@ function game.init()
     print("{{PROJECT_NAME}} loaded")
 
     local logo_tex = unison.assets.load_texture("textures/logo.png")
-    ui = unison.UI.new("fonts/DejaVuSans-Bold.ttf")
+    local font = unison.assets.load_font("fonts/DejaVuSans-Bold.ttf")
+    if font then
+        ui = unison.UI.new(font)
+    end
 
     world = unison.World.new()
     world:set_background(0x1a1a2e)
@@ -50,11 +53,13 @@ end
 
 function game.render()
     world:render()
-    ui:frame({
-        { type = "column", anchor = "top", padding = 16, children = {
-            { type = "label", text = "Unison 2D Game", font_size = 28, font_color = 0xffffff },
-        } },
-    })
+    if ui then
+        ui:frame({
+            { type = "column", anchor = "top", padding = 16, children = {
+                { type = "label", text = "Unison 2D Game", font_size = 28, font_color = 0xffffff },
+            } },
+        })
+    end
 end
 
 return game

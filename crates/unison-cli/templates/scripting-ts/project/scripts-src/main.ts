@@ -8,14 +8,17 @@
 
 let world: World;
 let logo_id: ObjectId;
-let ui: UI;
+let ui: UI | undefined;
 
 const game: Game = {
     init() {
         print("{{PROJECT_NAME}} loaded");
 
         const logo_tex = unison.assets.load_texture("textures/logo.png");
-        ui = unison.UI.new("fonts/DejaVuSans-Bold.ttf");
+        const font = unison.assets.load_font("fonts/DejaVuSans-Bold.ttf");
+        if (font !== undefined) {
+            ui = unison.UI.new(font);
+        }
 
         world = unison.World.new();
         world.set_background(0x1a1a2e);
@@ -50,11 +53,13 @@ const game: Game = {
 
     render() {
         world.render();
-        ui.frame([
-            { type: "column", anchor: "top", padding: 16, children: [
-                { type: "label", text: "Unison 2D Game", font_size: 28, font_color: 0xffffff },
-            ] },
-        ]);
+        if (ui !== undefined) {
+            ui.frame([
+                { type: "column", anchor: "top", padding: 16, children: [
+                    { type: "label", text: "Unison 2D Game", font_size: 28, font_color: 0xffffff },
+                ] },
+            ]);
+        }
     },
 };
 

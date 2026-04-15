@@ -41,9 +41,10 @@ fn lua_play_and_stop_round_trips_through_backend() {
 
     run_lua_in_init(&mut engine, r#"
         local snd = unison.assets.load_sound("dummy.wav")
-        assert(snd ~= 0, "load_sound should return a non-zero SoundId")
+        assert(snd ~= nil, "load_sound should return a SoundId")
         local pb  = unison.audio.play(snd)
         assert(pb ~= 0, "play should return a non-zero PlaybackId")
+        -- (play still returns 0 on web-deferred paths; this test runs with a real StubBackend)
         unison.audio.stop(pb)
     "#);
 
@@ -141,10 +142,11 @@ fn lua_world_play_sound_at_routes_through_play_spatial() {
 
     run_lua_in_init(&mut engine, r#"
         local snd = unison.assets.load_sound("dummy.wav")
-        assert(snd ~= 0, "load_sound should return a non-zero SoundId")
+        assert(snd ~= nil, "load_sound should return a SoundId")
         local w = unison.World.new()
         local pb = w:play_sound_at(snd, 1.0, 2.0)
         assert(pb ~= 0, "play_sound_at should return a non-zero PlaybackId")
+        -- (PlaybackId is integer; 0 means 'not playing' rather than a load error)
     "#);
 
     let events = &engine.audio.backend_for_test().events;

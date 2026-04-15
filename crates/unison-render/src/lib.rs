@@ -4,6 +4,7 @@
 //! Platform crates provide concrete implementations.
 
 mod color;
+mod font;
 mod texture;
 mod sprite;
 mod camera;
@@ -12,6 +13,7 @@ mod image;
 pub mod primitives;
 
 pub use color::Color;
+pub use font::FontId;
 pub use texture::{TextureId, TextureFormat, TextureFilter, TextureWrap, TextureDescriptor};
 pub use sprite::{Sprite, SpriteSheet};
 pub use camera::Camera;

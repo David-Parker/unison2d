@@ -123,5 +123,5 @@ declare interface UI {
   frame(this: UI, tree: UINode[]): void;
 }
 
-// UI factory is now unison.UI.new(font_path)
+// UI factory is now unison.UI.new(fontId)
 // See unison.d.ts.

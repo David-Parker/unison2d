@@ -10,36 +10,79 @@ below match those declarations exactly.
 
 ## unison.assets
 
-Asset loading service.
+Asset loading service. Every loader returns an opaque handle on success and
+`nil` (Lua) / `undefined` (TypeScript) on failure. Errors are logged by the
+engine; always check the result before using it. Call loaders in `init` or
+`on_enter`.
 
 #### unison.assets.load_texture
 
-Load a texture from embedded assets. Returns a texture ID integer (0 on error).
-Call in `init` or `on_enter`.
+Load a texture from embedded assets. Returns `TextureId | nil`.
 
 **Lua:**
 ```lua
 local tex = unison.assets.load_texture("textures/player.png")
+if not tex then return end
 ```
 
 **TypeScript:**
 ```typescript
-const tex: TextureId = unison.assets.load_texture("textures/player.png");
+const tex = unison.assets.load_texture("textures/player.png");
+if (tex === undefined) return;
 ```
 
 #### unison.assets.load_sound
 
-Load an audio file from embedded assets. Returns a `SoundId` integer (0 on error).
-Call in `init` or `on_enter`.
+Load an audio file from embedded assets. Returns `SoundId | nil`.
 
 **Lua:**
 ```lua
 local snd = unison.assets.load_sound("sfx/jump.ogg")
+if snd then unison.audio.play(snd) end
 ```
 
 **TypeScript:**
 ```typescript
-const snd: SoundId = unison.assets.load_sound("sfx/jump.ogg");
+const snd = unison.assets.load_sound("sfx/jump.ogg");
+if (snd !== undefined) unison.audio.play(snd);
+```
+
+#### unison.assets.load_font
+
+Register a font asset and return an opaque `FontId | nil`. Pass the result to
+`unison.UI.new()`. No bytes are copied at call time — the engine just remembers
+the path so the UI subsystem can fetch them on demand.
+
+**Lua:**
+```lua
+local font = unison.assets.load_font("fonts/DejaVuSans-Bold.ttf")
+```
+
+**TypeScript:**
+```typescript
+const font = unison.assets.load_font("fonts/DejaVuSans-Bold.ttf");
+```
+
+#### unison.assets.load_bytes
+
+Generic catch-all for loading raw asset bytes (level data, JSON, shader source,
+anything not covered by a typed loader). Returns the asset contents as a Lua
+string (byte buffer) or `nil` if the asset is missing.
+
+**Lua:**
+```lua
+local json = unison.assets.load_bytes("data/levels/01.json")
+if json then
+    local level = cjson.decode(json)
+end
+```
+
+**TypeScript:**
+```typescript
+const json = unison.assets.load_bytes("data/levels/01.json");
+if (json !== undefined) {
+    const level = JSON.parse(json);
+}
 ```
 
 ---
@@ -695,16 +738,19 @@ Declarative UI factory.
 
 #### unison.UI.new
 
-Create a UI handle using the given font asset. Reuse the handle across frames.
+Create a UI handle bound to a previously-loaded font. Reuse the handle across
+frames. Fonts are registered with [`unison.assets.load_font`](#unisonassetsload_font).
 
 **Lua:**
 ```lua
-local ui = unison.UI.new("fonts/DejaVuSans-Bold.ttf")
+local font = unison.assets.load_font("fonts/DejaVuSans-Bold.ttf")
+local ui = unison.UI.new(font)
 ```
 
 **TypeScript:**
 ```typescript
-const ui: UI = unison.UI.new("fonts/DejaVuSans-Bold.ttf");
+const font = unison.assets.load_font("fonts/DejaVuSans-Bold.ttf")!;
+const ui: UI = unison.UI.new(font);
 ```
 
 #### ui:frame / ui.frame

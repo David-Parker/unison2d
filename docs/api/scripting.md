@@ -240,9 +240,14 @@ Camera management via `world.cameras`.
 
 ## Assets
 
+Every loader returns `nil` on failure (logged via stderr).
+
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `unison.assets.load_texture` | `(path: string) → integer` | Load texture from embedded assets, returns texture ID |
+| `unison.assets.load_texture` | `(path: string) → TextureId\|nil` | Decode + upload a texture from embedded assets |
+| `unison.assets.load_sound` | `(path: string) → SoundId\|nil` | Register an audio clip with the audio backend |
+| `unison.assets.load_font` | `(path: string) → FontId\|nil` | Register a TTF/OTF font (pass to `unison.UI.new`) |
+| `unison.assets.load_bytes` | `(path: string) → string\|nil` | Catch-all: raw asset bytes for level data, JSON, etc. |
 
 ---
 
@@ -411,7 +416,7 @@ Declarative UI built from Lua tables.
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `unison.UI.new` | `(font_path) → UI` | Create UI handle from font asset |
+| `unison.UI.new` | `(FontId) → UI` | Create UI handle from a loaded font |
 | `ui:frame` | `(tree_table)` | Render a UI frame from nested table tree |
 
 **Node types:** `"column"`, `"row"`, `"panel"`, `"label"`, `"button"`, `"spacer"`
@@ -419,7 +424,8 @@ Declarative UI built from Lua tables.
 Button `on_click` values are emitted as string events. Listen with `unison.events.on("click_name", callback)`.
 
 ```lua
-local ui = unison.UI.new("fonts/DejaVuSans-Bold.ttf")
+local font = unison.assets.load_font("fonts/DejaVuSans-Bold.ttf")
+local ui   = unison.UI.new(font)
 
 ui:frame({
     { type = "column", anchor = "center", gap = 10, children = {
