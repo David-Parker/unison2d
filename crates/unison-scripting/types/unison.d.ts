@@ -15,8 +15,10 @@ declare type RenderTargetId = number;
 
 /** Asset loading service. */
 declare interface UnisonAssets {
-  /** Load a texture from embedded assets. Returns a texture ID. Call in init or on_enter. */
+  /** Load a texture from embedded assets. Returns a texture ID (0 on error). Call in init or on_enter. */
   load_texture(this: void, path: string): TextureId;
+  /** Load a sound from embedded assets. Returns a SoundId (0 on error). Call in init or on_enter. */
+  load_sound(this: void, path: string): SoundId;
 }
 
 /** Renderer configuration and screen info. */

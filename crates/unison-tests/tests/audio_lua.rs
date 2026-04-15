@@ -1,4 +1,4 @@
-//! Integration tests for `unison.audio.*` Lua bindings.
+//! Integration tests for `unison.audio.*` + `unison.assets.load_sound` Lua bindings.
 //!
 //! These tests install a `StubBackend` in place of the default audio system
 //! so the recorded event stream can be asserted against the expected behavior
@@ -9,12 +9,12 @@ use unison_scripting::ScriptedGame;
 use unison2d::{Engine, Game};
 
 /// Build an Engine with a StubBackend-backed AudioSystem and register a
-/// single fake sound asset under `path` so `unison.audio.load(path)` works.
+/// single fake sound asset under `path` so `unison.assets.load_sound(path)` works.
 fn setup_engine(asset_path: &str) -> Engine {
     let mut engine = Engine::new();
     // Replace the default audio system with one backed by StubBackend.
     engine.audio = AudioSystem::with_backend(Box::new(StubBackend::new()));
-    // Register a dummy asset so `unison.audio.load("dummy.wav")` succeeds.
+    // Register a dummy asset so `unison.assets.load_sound("dummy.wav")` succeeds.
     engine.assets_mut().insert(asset_path.to_string(), vec![0u8; 8]);
     engine
 }
@@ -40,8 +40,8 @@ fn lua_play_and_stop_round_trips_through_backend() {
     let mut engine = setup_engine("dummy.wav");
 
     run_lua_in_init(&mut engine, r#"
-        local snd = unison.audio.load("dummy.wav")
-        assert(snd ~= nil, "load should return a SoundId")
+        local snd = unison.assets.load_sound("dummy.wav")
+        assert(snd ~= 0, "load_sound should return a non-zero SoundId")
         local pb  = unison.audio.play(snd)
         assert(pb ~= 0, "play should return a non-zero PlaybackId")
         unison.audio.stop(pb)
@@ -106,8 +106,8 @@ fn lua_play_music_starts_and_crossfades() {
     engine.assets_mut().insert("other.wav".to_string(), vec![0u8; 8]);
 
     run_lua_in_init(&mut engine, r#"
-        local a = unison.audio.load("dummy.wav")
-        local b = unison.audio.load("other.wav")
+        local a = unison.assets.load_sound("dummy.wav")
+        local b = unison.assets.load_sound("other.wav")
         unison.audio.play_music(a)
         unison.audio.play_music(b, { crossfade = 1.0 })
     "#);
@@ -140,8 +140,8 @@ fn lua_world_play_sound_at_routes_through_play_spatial() {
     let mut engine = setup_engine("dummy.wav");
 
     run_lua_in_init(&mut engine, r#"
-        local snd = unison.audio.load("dummy.wav")
-        assert(snd ~= nil, "load should return a SoundId")
+        local snd = unison.assets.load_sound("dummy.wav")
+        assert(snd ~= 0, "load_sound should return a non-zero SoundId")
         local w = unison.World.new()
         local pb = w:play_sound_at(snd, 1.0, 2.0)
         assert(pb ~= 0, "play_sound_at should return a non-zero PlaybackId")

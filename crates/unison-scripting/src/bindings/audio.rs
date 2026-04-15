@@ -37,28 +37,6 @@ fn play_params_from_opts(t: Option<LuaTable>, default_bus: unison_audio::BusId) 
 pub fn populate(lua: &Lua, unison: &LuaTable) -> LuaResult<()> {
     let audio = lua.create_table()?;
 
-    // load(path) -> SoundId | nil
-    audio.set("load", lua.create_function(|_, path: String| {
-        let result = with_engine_ptr(|e| {
-            let bytes = e.assets().get(&path)
-                .map(|b| b.to_vec())
-                .ok_or_else(|| format!("Asset not found: '{path}'"))?;
-            e.audio.load(&bytes)
-                .map_err(|err| format!("audio load failed: {err}"))
-        });
-        match result {
-            Some(Ok(id)) => Ok(LuaValue::Integer(id.raw() as i64)),
-            Some(Err(e)) => {
-                eprintln!("[unison.audio.load] {e}");
-                Ok(LuaNil)
-            }
-            None => {
-                eprintln!("[unison.audio.load] called outside init/update/render");
-                Ok(LuaNil)
-            }
-        }
-    })?)?;
-
     // unload(SoundId)
     audio.set("unload", lua.create_function(|_, id: u32| {
         with_engine_ptr(|e| e.audio.unload(unison_audio::SoundId::from_raw(id)));

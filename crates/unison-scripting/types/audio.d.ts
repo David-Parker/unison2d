@@ -4,7 +4,7 @@
 // Audio types — spatial + non-spatial playback, buses, music
 // ===================================================================
 
-/** Opaque sound ID returned by unison.audio.load. */
+/** Opaque sound ID returned by unison.assets.load_sound. */
 declare type SoundId    = number;
 
 /** Opaque playback handle returned by play / play_music / world:play_sound_at. */
@@ -53,10 +53,8 @@ declare interface AudioTweenOptions { tween?: number; }
 /** Options for fading a playback out on stop. */
 declare interface AudioStopOptions  { fade_out?: number; }
 
-/** Audio service — loading, playback, buses, music. */
+/** Audio service — playback, buses, music. (Loading lives on unison.assets.load_sound.) */
 declare interface UnisonAudio {
-  /** Load an audio file from embedded assets. Returns a SoundId, or undefined on failure. */
-  load(this: void, path: string): SoundId | undefined;
   /** Free a previously loaded sound. */
   unload(this: void, sound: SoundId): void;
 

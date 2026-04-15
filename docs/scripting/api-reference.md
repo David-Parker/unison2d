@@ -14,8 +14,8 @@ Asset loading service.
 
 #### unison.assets.load_texture
 
-Load a texture from embedded assets. Returns a texture ID integer. Call in `init`
-or `on_enter`.
+Load a texture from embedded assets. Returns a texture ID integer (0 on error).
+Call in `init` or `on_enter`.
 
 **Lua:**
 ```lua
@@ -25,6 +25,21 @@ local tex = unison.assets.load_texture("textures/player.png")
 **TypeScript:**
 ```typescript
 const tex: TextureId = unison.assets.load_texture("textures/player.png");
+```
+
+#### unison.assets.load_sound
+
+Load an audio file from embedded assets. Returns a `SoundId` integer (0 on error).
+Call in `init` or `on_enter`.
+
+**Lua:**
+```lua
+local snd = unison.assets.load_sound("sfx/jump.ogg")
+```
+
+**TypeScript:**
+```typescript
+const snd: SoundId = unison.assets.load_sound("sfx/jump.ogg");
 ```
 
 ---
@@ -438,19 +453,7 @@ unison.events.clear();
 
 Music, SFX, and mix-bus service. See [api/audio.md](../api/audio.md) for the subsystem deep-dive (buses, spatial attenuation, web gesture gating, platform notes).
 
-#### unison.audio.load
-
-Load an audio file from embedded assets. Returns a `SoundId` integer, or `nil`/`undefined` on failure. Call in `init` or `on_enter`.
-
-**Lua:**
-```lua
-local snd = unison.audio.load("sfx/jump.ogg")
-```
-
-**TypeScript:**
-```typescript
-const snd: SoundId | undefined = unison.audio.load("sfx/jump.ogg");
-```
+Sound loading lives on [`unison.assets.load_sound`](#unisonassetsload_sound).
 
 #### unison.audio.unload
 
