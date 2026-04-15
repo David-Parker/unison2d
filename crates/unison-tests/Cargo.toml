@@ -4,6 +4,11 @@ version = "0.1.0"
 edition = "2021"
 publish = false
 
+[features]
+# Enable audio smoke tests that require an actual audio output device
+# (skipped by default — CI / sandboxed machines may not have one).
+audio-kira-tests = []
+
 [dev-dependencies]
 unison-physics = { path = "../unison-physics" }
 unison2d = { path = "../unison2d" }
@@ -13,4 +18,5 @@ unison-lighting = { path = "../unison-lighting" }
 unison-input = { path = "../unison-input" }
 unison-ui = { path = "../unison-ui" }
 unison-scripting = { path = "../unison-scripting" }
+unison-audio = { path = "../unison-audio" }
 mlua = { version = "0.10", features = ["lua54", "vendored"] }

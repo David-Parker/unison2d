@@ -8,7 +8,12 @@ description = "Unison 2D Game Engine - Audio subsystem"
 [dependencies]
 unison-core = { workspace = true }
 thiserror = { workspace = true }
+kira = { version = "0.12", default-features = false, features = ["cpal", "symphonia"], optional = true }
 
 [features]
-default = []
-# Backend + codec features added in Task 4 (kira backend).
+default = ["backend-kira", "codec-ogg", "codec-wav"]
+backend-kira = ["dep:kira"]
+codec-ogg  = ["kira?/ogg", "kira?/vorbis"]
+codec-wav  = ["kira?/wav", "kira?/pcm"]
+codec-mp3  = ["kira?/mp3"]
+codec-flac = ["kira?/flac"]
