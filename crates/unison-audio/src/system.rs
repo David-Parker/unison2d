@@ -427,10 +427,11 @@ mod tests {
     }
 }
 
-// Test-only accessor for inspecting the backend in unit tests.
-#[cfg(test)]
+// Test-only accessor for inspecting the backend. Exposed to external
+// integration tests via the `test-helpers` feature.
+#[cfg(any(test, feature = "test-helpers"))]
 impl AudioSystem {
-    pub(crate) fn backend_for_test(&self) -> &crate::stub_backend::StubBackend {
+    pub fn backend_for_test(&self) -> &crate::stub_backend::StubBackend {
         self.backend.as_any()
             .downcast_ref::<crate::stub_backend::StubBackend>()
             .expect("test backend must be StubBackend")

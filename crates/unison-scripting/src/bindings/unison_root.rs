@@ -31,6 +31,7 @@ pub fn register(lua: &Lua) -> LuaResult<()> {
     super::debug::populate(lua, &unison)?;
     super::math::populate(lua, &unison)?;
     super::world::populate(lua, &unison)?;
+    super::audio::populate(lua, &unison)?;
 
     lua.globals().set("unison", unison)?;
     Ok(())

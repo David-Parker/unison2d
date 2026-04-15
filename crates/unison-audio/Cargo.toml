@@ -13,6 +13,9 @@ kira = { version = "0.12", default-features = false, features = ["cpal", "sympho
 [features]
 default = ["backend-kira", "codec-ogg", "codec-wav"]
 backend-kira = ["dep:kira"]
+# Exposes in-crate test helpers (e.g. `AudioSystem::backend_for_test`) to
+# external crates' integration tests.
+test-helpers = []
 codec-ogg  = ["kira?/ogg", "kira?/vorbis"]
 codec-wav  = ["kira?/wav", "kira?/pcm"]
 codec-mp3  = ["kira?/mp3"]

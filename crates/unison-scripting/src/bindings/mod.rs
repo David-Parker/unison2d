@@ -27,6 +27,7 @@ pub mod render_targets;
 pub mod ui;
 pub mod math;
 pub mod debug;
+pub mod audio;
 
 use mlua::prelude::*;
 
