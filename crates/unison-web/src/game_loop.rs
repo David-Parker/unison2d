@@ -73,7 +73,6 @@ pub fn start_loop<G: Game + 'static>(
                     engine_ref.input.begin_frame();
                 }
                 first_tick = false;
-                engine_ref.pre_update();
                 game.update(&mut engine_ref);
             }
             accumulator -= FIXED_DT;

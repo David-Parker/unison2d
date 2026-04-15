@@ -123,7 +123,6 @@ impl<G: Game> GameState<G> {
                 self.engine.input.begin_frame();
             }
             first_tick = false;
-            self.engine.pre_update();
             self.game.update(&mut self.engine);
             self.accumulator -= FIXED_DT;
         }
