@@ -46,6 +46,7 @@ before working with a crate; update it when you change public API.
 | `unison-physics` | [physics.md](docs/api/physics.md) | XPBD soft body & rigid body physics |
 | `unison-render` | [render.md](docs/api/render.md) | Platform-agnostic rendering traits, textures, sprites |
 | `unison-lighting` | [lighting.md](docs/api/lighting.md) | 2D lighting with lightmap compositing |
+| `unison-audio` | [audio.md](docs/api/audio.md) | Cross-platform audio: music, SFX, 2D-spatial, buses, tweens (kira-backed) |
 | `unison-input` | [input.md](docs/api/input.md) | Raw input state + Lua action map |
 | `unison-ui` | [ui.md](docs/api/ui.md) | Declarative React-like UI system (HUDs, menus, buttons) |
 | `unison-core` | [math.md](docs/api/math.md) | Shared Vec2, Color, Rect types |

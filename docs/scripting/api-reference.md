@@ -434,6 +434,258 @@ unison.events.clear();
 
 ---
 
+## unison.audio
+
+Music, SFX, and mix-bus service. See [api/audio.md](../api/audio.md) for the subsystem deep-dive (buses, spatial attenuation, web gesture gating, platform notes).
+
+#### unison.audio.load
+
+Load an audio file from embedded assets. Returns a `SoundId` integer, or `nil`/`undefined` on failure. Call in `init` or `on_enter`.
+
+**Lua:**
+```lua
+local snd = unison.audio.load("sfx/jump.ogg")
+```
+
+**TypeScript:**
+```typescript
+const snd: SoundId | undefined = unison.audio.load("sfx/jump.ogg");
+```
+
+#### unison.audio.unload
+
+Free a previously loaded sound.
+
+**Lua:**
+```lua
+unison.audio.unload(snd)
+```
+
+**TypeScript:**
+```typescript
+unison.audio.unload(snd);
+```
+
+#### unison.audio.play
+
+Play a non-positional sound. Returns a `PlaybackId` (0 if the call was deferred by the web pre-arm queue).
+
+**Lua:**
+```lua
+local pb = unison.audio.play(snd, { volume = 0.8, pitch = 1.1, looping = false, bus = "sfx", fade_in = 0.05 })
+```
+
+**TypeScript:**
+```typescript
+const pb: PlaybackId = unison.audio.play(snd, { volume: 0.8, pitch: 1.1, looping: false, bus: "sfx", fade_in: 0.05 });
+```
+
+#### unison.audio.stop
+
+Stop a playback, optionally fading out over `fade_out` seconds.
+
+**Lua:**
+```lua
+unison.audio.stop(pb, { fade_out = 0.25 })
+```
+
+**TypeScript:**
+```typescript
+unison.audio.stop(pb, { fade_out: 0.25 });
+```
+
+#### unison.audio.pause / unison.audio.resume
+
+Pause or resume a playback (its handle stays valid).
+
+**Lua:**
+```lua
+unison.audio.pause(pb)
+unison.audio.resume(pb)
+```
+
+**TypeScript:**
+```typescript
+unison.audio.pause(pb);
+unison.audio.resume(pb);
+```
+
+#### unison.audio.is_playing
+
+`true` while the playback is still producing audio.
+
+**Lua:**
+```lua
+if unison.audio.is_playing(pb) then ... end
+```
+
+**TypeScript:**
+```typescript
+if (unison.audio.is_playing(pb)) { ... }
+```
+
+#### unison.audio.set_volume / unison.audio.set_pitch
+
+Update a playback's volume or pitch, optionally tweened over `tween` seconds.
+
+**Lua:**
+```lua
+unison.audio.set_volume(pb, 0.3, { tween = 0.5 })
+unison.audio.set_pitch(pb, 1.25, { tween = 0.2 })
+```
+
+**TypeScript:**
+```typescript
+unison.audio.set_volume(pb, 0.3, { tween: 0.5 });
+unison.audio.set_pitch(pb, 1.25, { tween: 0.2 });
+```
+
+#### unison.audio.play_music
+
+Start a music track. Exclusive — replaces the current track, with optional `crossfade` in seconds. Music loops by default.
+
+**Lua:**
+```lua
+local music = unison.audio.play_music(track, { volume = 0.7, crossfade = 1.5 })
+```
+
+**TypeScript:**
+```typescript
+const music: PlaybackId = unison.audio.play_music(track, { volume: 0.7, crossfade: 1.5 });
+```
+
+#### unison.audio.stop_music / pause_music / resume_music / current_music
+
+Control the currently-active music track.
+
+**Lua:**
+```lua
+unison.audio.stop_music({ fade_out = 1.0 })
+unison.audio.pause_music()
+unison.audio.resume_music()
+local pb = unison.audio.current_music()  -- nil if none
+```
+
+**TypeScript:**
+```typescript
+unison.audio.stop_music({ fade_out: 1.0 });
+unison.audio.pause_music();
+unison.audio.resume_music();
+const pb: PlaybackId | undefined = unison.audio.current_music();
+```
+
+#### unison.audio.set_master_volume
+
+Set the master output volume. Applies on top of all bus volumes.
+
+**Lua:**
+```lua
+unison.audio.set_master_volume(0.6, { tween = 0.5 })
+```
+
+**TypeScript:**
+```typescript
+unison.audio.set_master_volume(0.6, { tween: 0.5 });
+```
+
+#### unison.audio.set_bus_volume
+
+Set the volume of a named bus. Unknown bus names are a no-op.
+
+**Lua:**
+```lua
+unison.audio.set_bus_volume("music", 0.4, { tween = 0.25 })
+```
+
+**TypeScript:**
+```typescript
+unison.audio.set_bus_volume("music", 0.4, { tween: 0.25 });
+```
+
+#### unison.audio.create_bus
+
+Create a named bus. Idempotent — repeated calls with the same name are no-ops. Built-in buses (`"master"`, `"music"`, `"sfx"`) are always present.
+
+**Lua:**
+```lua
+unison.audio.create_bus("ui")
+```
+
+**TypeScript:**
+```typescript
+unison.audio.create_bus("ui");
+```
+
+#### unison.audio.stop_all
+
+Stop every non-spatial playback, optionally fading out. Spatial (world-scoped) playbacks are stopped via `world:clear_sounds` — see below.
+
+**Lua:**
+```lua
+unison.audio.stop_all({ fade_out = 0.5 })
+```
+
+**TypeScript:**
+```typescript
+unison.audio.stop_all({ fade_out: 0.5 });
+```
+
+### Spatial audio (world-scoped)
+
+Spatial sounds are attached to a specific `World` so that `world:clear_sounds` stops only that world's voices. See [api/audio.md](../api/audio.md) for the V1 attenuation caveats (static at play time in the kira backend).
+
+#### world:play_sound_at / world.play_sound_at
+
+Play a positional sound at world position `(x, y)`. Returns a `PlaybackId`.
+
+**Lua:**
+```lua
+local pb = world:play_sound_at(snd, 4.0, 2.0, {
+    volume = 0.9, pitch = 1.0, looping = false,
+    max_distance = 25.0, rolloff = "inverse", bus = "sfx",
+})
+```
+
+**TypeScript:**
+```typescript
+const pb: PlaybackId = world.play_sound_at(snd, 4.0, 2.0, {
+    volume: 0.9, pitch: 1.0, looping: false,
+    max_distance: 25.0, rolloff: "inverse", bus: "sfx",
+});
+```
+
+**Rolloff values:** `"inverse"` (inverse-square, default), `"linear"`.
+
+#### world:set_sound_position / world.set_sound_position
+
+Update a spatial playback's position. Forward-compat: under the V1 kira backend this does not currently change the audible output (see [api/audio.md](../api/audio.md)).
+
+**Lua:**
+```lua
+world:set_sound_position(pb, x, y)
+```
+
+**TypeScript:**
+```typescript
+world.set_sound_position(pb, x, y);
+```
+
+#### world:clear_sounds / world.clear_sounds
+
+Stop every spatial playback belonging to this world, optionally fading out. Call in `on_exit` or when tearing down a scene.
+
+**Lua:**
+```lua
+world:clear_sounds({ fade_out = 0.3 })
+```
+
+**TypeScript:**
+```typescript
+world.clear_sounds({ fade_out: 0.3 });
+```
+
+---
+
 ## unison.UI
 
 Declarative UI factory.

@@ -23,6 +23,7 @@ Per-crate deep dives:
 | `unison-physics` | XPBD soft body & rigid body physics | [api/physics.md](api/physics.md) |
 | `unison-render` | Platform-agnostic rendering traits, textures, sprites | [api/render.md](api/render.md) |
 | `unison-lighting` | 2D lighting with lightmap compositing | [api/lighting.md](api/lighting.md) |
+| `unison-audio` | Cross-platform audio: music, SFX, 2D-spatial, buses, tweens (kira-backed) | [api/audio.md](api/audio.md) |
 | `unison-input` | Raw input state + Lua action map | [api/input.md](api/input.md) |
 | `unison-core` | Shared Vec2, Color, Rect types | [api/math.md](api/math.md) |
 | `unison-assets` | Build-time asset embedding & runtime store | [api/assets.md](api/assets.md) |
