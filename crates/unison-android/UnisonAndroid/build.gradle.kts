@@ -8,7 +8,10 @@ android {
     compileSdk = 34
 
     defaultConfig {
-        minSdk = 24
+        // API 26+ required: cpal (via unison-audio → kira) links libaaudio,
+        // which only exists in the NDK sysroot from API 26 onwards.
+        // Also required for AudioFocusRequest (consumers wiring AudioFocus).
+        minSdk = 26
     }
 
     compileOptions {

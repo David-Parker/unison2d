@@ -58,4 +58,34 @@ object UnisonNative {
 
     /** Destroy the game state and free memory. Do not use [state] after this. */
     external fun gameDestroy(state: Long)
+
+    /**
+     * Extract the inner `Engine` pointer from a [gameInit] handle. Pass the
+     * result to [audioSuspend] / [audioResumeSystem] / [audioArm] to drive
+     * the Rust audio backend from Kotlin lifecycle / AudioFocus callbacks.
+     *
+     * @param state Opaque handle returned by [gameInit].
+     * @return Opaque `Engine *` as a `jlong`, or 0 if [state] is 0.
+     */
+    external fun gameEnginePtr(state: Long): Long
+
+    /**
+     * Suspend the audio backend (stop pulling frames). Safe no-op when
+     * [enginePtr] is 0. Call from `onPause` or on `AUDIOFOCUS_LOSS` /
+     * `AUDIOFOCUS_LOSS_TRANSIENT`.
+     */
+    external fun audioSuspend(enginePtr: Long)
+
+    /**
+     * Resume the audio backend after a system-initiated suspension
+     * (lifecycle or AudioFocus regain). Safe no-op when [enginePtr] is 0.
+     * Call from `onResume` or on `AUDIOFOCUS_GAIN`.
+     */
+    external fun audioResumeSystem(enginePtr: Long)
+
+    /**
+     * Arm the audio backend after a user gesture. Exposed for parity with
+     * iOS and web; Android does not require a user-gesture arm step.
+     */
+    external fun audioArm(enginePtr: Long)
 }

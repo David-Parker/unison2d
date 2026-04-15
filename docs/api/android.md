@@ -233,11 +233,38 @@ UnisonAndroid/
     └── JoystickView.kt        # Virtual joystick overlay
 ```
 
-Platform requirement: Android API 24+ (Android 7.0).
+Platform requirement: Android API 26+ (Android 8.0 Oreo). Driven by two
+constraints:
+- `cpal` (pulled in by `unison-audio` → kira) links `libaaudio.so`, which
+  only appears in the NDK sysroot from API 26 onwards.
+- `AudioFocusRequest.Builder` (used by consumers wiring AudioFocus to
+  `UnisonNative.audioSuspend` / `audioResumeSystem`) is API 26+.
 
 ### UnisonNative
 
-Kotlin `object` declaring the 9 `external` JNI methods matching the Rust `export_game!` macro output. The actual function bodies are in the game's `.so` library (loaded by `System.loadLibrary` in `GameActivity`).
+Kotlin `object` declaring the `external` JNI methods matching the Rust
+`export_game!` macro output (game-specific: `gameInit`, `gameFrame`,
+`gameResize`, `gameTouchBegan/Moved/Ended/Cancelled`, `gameSetAxis`,
+`gameDestroy`, `gameEnginePtr`) plus engine-level audio bridges
+(`audioSuspend`, `audioResumeSystem`, `audioArm`, implemented directly in
+`unison-android/src/lib.rs`). The actual function bodies are in the game's
+`.so` library (loaded by `System.loadLibrary` in `GameActivity`).
+
+Audio lifecycle usage:
+
+```kotlin
+// In onPause / AUDIOFOCUS_LOSS:
+val engine = UnisonNative.gameEnginePtr(gameState)
+if (engine != 0L) UnisonNative.audioSuspend(engine)
+
+// In onResume / AUDIOFOCUS_GAIN:
+val engine = UnisonNative.gameEnginePtr(gameState)
+if (engine != 0L) UnisonNative.audioResumeSystem(engine)
+```
+
+`gameEnginePtr` must run on the GL thread (it dereferences the Rust
+`GameState`). Subsequent `audioSuspend` / `audioResumeSystem` calls are
+safe from any thread as long as the resulting `Engine *` is still live.
 
 ### GameActivity
 

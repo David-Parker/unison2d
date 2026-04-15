@@ -159,5 +159,21 @@ macro_rules! export_game {
                 drop(Box::from_raw(state as *mut __UnisonGameState));
             }
         }
+
+        /// Expose the `Engine` owned by `GameState` so Kotlin can pass it to
+        /// `UnisonNative.audioSuspend` / `audioResumeSystem` for AudioFocus
+        /// and lifecycle handling. Returns 0 if `state` is 0.
+        #[no_mangle]
+        pub unsafe extern "system" fn Java_com_unison2d_UnisonNative_gameEnginePtr(
+            _env: $crate::jni::JNIEnv,
+            _class: $crate::jni::objects::JClass,
+            state: $crate::jni::sys::jlong,
+        ) -> $crate::jni::sys::jlong {
+            if state == 0 {
+                return 0;
+            }
+            let state = &mut *(state as *mut __UnisonGameState);
+            state.engine_mut() as *mut _ as $crate::jni::sys::jlong
+        }
     };
 }
