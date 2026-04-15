@@ -1350,6 +1350,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "unison-audio"
+version = "0.1.0"
+dependencies = [
+ "thiserror",
+ "unison-core",
+]
+
+[[package]]
 name = "unison-cli"
 version = "0.1.0"
 dependencies = [
