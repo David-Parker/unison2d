@@ -159,6 +159,8 @@ impl AudioBackend for KiraBackend {
         Ok(BackendSoundId::from_raw(id))
     }
 
+    /// Drops the decoded `StaticSoundData`. In-flight playback handles retain
+    /// their own `Arc` to the sample buffer, so there is no dangling-read risk.
     fn unload_sound(&mut self, sound: BackendSoundId) {
         self.sounds.remove(&sound.raw());
     }
@@ -180,11 +182,8 @@ impl AudioBackend for KiraBackend {
         if params.looping {
             data = data.loop_region(0.0..);
         }
-        if let Some(fade) = params.fade_in {
-            data = data.fade_in_tween(Some(Tween {
-                duration: Duration::from_secs_f32(fade),
-                ..Tween::default()
-            }));
+        if params.fade_in.is_some() {
+            data = data.fade_in_tween(Some(tween_or_default(params.fade_in)));
         }
 
         let handle = self.play_routed(params.bus, data)?;
@@ -287,9 +286,12 @@ impl AudioBackend for KiraBackend {
                 self.tracks.insert(id, track);
                 BackendBusId::from_raw(id)
             }
-            Err(_) => {
+            Err(e) => {
                 // Resource limit hit — fall back to routing on the main
                 // track (id 0) so the call never fails at the trait level.
+                eprintln!(
+                    "unison-audio: create_bus falling back to main track (add_sub_track failed: {e})"
+                );
                 BackendBusId::from_raw(0)
             }
         }
@@ -312,7 +314,10 @@ impl AudioBackend for KiraBackend {
     }
 
     fn tick(&mut self, _dt: f32) {
-        // kira runs its own audio thread — nothing to do here.
+        // kira runs its own audio thread for actual mixing, but we still need
+        // to reap finished playback handles so `handles` doesn't grow forever.
+        self.handles
+            .retain(|_, h| !matches!(h.state(), PlaybackState::Stopped));
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
