@@ -99,10 +99,10 @@ pub fn run<G: Game + 'static>(game: G) {
     let mut engine = Engine::new();
     engine.renderer = Some(Box::new(web_renderer));
 
-    // Defer audio init until first user gesture (browser autoplay policy).
-    // The audio system starts unarmed; a one-shot listener below arms it
-    // on the first keydown / mousedown / touchstart.
-    engine.audio.unarm_for_web();
+    // On wasm32 the engine constructed `AudioSystem` on a `StubBackend`
+    // and already left it unarmed (see `unison2d::engine::make_default_audio_system`).
+    // The one-shot listener installed below constructs `KiraBackend` on
+    // the first user gesture and swaps it in.
 
     let engine = Rc::new(RefCell::new(engine));
 
@@ -113,9 +113,17 @@ pub fn run<G: Game + 'static>(game: G) {
     game_loop::start_loop(game, engine, input);
 }
 
-/// Install listeners on `window` that call `engine.audio.arm()` on the first
-/// user gesture (keydown, mousedown, or touchstart). Required because browsers
-/// block audio playback until a user interaction has occurred.
+/// Install listeners on `window` that initialize the real audio backend on
+/// the first user gesture (keydown, mousedown, or touchstart). Required
+/// because browsers block creating an `AudioContext` until a user
+/// interaction has occurred.
+///
+/// On the first gesture we attempt to construct a `KiraBackend` (which
+/// internally creates the browser `AudioContext`) and swap it into the
+/// `AudioSystem`, replaying any queued pre-gesture calls. If construction
+/// fails (no audio hardware accessible even post-gesture) we fall back to
+/// just arming the existing `StubBackend` so the game still runs silently
+/// instead of crashing.
 ///
 /// The closure is leaked via `.forget()` — it lives for the page lifetime,
 /// matching the engine and game loop.
@@ -126,7 +134,37 @@ fn install_audio_arm_listener(engine: Rc<RefCell<Engine>>) {
             return;
         }
         armed.set(true);
-        engine.borrow_mut().audio.arm();
+
+        let mut engine = engine.borrow_mut();
+        match unison_audio::KiraBackend::new() {
+            Ok(backend) => {
+                match engine.audio.swap_backend(Box::new(backend)) {
+                    Ok(()) => {
+                        web_sys::console::log_1(
+                            &"[unison] audio: KiraBackend installed after user gesture".into(),
+                        );
+                    }
+                    Err(e) => {
+                        web_sys::console::warn_1(
+                            &format!(
+                                "[unison] audio: swap_backend failed ({e:?}); falling back to silent stub",
+                            )
+                            .into(),
+                        );
+                        engine.audio.arm();
+                    }
+                }
+            }
+            Err(e) => {
+                web_sys::console::warn_1(
+                    &format!(
+                        "[unison] audio: KiraBackend init failed ({e:?}); falling back to silent stub",
+                    )
+                    .into(),
+                );
+                engine.audio.arm();
+            }
+        }
     }) as Box<dyn FnMut(web_sys::Event)>);
 
     let window = web_sys::window().expect("no window");

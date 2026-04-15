@@ -41,9 +41,16 @@ impl Default for MusicOptions {
     }
 }
 
-struct Bus { backend_id: BackendBusId }
+struct Bus {
+    backend_id: BackendBusId,
+}
 
-struct Sound { backend_id: BackendSoundId }
+struct Sound {
+    backend_id: BackendSoundId,
+    /// Raw encoded bytes — retained so `swap_backend` can re-load the sound
+    /// against a freshly-constructed backend.
+    bytes: Vec<u8>,
+}
 
 struct Playback {
     backend_id: BackendPlaybackId,
@@ -131,6 +138,66 @@ impl AudioSystem {
         }
     }
 
+    /// Swap the underlying [`AudioBackend`] for a new one, migrating sound
+    /// and bus state.
+    ///
+    /// Used on web to defer real-backend (KiraBackend) construction until
+    /// after the first user gesture: the system starts on a `StubBackend`
+    /// that silently records calls; once the gesture fires the platform
+    /// constructs a real backend and swaps it in.
+    ///
+    /// Migration semantics:
+    /// - Every [`Sound`] currently tracked is re-loaded against `new_backend`
+    ///   from the bytes retained at `load()` time, and the external `SoundId`
+    ///   keeps its identity (only the backend handle behind it changes).
+    /// - Every [`Bus`] currently tracked is re-created (`backend.create_bus()`)
+    ///   and the external `BusId` keeps its identity (the master/music/sfx
+    ///   name lookups stay valid across the swap).
+    /// - In-flight playbacks are NOT migrated and are dropped: nothing was
+    ///   actually audible on the previous backend (this path exists for the
+    ///   web stub-then-Kira swap), so live playback IDs are forgotten and
+    ///   `current_music` is cleared.
+    /// - After a successful swap the system is left armed and any pending
+    ///   pre-arm queue is drained against the new backend.
+    pub fn swap_backend(
+        &mut self,
+        mut new_backend: Box<dyn AudioBackend>,
+    ) -> Result<(), AudioError> {
+        // Re-create buses on the new backend, preserving external BusIds.
+        // Iterate in BusId order so re-creation order is deterministic.
+        let mut bus_keys: Vec<u32> = self.buses.keys().copied().collect();
+        bus_keys.sort_unstable();
+        for key in bus_keys {
+            let new_backend_bus = new_backend.create_bus();
+            if let Some(bus) = self.buses.get_mut(&key) {
+                bus.backend_id = new_backend_bus;
+            }
+        }
+
+        // Re-load sounds on the new backend, preserving external SoundIds.
+        let mut sound_keys: Vec<u32> = self.sounds.keys().copied().collect();
+        sound_keys.sort_unstable();
+        for key in sound_keys {
+            // Borrow bytes immutably first to satisfy the borrow checker.
+            let bytes = self.sounds.get(&key).map(|s| s.bytes.clone());
+            if let Some(bytes) = bytes {
+                let new_backend_id = new_backend.load_sound(&bytes)?;
+                if let Some(sound) = self.sounds.get_mut(&key) {
+                    sound.backend_id = new_backend_id;
+                }
+            }
+        }
+
+        // Discard live playbacks — they cannot be migrated.
+        self.playbacks.clear();
+        self.current_music = None;
+
+        // Install the new backend, then arm (this also drains any queued calls).
+        self.backend = new_backend;
+        self.arm();
+        Ok(())
+    }
+
     /// Returns true if the call should be queued instead of executed.
     fn should_queue(&mut self, call: QueuedCall) -> bool {
         if self.armed { return false; }
@@ -164,7 +231,7 @@ impl AudioSystem {
         let backend_id = self.backend.load_sound(bytes)?;
         let id = SoundId::from_raw(self.next_sound);
         self.next_sound += 1;
-        self.sounds.insert(id.raw(), Sound { backend_id });
+        self.sounds.insert(id.raw(), Sound { backend_id, bytes: bytes.to_vec() });
         Ok(id)
     }
 
@@ -414,6 +481,68 @@ mod tests {
         s.set_listener_position(Vec2::new(3.0, 5.0));
         let last = s.backend_for_test().events.last().cloned().unwrap();
         assert_eq!(last, StubEvent::SetListener(Vec2::new(3.0, 5.0)));
+    }
+
+    #[test]
+    fn swap_backend_migrates_sounds_and_buses() {
+        let mut s = sys();
+        // Load 2 sounds + create 1 custom bus on backend A.
+        let snd_a = s.load(&[1u8; 8]).unwrap();
+        let snd_b = s.load(&[2u8; 16]).unwrap();
+        let custom_bus = s.create_bus("ui");
+
+        // Snapshot the external IDs we expect to remain stable.
+        let master = s.master_bus();
+        let music  = s.music_bus();
+        let sfx    = s.sfx_bus();
+
+        // Swap to a fresh StubBackend (B).
+        s.swap_backend(Box::new(StubBackend::new())).unwrap();
+
+        // External IDs must not have changed.
+        assert_eq!(s.master_bus(), master);
+        assert_eq!(s.music_bus(),  music);
+        assert_eq!(s.sfx_bus(),    sfx);
+        assert_eq!(s.bus_by_name("ui"), Some(custom_bus));
+
+        // Backend B should have received CreateBus events for all 4 buses.
+        let backend = s.backend_for_test();
+        let create_bus_count = backend.events.iter()
+            .filter(|e| matches!(e, StubEvent::CreateBus))
+            .count();
+        assert_eq!(create_bus_count, 4, "master+music+sfx+ui");
+
+        // Backend B should have received LoadSound events for both sounds.
+        let load_events: Vec<&StubEvent> = backend.events.iter()
+            .filter(|e| matches!(e, StubEvent::LoadSound { .. }))
+            .collect();
+        assert_eq!(load_events.len(), 2);
+        assert!(matches!(load_events[0], StubEvent::LoadSound { bytes_len: 8 }));
+        assert!(matches!(load_events[1], StubEvent::LoadSound { bytes_len: 16 }));
+
+        // Sanity: the external Sound + Bus IDs still resolve and are usable.
+        let pb = s.play(snd_a, PlayParams::with_bus(custom_bus)).unwrap();
+        assert!(pb.raw() != 0);
+        let _ = snd_b; // suppress unused-warning if play fails to read
+    }
+
+    #[test]
+    fn swap_backend_drains_queue() {
+        let mut s = sys();
+        let snd = s.load(&[0u8; 4]).unwrap();
+        s.unarm_for_web();
+        // Queue a play call against the (still-stub) backend A.
+        s.play(snd, PlayParams::with_bus(s.sfx_bus())).unwrap();
+
+        // Swap to backend B — this should arm and drain the queue, executing
+        // the queued play() against backend B.
+        s.swap_backend(Box::new(StubBackend::new())).unwrap();
+
+        let backend = s.backend_for_test();
+        assert!(
+            backend.events.iter().any(|e| matches!(e, StubEvent::Play { .. })),
+            "queued Play should have been replayed against new backend",
+        );
     }
 
     #[test]

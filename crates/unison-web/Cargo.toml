@@ -10,6 +10,7 @@ unison-core = { workspace = true }
 unison-render = { workspace = true }
 unison-input = { workspace = true }
 unison-profiler = { workspace = true }
+unison-audio = { workspace = true }
 unison2d = { workspace = true }
 wasm-bindgen = { workspace = true }
 js-sys = { workspace = true }

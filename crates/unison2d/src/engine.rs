@@ -160,11 +160,27 @@ impl Default for Engine {
     }
 }
 
-/// Build the default audio system. Tries `KiraBackend` when the feature is
-/// enabled, falling back to a silent `StubBackend` on error or when the
-/// feature is disabled so games still run on headless / audio-less systems.
+/// Build the default audio system.
+///
+/// Non-web targets: try `KiraBackend` (when enabled), falling back to a
+/// silent `StubBackend` on error or when the feature is disabled so games
+/// still run on headless / audio-less systems.
+///
+/// Web (`wasm32`): ALWAYS start on `StubBackend` and leave the system
+/// unarmed. Constructing `KiraBackend` here would create the browser
+/// `AudioContext` before any user gesture, which the autoplay policy then
+/// suspends permanently. The web platform crate constructs the real
+/// `KiraBackend` inside its first-gesture handler and swaps it in via
+/// [`AudioSystem::swap_backend`].
 fn make_default_audio_system() -> AudioSystem {
-    #[cfg(feature = "backend-kira")]
+    #[cfg(target_arch = "wasm32")]
+    {
+        let mut sys = AudioSystem::with_backend(Box::new(unison_audio::StubBackend::new()));
+        sys.unarm_for_web();
+        return sys;
+    }
+
+    #[cfg(all(not(target_arch = "wasm32"), feature = "backend-kira"))]
     {
         use unison_audio::KiraBackend;
         match KiraBackend::new() {
@@ -174,6 +190,8 @@ fn make_default_audio_system() -> AudioSystem {
             ),
         }
     }
+
+    #[cfg(not(target_arch = "wasm32"))]
     AudioSystem::with_backend(Box::new(unison_audio::StubBackend::new()))
 }
 

@@ -2016,6 +2016,7 @@ name = "unison-web"
 version = "0.1.0"
 dependencies = [
  "js-sys",
+ "unison-audio",
  "unison-core",
  "unison-input",
  "unison-profiler",
