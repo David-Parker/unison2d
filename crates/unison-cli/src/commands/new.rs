@@ -172,6 +172,7 @@ fn render_path_component(s: &str, vars: &HashMap<&str, &str>) -> String {
         .replace("KOTLIN_PACKAGE_PATH", &kotlin_path);
     match with_subs.as_str() {
         "_cargo" => ".cargo".to_string(),
+        "_Cargo.toml" => "Cargo.toml".to_string(),
         _ => with_subs,
     }
 }

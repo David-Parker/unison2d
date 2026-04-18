@@ -21,9 +21,6 @@ members = [
     "crates/unison-audio",
     "crates/unison-log",
 ]
-exclude = [
-    "crates/unison-cli/templates",
-]
 
 [workspace.package]
 version = "0.1.0"
