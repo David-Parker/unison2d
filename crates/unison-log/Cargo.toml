@@ -1,0 +1,16 @@
+[package]
+name = "unison-log"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Unison 2D Game Engine - Cross-platform logging"
+
+[dependencies]
+log = { workspace = true }
+
+[target.'cfg(target_os = "android")'.dependencies]
+android_logger = "0.14"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+web-sys = { workspace = true }
+wasm-bindgen = { workspace = true }

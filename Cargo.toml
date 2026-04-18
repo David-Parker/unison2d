@@ -19,6 +19,7 @@ members = [
     "crates/unison-cli",
     "crates/unison-lua",
     "crates/unison-audio",
+    "crates/unison-log",
 ]
 
 [workspace.package]
@@ -46,6 +47,7 @@ unison-scripting = { path = "crates/unison-scripting" }
 unison-audio = { path = "crates/unison-audio" }
 
 # External dependencies
+log = "0.4"
 thiserror = "1"
 flate2 = "1.0"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "bmp", "webp"] }
