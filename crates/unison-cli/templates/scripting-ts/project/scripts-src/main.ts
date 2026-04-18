@@ -26,7 +26,7 @@ const game: Game = {
         world.set_ground(-4.5);
         world.set_ground_restitution(0.7);
 
-        logo_id = world.spawn_soft_body({
+        logo_id = world.objects.spawn_soft_body({
             mesh: "ellipse",
             mesh_params: [2.0, 2.0, 24, 3],
             material: "rubber",
@@ -39,13 +39,13 @@ const game: Game = {
         const [sx, sy] = unison.input.pointer_position();
         if (sx !== undefined && sy !== undefined) {
             const [tx, ty] = world.cameras.screen_to_world(sx, sy);
-            const [px, py] = world.get_position(logo_id);
+            const [px, py] = world.objects.position(logo_id);
             const dx = tx - px;
             const dy = ty - py;
             const mag = Math.sqrt(dx * dx + dy * dy);
             if (mag > 1e-4) {
                 const strength = 500.0;
-                world.apply_force(logo_id, (dx / mag) * strength, (dy / mag) * strength);
+                world.objects.apply_force(logo_id, (dx / mag) * strength, (dy / mag) * strength);
             }
         }
         world.step(dt);

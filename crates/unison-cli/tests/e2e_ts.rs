@@ -95,6 +95,43 @@ fn run_unison(root: &Path, args: &[&str]) {
     );
 }
 
+/// Lightweight type-check: scaffolds a TS project, installs deps, and runs
+/// `tsc --noEmit`. Catches stale template ↔ type-declaration mismatches
+/// (e.g. template calling world.spawn_soft_body() when the method moved to
+/// world.objects.spawn_soft_body()) without needing trunk or wasm.
+#[test]
+#[ignore]
+fn e2e_ts_typecheck() {
+    if !have("npm") {
+        eprintln!("skipping: npm missing");
+        return;
+    }
+    let (_tmp, root) = scaffold_ts_project();
+
+    let install = Command::new("npm")
+        .arg("install")
+        .current_dir(&root)
+        .output()
+        .unwrap();
+    assert!(
+        install.status.success(),
+        "npm install failed:\nstdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&install.stdout),
+        String::from_utf8_lossy(&install.stderr),
+    );
+
+    let tsc = Command::new("npx")
+        .args(["tsc", "--noEmit"])
+        .current_dir(root.join("project/scripts-src"))
+        .output()
+        .unwrap();
+    assert!(
+        tsc.status.success(),
+        "tsc --noEmit failed — template does not type-check against engine declarations:\n{}",
+        String::from_utf8_lossy(&tsc.stdout),
+    );
+}
+
 /// Would have caught: missing engine types in TS template, broken tsconfig
 /// paths (`../../assets` typo, missing language-extensions include, wrong
 /// `module` for `export =`), missing `node_modules/` auto-install in
